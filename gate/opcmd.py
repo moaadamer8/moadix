@@ -21,6 +21,8 @@ Increment 2:
   of the exact validator result it relied on.
 - INIT, WAIVE (owner, scope, expiry; high severity unwaivable), PROCEED-PAST
   (v1's progression waiver) and PARK (stop, measure, record, tag).
+- ADOPT <code> (ruling 3, increment 3): adopts the product settings the agent
+  proposed under .sdlc-proposals/ into .sdlc/ (gate/adopt.py).
 """
 import base64
 import contextlib
@@ -31,7 +33,7 @@ import re
 import shutil
 import subprocess
 
-from . import pathmap, state, validation
+from . import adopt, pathmap, state, validation
 
 PH = r"(?P<phase>\d{1,2}[a-z]?)"
 TEXT = r"[ !#-\[\]-~]{1,300}?"  # printable ASCII without " and \ (the checker's alphabet)
@@ -47,6 +49,7 @@ COMMANDS = [
     ("PROCEED-PAST", re.compile(r"^PROCEED-PAST " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("PARK", re.compile(r"^PARK" + CODE + r"$")),
     ("INIT", re.compile(r"^INIT " + PID + CODE + r"$")),
+    ("ADOPT", re.compile(r"^ADOPT" + CODE + r"$")),
     ("REVIEW", re.compile(r"^REVIEW " + PH + r"$")),
     ("STATUS", re.compile(r"^STATUS$")),
 ]
@@ -59,6 +62,7 @@ USAGE = {
     "PROCEED-PAST": "PROCEED-PAST <phase> <reason> <code>",
     "PARK": "PARK <code>",
     "INIT": "INIT <product-id> <code>",
+    "ADOPT": "ADOPT <code>",
     "REVIEW": "REVIEW <phase>",
     "STATUS": "STATUS",
 }
@@ -312,7 +316,8 @@ def _park_spec(root):
     park = doc.get("park")
     if not isinstance(park, dict):
         return None, (".sdlc/product.yaml declares no `park:` section (stop command and counts), so there is "
-                      "nothing to run. The operator adds it in a terminal; agents cannot write .sdlc/")
+                      "nothing to run. The agent proposes it in .sdlc-proposals/product.yaml and the operator adopts it with "
+                      "ADOPT <code>; agents cannot write .sdlc/")
     dirs = _trusted_dirs()
 
     def resolve(argv, what):
@@ -447,6 +452,14 @@ def handle(hook_input):
         val = ""
         if not problems and st["current_phase"] != "done":
             val = " " + _validation_text(*validation.read(root, st["current_phase"], st), st["current_phase"]) + "."
+        props = adopt.pending(root)
+        if props:
+            try:
+                adopt.plan(root)
+                verdict = "valid; ADOPT <code> adopts them"
+            except (adopt.ProposalError, OSError) as e:
+                verdict = "NOT adoptable as they stand: %s" % e
+            val += " Pending proposals in %s/: %s (%s)." % (adopt.DIR, ", ".join(props[:10]), verdict)
         return _ctx("STATUS. %s. %s.%s Relay this to the operator verbatim." % (integrity, _summary(st), val))
     if name == "REVIEW":
         ph = _phase(st, g["phase"])
@@ -493,6 +506,13 @@ def handle(hook_input):
             why = res
     if not why and name == "WAIVE":
         why = _waive_gate(root, g)
+    adoption = None
+    if not why and name == "ADOPT":
+        try:
+            adoption = adopt.plan(root)
+            payload.update(adopt.payload(root, adoption))
+        except (adopt.ProposalError, OSError) as e:
+            why = "the proposal was refused: %s" % e
     park = None
     if not why and name == "PARK":
         spec, why = _park_spec(root)
@@ -522,6 +542,8 @@ def handle(hook_input):
         return _ctx("%s NOT recorded: %s. Nothing changed.%s" % (name, _refusal(out), tail))
     _burn_all(message, keep=code)
     state.append_line(root, out)
+    if adoption:
+        adopt.apply(root, adoption)
     st2, problems2 = state.current_state(root)
     if not problems2 or all("phase.yaml differs" in p for p in problems2):
         state.write_phase(root, st2)
@@ -534,6 +556,9 @@ def handle(hook_input):
             " All phases are done."
     if name == "REOPEN":
         nxt = " Phase %s is open again; continue from there." % g["phase"]
+    if name == "ADOPT":
+        nxt = " Adopted into .sdlc/: %s; the proposals were removed. Validator results computed before this are now " \
+              "stale." % ", ".join("%s (sha256 %s)" % (f["target"], f["result_sha256"][:12]) for f in payload["files"])
     if name == "PARK":
         tag = payload["tag"]
         rc, _o, err = _git(root, "tag", "-a", tag, "-m", "MOADIX PARK (ledger seq %d) counts %s" % (

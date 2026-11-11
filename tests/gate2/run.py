@@ -450,6 +450,106 @@ def group_autoval():
            "NOT recorded" in ctx and "turn ends" in ctx, short(ctx))
 
 
+# ===================================================================== ADOPT (ruling 3)
+def group_adopt():
+    G = "adopt"
+    p = E.repo("adoptprod", docs=("00-brd.md",))
+    E.init(p, "adoptfx")
+    props = os.path.join(p, ".sdlc-proposals")
+    for tool, ti, want in (("Write", {"file_path": ".sdlc-proposals/product.yaml", "content": "size: S\n"}, "none"),
+                           ("Write", {"file_path": ".sdlc-proposals/config/product-tests.yaml", "content": "x: 1\n"},
+                            "none"),
+                           ("Bash", {"command": "mkdir -p .sdlc-proposals/config && echo 'x: 1' > "
+                                                ".sdlc-proposals/config/product-tests.yaml"}, "none"),
+                           ("Write", {"file_path": ".sdlc/config/product-tests.yaml", "content": "x: 1\n"}, "deny"),
+                           ("Write", {"file_path": ".sdlc/product.yaml", "content": "park: {}\n"}, "deny")):
+        d, why = E.pretool(p, tool, ti)
+        record(G, "agent %s %s -> %s" % (tool, short(json.dumps(ti), 70), want), d == want, short(why, 120) or "(none)")
+    n = ledger_n(p)
+    ctx = E.prompt(p, "ADOPT %s" % E.fresh())
+    record(G, "ADOPT with nothing proposed -> refused, nothing recorded", "NOT recorded" in ctx and
+           "nothing to adopt" in ctx and ledger_n(p) == n, short(ctx))
+    bad_cases = [
+        ("product.yaml", "product: hijack\n", "may only set"),
+        ("product.yaml", "park:\n  stop: [bash, -c, 'rm -rf /']\n  counts:\n    n: [docker, ps]\n", "PARK only runs"),
+        ("config/evil.yaml", "x: 1\n", "not adoptable"),
+        ("product.yaml", "- just\n- a list\n", "mapping"),
+    ]
+    for rel, text, want in bad_cases:
+        shutil.rmtree(props, ignore_errors=True)
+        E.write(p, os.path.join(".sdlc-proposals", rel), text)
+        before = open(os.path.join(p, ".sdlc", "product.yaml")).read()
+        ctx = E.prompt(p, "ADOPT %s" % E.fresh())
+        record(G, "ADOPT of an invalid proposal (%s: %s) -> refused, .sdlc/ unchanged" % (rel, short(text, 40)),
+               "NOT recorded" in ctx and want in ctx and ledger_n(p) == n and
+               open(os.path.join(p, ".sdlc", "product.yaml")).read() == before, short(ctx, 200))
+    shutil.rmtree(props, ignore_errors=True)
+    E.write(p, ".sdlc-proposals/real.yaml", "x: 1\n")
+    os.makedirs(os.path.join(props, "config"))
+    os.symlink(os.path.join(p, "README.md"), os.path.join(props, "config", "product-tests.yaml"))
+    ctx = E.prompt(p, "ADOPT %s" % E.fresh())
+    record(G, "ADOPT of a symlinked proposal -> refused", "NOT recorded" in ctx and ledger_n(p) == n, short(ctx))
+    shutil.rmtree(props, ignore_errors=True)
+    park = ("platform: WEB\npark:\n  stop: [docker, compose, -p, adoptfx, stop]\n  counts:\n"
+            "    orders: [docker, compose, -p, adoptfx, run, --rm, db, count]\n")
+    tests_cfg = "targets:\n  - id: unit\n    command: npm test\n"
+    E.write(p, ".sdlc-proposals/product.yaml", park)
+    E.write(p, ".sdlc-proposals/config/product-tests.yaml", tests_cfg)
+    st = E.prompt(p, "STATUS")
+    record(G, "STATUS lists pending proposals and says whether they are adoptable",
+           "Pending proposals" in st and "product.yaml" in st and "valid; ADOPT" in st, short(st[-260:], 260))
+    E.stop(p)
+    ok = False
+    for _ in range(60):
+        if os.path.exists(os.path.join(p, ".sdlc", "cache", "validation-0.json")):
+            ok = True
+            break
+        time.sleep(0.25)
+    record(G, "pending proposals do not make the tree dirty: the Stop hook still runs the validators", ok, "")
+    ctx = E.prompt(p, "ADOPT 123456")
+    record(G, "ADOPT with a wrong code -> refused; proposals kept, .sdlc/ unchanged",
+           "NOT recorded" in ctx and os.path.exists(os.path.join(props, "product.yaml")) and
+           not os.path.exists(os.path.join(p, ".sdlc", "config", "product-tests.yaml")), short(ctx))
+    ctx = E.prompt(p, "ADOPT %s" % E.fresh())
+    prod = open(os.path.join(p, ".sdlc", "product.yaml")).read()
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import hlib
+    doc = hlib.parse_yaml(prod)
+    record(G, "ADOPT with a valid code -> recorded; park and platform merged into .sdlc/product.yaml, id unchanged",
+           "recorded" in ctx and doc.get("product") == "adoptfx" and doc.get("platform") == "WEB" and
+           doc["park"]["stop"] == ["docker", "compose", "-p", "adoptfx", "stop"], short(ctx, 260))
+    record(G, "... the config proposal is now .sdlc/config/product-tests.yaml, byte for byte",
+           open(os.path.join(p, ".sdlc", "config", "product-tests.yaml")).read() == tests_cfg, "")
+    record(G, "... and the proposals were removed", not os.path.exists(props), "")
+    _b, pl = E.payload(p, ledger_n(p))
+    files = {f["target"]: f for f in pl.get("files") or []}
+    import hashlib
+    record(G, "the ledger line records what was adopted: each target, proposal sha256, result sha256, content",
+           set(files) == {".sdlc/product.yaml", ".sdlc/config/product-tests.yaml"} and
+           files[".sdlc/config/product-tests.yaml"]["result_sha256"] == hashlib.sha256(tests_cfg.encode()).hexdigest()
+           and base64_ok(files[".sdlc/config/product-tests.yaml"].get("content_b64"), tests_cfg) and
+           files[".sdlc/product.yaml"]["keys"] == ["park", "platform"], short(json.dumps(pl), 300))
+    st = E.prompt(p, "STATUS")
+    record(G, "STATUS after ADOPT: integrity OK", "INTEGRITY OK" in st, short(st, 120))
+    with open(os.path.join(p, ".sdlc", "config", "product-tests.yaml"), "a") as f:
+        f.write("# edited in Terminal\n")
+    st = E.prompt(p, "STATUS")
+    record(G, "an adopted file edited outside ADOPT -> STATUS integrity failure naming it",
+           "INTEGRITY FAILURE" in st and "product-tests.yaml differs from what ADOPT recorded" in st, short(st, 200))
+    with open(os.path.join(p, ".sdlc", "config", "product-tests.yaml"), "w") as f:
+        f.write(tests_cfg)
+    st = E.prompt(p, "STATUS")
+    record(G, "restored -> integrity OK again", "INTEGRITY OK" in st, short(st, 80))
+
+
+def base64_ok(b64, text):
+    import base64
+    try:
+        return base64.b64decode(b64 or "").decode() == text
+    except Exception:
+        return False
+
+
 # ===================================================================== INIT
 def group_init():
     G = "init"
@@ -725,6 +825,7 @@ def main():
         group_port()
         group_approve()
         group_autoval()
+        group_adopt()
         group_init()
         group_waive()
         group_proceed()

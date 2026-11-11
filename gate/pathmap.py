@@ -38,7 +38,8 @@ PROTECTED_ALWAYS = [
     ("**/service-account*.json", "secret", "is a cloud credential"),
 ]
 PROTECTED_EXCEPTIONS = ["_bmad/custom/**", "**/.env.example", "**/.env.sample", "**/.env.template"]
-ALWAYS_ALLOW = ["CLAUDE.md", ".gitignore", "README.md", "docs/**"]
+# .sdlc-proposals/: settings the agent proposes; only the operator's ADOPT moves them into .sdlc/ (ruling 3).
+ALWAYS_ALLOW = ["CLAUDE.md", ".gitignore", "README.md", "docs/**", ".sdlc-proposals/**"]
 
 HOME = os.path.expanduser("~")
 PROTECTED_EXTERNAL = [

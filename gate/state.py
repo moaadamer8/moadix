@@ -228,6 +228,9 @@ def current_state(root):
     """(state, problems). On any problem the state is the last verified prefix's; callers fail closed."""
     prod = load_product(root)
     ok, problems, entries = verify_ledger(root, prod["product"])
+    if ok:
+        from . import adopt  # late: adopt imports this module
+        problems.extend(adopt.drift(root, entries))
     links = hardlinked(root)
     if links:
         problems.append("hard link(s) to gate state: %s (a second path to these bytes bypasses .sdlc/ "
@@ -264,7 +267,8 @@ def write_phase(root, st):
 
 
 PRODUCT_TEMPLATE = """# MOADIX product definition. Gate-owned: created by INIT; agents cannot write
-# .sdlc/. The operator edits it in a terminal.
+# .sdlc/. Settings change only through ADOPT <code>: the agent proposes them in
+# .sdlc-proposals/product.yaml (keys platform, size, app_run, test_targets, park).
 product: %s
 created: "%s"
 path_map: default
