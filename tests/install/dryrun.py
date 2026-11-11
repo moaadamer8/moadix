@@ -134,11 +134,19 @@ def main():
     shutil.copy(os.path.join(REPO, "tests", "fixtures", "product", "sdlc", "00-brd.md"), os.path.join(PROD, "sdlc"))
     sh(["git", "-C", PROD, "add", "-A"])
     sh(["git", "-C", PROD, "-c", "user.email=dryrun@example.invalid", "-c", "user.name=dryrun", "commit", "-qm", "brd"])
-    for _ in range(12):  # increment 2: APPROVE needs a fresh, passing validator run
+    stop = pol["hooks"]["Stop"][0]["hooks"][0]
+    check("policy: a Stop hook runs the installed gate copy (it starts validators; never blocks, so no onFailure)",
+          stop["command"] == "/usr/bin/python3 -I '%s/moadix/gate/hook.py' stop" % CC and "onFailure" not in stop,
+          json.dumps(stop))
+    # increment 3 (ruling 2): the gate starts the validators when the agent's turn ends; REVIEW only reads.
+    hook("stop", {"hook_event_name": "Stop", "cwd": PROD})
+    for _ in range(40):
         o = hook("prompt", {"prompt": "REVIEW 0", "cwd": PROD})
-        if "still running" not in o and "have no current result" not in o:
+        if "validators for phase 0: PASS" in o or "FAIL" in o:
             break
-    check("installed gate: REVIEW 0 runs the ported validators", "check-handoff-0: PASS" in o, o[:200])
+        time.sleep(0.5)
+    check("installed gate: the Stop hook ran the ported validators; REVIEW 0 shows the result", "check-handoff-0: PASS" in o,
+          o[:200])
     o = hook("prompt", {"prompt": "APPROVE 0 %s" % totp(key), "cwd": PROD})
     check("installed gate: 'APPROVE 0 <code from the shown key>' is recorded", "APPROVE 0 recorded (ledger seq 1)" in o, o[:200])
     o = hook("pretool", {"tool_name": "Edit", "tool_input": {"file_path": ".sdlc/phase.yaml", "old_string": "a", "new_string": "b"}, "cwd": PROD})

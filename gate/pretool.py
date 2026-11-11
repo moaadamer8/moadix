@@ -15,7 +15,7 @@ Any internal error is a deny (fail closed).
 import os
 import re
 
-from . import bashcls, pathmap, state
+from . import autoval, bashcls, pathmap, state
 
 TURN_TOOLS = {"CronCreate", "CronDelete", "ScheduleWakeup", "SendMessage", "ListAgents", "RemoteTrigger"}
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
@@ -198,4 +198,6 @@ def decide(hook_input):
     if tool == "Bash":
         why = check_bash(ti.get("command") or "", cwd, cache)
         return deny(why) if why else None
+    if autoval.is_request_review(tool, ti):
+        autoval.trigger(cwd)  # ruling 2: the gate runs the phase's validators; the call itself changes no state
     return None

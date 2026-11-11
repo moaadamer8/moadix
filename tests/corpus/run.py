@@ -205,12 +205,16 @@ def status(fx, product):
 
 
 def review(fx, product, label):
-    """REVIEW until the phase's validators have a fresh result (increment 2)."""
+    """Until the phase's validators have a fresh result. Increment 3 (ruling 2): the
+    agent's turn ends (Stop hook), the gate runs them, and the read-only REVIEW is
+    polled. (Increment 2 sent REVIEW, which started the run itself.)"""
+    fx.hook("stop", {"hook_event_name": "Stop", "session_id": "corpus", "cwd": product})
     ctx = ""
-    for _ in range(12):
+    for _ in range(60):
         ctx = fx.prompt(product, "REVIEW %s" % label)[0]
         if "still running" not in ctx and "have no current result" not in ctx:
             break
+        time.sleep(0.25)
     return ctx
 
 

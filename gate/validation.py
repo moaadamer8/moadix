@@ -4,10 +4,15 @@ APPROVE must answer inside the UserPromptSubmit hook's timeout, and the ported
 v1 validators take seconds to minutes (check-lld provisions PyYAML through uv).
 So the validators never run inside APPROVE:
 
-  REVIEW <phase>  starts a detached worker (gate/validate.py) when there is no
-                  fresh result, waits briefly, and prints what it has.
-  APPROVE         reads the cache only. Missing, running, stale or dirty
-                  counts as a FAILURE, never as a pass.
+  the gate       starts a detached worker (gate/validate.py) for the current
+                 phase when the agent's turn ends (Stop hook) or when the agent
+                 calls /moadix:request-review, if the tree is clean and there is
+                 no fresh result (ruling 2, increment 3). Only the gate starts
+                 it; only the worker writes the cache.
+  REVIEW <phase> optional and read-only: prints what the cache holds.
+  APPROVE        reads the cache only. Missing, running, stale or dirty
+                 counts as a FAILURE, never as a pass. The ledger line records
+                 the sha256 of the exact cache file it relied on (`digest`).
 
 A cache entry is fresh only when every part of its key still holds:
   commit      HEAD of the product repo when the run started
@@ -58,10 +63,13 @@ def _git(root, *args):
 
 
 def tree_state(root):
-    """(head or None, [changed paths outside .sdlc/])."""
+    """(head or None, [changed paths outside .sdlc/ and .sdlc-proposals/]).
+    .sdlc-proposals/ holds settings the agent proposes for ADOPT; validators do
+    not read it, so a pending proposal does not make results stale."""
     rc, out = _git(root, "rev-parse", "--verify", "HEAD")
     head = out.strip() if rc == 0 and out.strip() else None
-    rc, out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude).sdlc")
+    rc, out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude).sdlc",
+                   ":(exclude).sdlc-proposals")
     if rc != 0:
         return head, ["(git status failed)"]
     return head, [ln[3:] for ln in out.splitlines() if ln.strip()]
@@ -139,8 +147,12 @@ def read(root, label, st):
     """(status, data, detail). status: fresh | missing | running | stale | dirty | unreadable."""
     now_key = key(root, st)
     try:
-        with open(cache_file(root, label)) as f:
-            data = json.load(f)
+        with open(cache_file(root, label), "rb") as f:
+            raw = f.read()
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("not an object")
+        data["_digest"] = "sha256:" + hashlib.sha256(raw).hexdigest()  # what APPROVE records it relied on
     except FileNotFoundError:
         data = None
     except (OSError, ValueError) as e:
@@ -168,6 +180,22 @@ def read(root, label, st):
     if data.get("phase") != label:
         return "stale", data, "the cached results are for another phase"
     return "fresh", data, "validators ran %s on commit %s" % (data.get("finished_at"), now_key["commit"][:12])
+
+
+def ensure(root, st):
+    """Gate-side trigger (Stop hook, request-review): start the current phase's
+    validators when its result is missing or stale and the tree is clean.
+    Returns (started, status, detail). Never raises."""
+    label = st.get("current_phase")
+    if not label or label == "done":
+        return False, "done", "every phase is approved"
+    try:
+        status, _data, detail = read(root, label, st)
+    except Exception as e:  # best effort: APPROVE fails closed on a missing result anyway
+        return False, "error", repr(e)
+    if status in ("missing", "stale"):
+        return start(root, label), status, detail
+    return False, status, detail
 
 
 def start(root, label):

@@ -310,9 +310,17 @@ def group_approve():
     ctx = E.prompt(p, "APPROVE 0 %s" % E.fresh())
     record(G, "APPROVE never runs the validators itself (no worker started, %.2fs)" % (time.time() - t0),
            not os.path.exists(os.path.join(p, ".sdlc", "cache", "validation-0.log")) and time.time() - t0 < 5, "")
+    ctx = E.prompt(p, "REVIEW 0")
+    record(G, "REVIEW is read-only (ruling 2): with no result it starts nothing and says the gate will run them",
+           "have no current result" in ctx and "turn ends" in ctx and
+           not os.path.exists(os.path.join(p, ".sdlc", "cache", "validation-0.log")), short(ctx))
     ctx = E.review_until_fresh(p, "0")
-    record(G, "REVIEW 0 runs the validators and prints their results", "check-handoff-0: PASS" in ctx and
-           "PASS" in ctx, short(ctx))
+    record(G, "the Stop hook (agent's turn ends) runs the validators; REVIEW then shows their results",
+           "check-handoff-0: PASS" in ctx and os.path.exists(os.path.join(p, ".sdlc", "cache", "validation-0.json")),
+           short(ctx))
+    cache_bytes = open(os.path.join(p, ".sdlc", "cache", "validation-0.json"), "rb").read()
+    import hashlib
+    want_digest = "sha256:" + hashlib.sha256(cache_bytes).hexdigest()
     c = E.fresh()
     ctx = E.prompt(p, "APPROVE 0 %s" % c)
     dur = E.last_duration
@@ -322,6 +330,12 @@ def group_approve():
     record(G, "the ledger line carries the validator results it was approved on",
            pl.get("validation", {}).get("verdict") == "pass" and
            pl["validation"]["results"][0]["validator"] == "check-handoff-0", short(pl.get("validation")))
+    record(G, "the APPROVE line records the digest of the exact validator result it relied on (ruling 2)",
+           pl["validation"].get("digest") == want_digest and want_digest[:19] in ctx,
+           "recorded %s; sha256 of the cache file %s" % (pl["validation"].get("digest"), want_digest))
+    ctx = E.prompt(p, "REVIEW 0")
+    record(G, "REVIEW of the approved phase names the result digest it was approved on", want_digest[:19] in ctx,
+           short(ctx))
     st = E.prompt(p, "STATUS")
     record(G, "STATUS integrity OK after a validated approval", "INTEGRITY OK" in st and "current phase 1;" in st,
            short(st, 120))
@@ -379,6 +393,61 @@ def group_approve():
     record(G, "a recorded WAIVE after the run -> stale (results can depend on waivers)",
            "NOT recorded" in ctx and "different ledger" in ctx, short(ctx))
     return p
+
+
+# ===================================================================== gate-run validators (ruling 2)
+def group_autoval():
+    G = "autoval"
+    p = E.repo("autoprod", docs=("00-brd.md", "01-research.md"))
+    E.init(p, "autofx")
+    log0 = os.path.join(p, ".sdlc", "cache", "validation-0.log")
+    rc, out, err = E.stop(os.path.join(E.base))
+    record(G, "Stop hook outside any product: exit 0, no output, nothing started", rc == 0 and not out and not err,
+           "rc=%d out=%r" % (rc, out))
+    E.write(p, "docs/wip.md", "uncommitted\n")
+    rc, out, err = E.stop(p)
+    time.sleep(0.5)
+    record(G, "Stop hook on a dirty tree: starts nothing (results would describe no commit)",
+           rc == 0 and not out and not os.path.exists(log0), "rc=%d out=%r" % (rc, out))
+    E.commit(p, "wip")
+    rc, out, err = E.stop(p)
+    record(G, "Stop hook never answers (a Stop 'block' would keep the agent running)", rc == 0 and not out,
+           "rc=%d out=%r err=%r" % (rc, out, err[-120:]))
+    ok = False
+    for _ in range(60):
+        if os.path.exists(os.path.join(p, ".sdlc", "cache", "validation-0.json")):
+            ok = True
+            break
+        time.sleep(0.25)
+    record(G, "Stop hook on a clean tree: the gate runs the current phase's validators and caches the result", ok,
+           "cache file present: %s" % ok)
+    ctx = E.prompt(p, "APPROVE 0 %s" % E.fresh())
+    record(G, "APPROVE without any REVIEW, on the gate's own cached result -> recorded",
+           "recorded" in ctx and ledger_n(p) == 2, short(ctx))
+    # request-review: the agent's /moadix:request-review call starts the run (and is allowed through)
+    log1 = os.path.join(p, ".sdlc", "cache", "validation-1.json")
+    d, why = E.pretool(p, "Skill", {"skill": "moadix:request-review", "args": "1"})
+    ok = False
+    for _ in range(60):
+        if os.path.exists(log1):
+            ok = True
+            break
+        time.sleep(0.25)
+    record(G, "the agent's Skill call moadix:request-review starts the phase's validators (and is not denied)",
+           ok and d == "none", "decision %s; cache present %s" % (d, ok))
+    d, why = E.pretool(p, "SlashCommand", {"command": "/moadix:request-review 1"})
+    record(G, "... the SlashCommand form is recognised too", d == "none", short(why) or "(none)")
+    # the agent cannot write the cache itself
+    for tool, ti in (("Write", {"file_path": ".sdlc/cache/validation-1.json", "content": "{}"}),
+                     ("Bash", {"command": "echo '{}' > .sdlc/cache/validation-1.json"})):
+        d, why = E.pretool(p, tool, ti)
+        record(G, "agent %s of the validator cache -> denied (only the gate writes it)" % tool, d == "deny",
+               short(why, 120))
+    # a planted cache file: APPROVE records its digest, so a swap is visible in the ledger
+    E.commit(p, "again")
+    ctx = E.prompt(p, "APPROVE 1 %s" % E.fresh())
+    record(G, "after a new commit the old result is stale -> APPROVE refused, with a hint that the gate re-runs them",
+           "NOT recorded" in ctx and "turn ends" in ctx, short(ctx))
 
 
 # ===================================================================== INIT
@@ -655,6 +724,7 @@ def main():
         group_inc1(p)
         group_port()
         group_approve()
+        group_autoval()
         group_init()
         group_waive()
         group_proceed()

@@ -14,7 +14,11 @@ Increment 2:
 - APPROVE runs the current phase's validators: it reads their cached results
   (gate/validation.py) and refuses with their findings unless a FRESH result
   for the current commit passed. Missing, running, stale or dirty = refused.
-- REVIEW <phase> starts the validators when needed and prints the same results.
+- Increment 3 (ruling 2): REVIEW is no longer required before APPROVE. The gate
+  starts the validators itself when the agent's turn ends (Stop hook) or the
+  agent calls /moadix:request-review (gate/autoval.py). REVIEW <phase> is an
+  optional, read-only view of the cache. Each APPROVE line records the digest
+  of the exact validator result it relied on.
 - INIT, WAIVE (owner, scope, expiry; high severity unwaivable), PROCEED-PAST
   (v1's progression waiver) and PARK (stop, measure, record, tag).
 """
@@ -61,7 +65,6 @@ USAGE = {
 CODE_TOKEN = re.compile(r"(?<!\d)\d{6}(?!\d)")
 FINDING_ID = re.compile(r"^(?:SF|SEC)-\d+$")
 PREFIX = "MOADIX gate: "
-REVIEW_WAIT = 8        # seconds REVIEW waits for a fresh validator run
 PARK_STOP_TIMEOUT = 45
 PARK_COUNT_TIMEOUT = 10
 PARK_VERBS = ("docker", "podman")
@@ -113,6 +116,16 @@ def _summary(st):
         parked = "; PARKED at ledger seq %s (counts: %s)" % (st["parked"]["seq"], json.dumps(st["parked"].get("counts")))
     return "current phase %s; ledger seq %d; waivers: %s%s; phases: %s" % (
         st["current_phase"], st["ledger_seq"], w, parked, "; ".join(rows))
+
+
+def _approval_digest(st, label):
+    """The validator-result digest recorded by the APPROVE that approved `label`, if any."""
+    for e in reversed(st.get("_entries") or []):
+        if e["action"].split(" ", 1)[0] in ("APPROVE", "REOPEN"):
+            pl = state.decode_payload(e)
+            if pl.get("phase") == label:
+                return (pl.get("validation") or {}).get("digest") if e["action"].startswith("APPROVE") else None
+    return None
 
 
 def _phase(st, label):
@@ -172,13 +185,17 @@ def _paused():
 
 def _validation_text(status, data, detail, label):
     if status == "fresh":
-        head = "validators for phase %s: %s (%s)" % (label, data["verdict"].upper(), detail)
+        head = "validators for phase %s: %s (%s; result %s)" % (label, data["verdict"].upper(), detail,
+                                                                 data["_digest"][:19])
         return head + ". " + "; ".join(validation.summary(data))
     if status == "running":
         return "validators for phase %s are still running (%s); send REVIEW %s again in a minute" % (
             label, detail, label)
     if status in ("missing", "stale"):
-        return "validators for phase %s have no current result (%s)" % (label, detail)
+        return ("validators for phase %s have no current result (%s); the gate runs them when the agent's turn "
+                "ends or the agent calls /moadix:request-review" % (label, detail))
+    if status == "dirty":
+        return "validators for phase %s cannot run yet (%s)" % (label, detail)
     return "validators for phase %s cannot be judged (%s)" % (label, detail)
 
 
@@ -186,9 +203,10 @@ def _approve_gate(root, st, label):
     """(ok, reason, data). APPROVE passes only on a fresh, passing result."""
     status, data, detail = validation.read(root, label, st)
     if status != "fresh":
-        hint = "; send REVIEW %s to run them, then APPROVE again" % label if status in ("missing", "stale") else ""
+        hint = ("; the gate runs them when the agent's turn ends, so send APPROVE again in a minute (REVIEW %s "
+                "shows when they are done)" % label) if status in ("missing", "stale", "running") else ""
         if status == "dirty":
-            hint = "; commit the work, send REVIEW %s, then APPROVE again" % label
+            hint = "; the agent must commit the work first; the gate then runs them when its turn ends"
         return False, "the phase's validators have no fresh result for this commit (%s), and a stale or missing " \
                       "result counts as a failure%s" % (detail, hint), None
     if data["verdict"] != "pass":
@@ -440,17 +458,17 @@ def handle(hook_input):
             return _ctx("%s; gate state failed its integrity check (%s), so validators were not run. Relay this to "
                         "the operator verbatim." % (head, "; ".join(problems)))
         if ph["label"] == st["current_phase"]:
+            # Read-only (ruling 2): REVIEW never starts a run; it shows what the gate's last run left.
             status, data, detail = validation.read(root, ph["label"], st)
-            if status in ("missing", "stale"):
-                validation.start(root, ph["label"])
-                status, data, detail = validation.wait(root, ph["label"], st, REVIEW_WAIT)
             text = _validation_text(status, data, detail, ph["label"])
             if status == "fresh" and data["verdict"] != "pass":
                 text += ". Findings: " + " | ".join(validation.findings(data))
         else:
             ev = ph.get("evidence") or []
-            text = "not the current phase (%s); recorded validator evidence: %s" % (
-                st["current_phase"], ", ".join("%s %s" % (e.get("validator"), e.get("result")) for e in ev) or "none")
+            relied = _approval_digest(st, ph["label"])
+            text = "not the current phase (%s); recorded validator evidence: %s%s" % (
+                st["current_phase"], ", ".join("%s %s" % (e.get("validator"), e.get("result")) for e in ev) or "none",
+                "; approved on validator result %s" % relied if relied else "")
         return _ctx("%s; %s. Relay this to the operator verbatim." % (head, text))
 
     code = g.pop("code")
@@ -464,7 +482,7 @@ def handle(hook_input):
         ok, why, data = _approve_gate(root, st, g["phase"])
         if ok:
             payload["validation"] = {"commit": data["key"]["commit"], "verdict": data["verdict"],
-                                     "finished_at": data.get("finished_at"),
+                                     "finished_at": data.get("finished_at"), "digest": data["_digest"],
                                      "results": [{"validator": r["validator"], "result": r["result"],
                                                   "exit_code": r["exit_code"]} for r in data["results"]]}
     if not why and name == "PROCEED-PAST":
@@ -509,8 +527,11 @@ def handle(hook_input):
         state.write_phase(root, st2)
     seq = json.loads(json.loads(out)["body"])["seq"]
     nxt = ""
+    if name == "APPROVE":
+        nxt = " It rests on validator result %s." % payload["validation"]["digest"][:19]
     if name in ("APPROVE", "PROCEED-PAST"):
-        nxt = " Proceed to phase %s." % st2["current_phase"] if st2["current_phase"] != "done" else " All phases are done."
+        nxt += " Proceed to phase %s." % st2["current_phase"] if st2["current_phase"] != "done" else \
+            " All phases are done."
     if name == "REOPEN":
         nxt = " Phase %s is open again; continue from there." % g["phase"]
     if name == "PARK":

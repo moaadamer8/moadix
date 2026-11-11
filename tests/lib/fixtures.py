@@ -135,12 +135,21 @@ class Env(object):
     def init(self, path, pid):
         return self.prompt(path, "INIT %s %s" % (pid, self.fresh()))
 
-    def review_until_fresh(self, path, label, tries=12):
+    def stop(self, cwd):
+        """The Stop hook (the agent's turn ends): the gate starts the current phase's validators."""
+        rc, out, err = self.hook("stop", {"hook_event_name": "Stop", "session_id": "g2", "cwd": cwd})
+        return rc, out, err
+
+    def review_until_fresh(self, path, label, tries=60):
+        """Increment 3 (ruling 2): the agent's turn ends (Stop hook), the gate runs the
+        validators, and the read-only REVIEW is polled until it shows a result."""
+        self.stop(path)
         ctx = ""
         for _ in range(tries):
             ctx = self.prompt(path, "REVIEW %s" % label)
             if "still running" not in ctx and "have no current result" not in ctx:
                 return ctx
+            time.sleep(0.25)
         return ctx
 
     def ledger(self, path):

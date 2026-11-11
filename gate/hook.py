@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-"""MOADIX hook entry point: `hook.py prompt` (UserPromptSubmit) or `hook.py pretool`.
+"""MOADIX hook entry point: `hook.py prompt` (UserPromptSubmit), `hook.py pretool`
+or `hook.py stop` (Stop: starts the current phase's validators, never blocks).
 
 Run by /usr/bin/python3 (SIP-protected), from MOADIX_HOME, the root-owned copy
 the installer makes. Exit codes:
@@ -19,11 +20,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 with contextlib.suppress(ImportError):  # only in test fixtures' gate copies (tests/lib/_testguard.py)
     importlib.import_module("gate._testguard")
-from gate import opcmd, pretool  # noqa: E402
+from gate import autoval, opcmd, pretool  # noqa: E402
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    if mode == "stop":
+        # Never answers and never fails: a Stop hook that blocked would keep the agent running.
+        # Fail-open is safe here because a missing validator result makes APPROVE refuse.
+        with contextlib.suppress(Exception):
+            autoval.on_stop(json.load(sys.stdin))
+        return 0
     data = json.load(sys.stdin)
     if mode == "pretool":
         try:

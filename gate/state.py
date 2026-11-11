@@ -195,6 +195,7 @@ def replay(product_id, entries):
                     for w in sorted(waivers.values(), key=lambda w: w["seq"])],
         "parked": parked,
         "_head_ts": head["ts"] if head else None,
+        "_entries": list(entries),  # verified ledger bodies (not rendered): payload digests, scorecard
     }
 
 
