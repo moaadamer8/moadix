@@ -1,0 +1,9 @@
+# <path glob>	<line regex>	<reason>
+skills/bmad-architecture/*	^(\d+\. )?Stop here and report what you produced\. The operator decides whether the phase is approved \(MOADIX gate\)\.$	MOADIX hand-back line: says the operator, not the agent, approves the phase
+skills/bmad-architecture/customize.toml	^# --- Configurable below\. Overrides merge per BMad structural rules: ---$	describes how BMad config override layers are combined; not a code merge
+skills/bmad-architecture/SKILL.md	→ a merged `customize\.toml` field;	config layers combined into one table; not a code merge
+skills/bmad-architecture/SKILL.md	\(merges `_bmad/config\.toml`, `_bmad/config\.user\.toml`	describes what the config resolver combines; not a code merge
+skills/bmad-architecture/customize.toml	^# Use for pre-flight loads, approved-stack policy checks, etc\.$	'approved stack' = an organisation's allowed-technology list (data)
+skills/bmad-architecture/customize.toml	^# \(approved stacks, banned dependencies, platform constraints, compliance guardrails\)\.$	'approved stacks' = an organisation's allowed-technology list (data)
+skills/bmad-architecture/customize.toml	consult ON DEMAND during the run \(not preemptively\) — approved-stack$	'approved-stack' registry = allowed-technology list (data)
+skills/bmad-architecture/references/headless.md	\(the operator still reviews it; only the MOADIX gate approves a phase\)	MOADIX adaptation stating that only the gate approves

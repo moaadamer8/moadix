@@ -1,0 +1,10 @@
+# <path glob>	<line regex>	<reason>
+skills/bmad-forge-idea/*	^(\d+\. )?Stop here and report what you produced\. The operator decides whether the phase is approved \(MOADIX gate\)\.$	MOADIX hand-back line: says the operator, not the agent, approves the phase
+skills/bmad-forge-idea/customize.toml	^# --- Configurable below\. Overrides merge per BMad structural rules: ---$	describes how BMad config override layers are combined; not a code merge
+skills/bmad-forge-idea/SKILL.md	resolves to fields in the merged `customize\.toml` `\[workflow\]` table	config layers combined into one table; not a code merge
+skills/bmad-forge-idea/SKILL.md	from the merged JSON read `\{user_name\}`	resolved config JSON; not a code merge
+skills/bmad-forge-idea/scripts/resolve_personas.py	of tables \(depending on how the layers merged\); normalize both to a dict\.	docstring about combining config layers
+skills/bmad-forge-idea/scripts/resolve_personas.py	"""Merged \[workflow\] table for bmad-party-mode \(base \+ user overrides\)\."""	docstring about combining config layers
+skills/bmad-forge-idea/scripts/resolve_personas.py	# Fallback: base customize\.toml directly, no override merge\.	comment about combining config layers
+skills/bmad-forge-idea/scripts/resolve_personas.py	No base roster exists in this path, so a shallow merge is enough\.	comment about combining dicts
+skills/bmad-forge-idea/scripts/resolve_personas.py	^\s*(merged = dict\(team\)|merged\[key\] = (merged\[key\] \+ val|val)|return merged|if isinstance\(val, list\) and isinstance\(merged\.get\(key\), list\):)$	Python variable named merged (dict of config values)

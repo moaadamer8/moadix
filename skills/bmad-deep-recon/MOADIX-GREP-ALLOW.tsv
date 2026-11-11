@@ -1,0 +1,17 @@
+# <path glob>	<line regex>	<reason>
+skills/bmad-deep-recon/*	^(\d+\. )?Stop here and report what you produced\. The operator decides whether the phase is approved \(MOADIX gate\)\.$	MOADIX hand-back line: says the operator, not the agent, approves the phase
+skills/bmad-deep-recon/customize.toml	^# --- Configurable below\. Overrides merge per BMad structural rules: ---$	describes how BMad config override layers are combined; not a code merge
+skills/bmad-deep-recon/SKILL.md	→ a merged `customize\.toml` field;	config layers combined into one table; not a code merge
+skills/bmad-deep-recon/SKILL.md	From the merged JSON resolve `\{user_name\}`	resolved config JSON; not a code merge
+skills/bmad-deep-recon/SKILL.md	resolves to — shipped: `market`, `domain`	'shipped' = the research types bundled with the skill (data), not an instruction to ship
+skills/bmad-deep-recon/customize.toml	^# Theme for the HTML briefing: empty = the shipped neutral professional$	'shipped' = bundled default theme
+skills/bmad-deep-recon/customize.toml	^# Keyed by `code`: an override with a matching code replaces the shipped$	'shipped' = bundled default entry
+skills/bmad-deep-recon/references/html-briefing.md	empty means the shipped default — neutral, professional	'shipped' = bundled default theme
+skills/bmad-deep-recon/assets/research.template.md	^_Sections are appended per the approved research plan;	the user's approval of the research plan at the plan gate (a user checkpoint), not agent self-approval
+skills/bmad-deep-recon/references/run.md	then run the acquisition loop once per dimension of the approved plan, in plan order\.	plan approved by the user at the plan gate (user checkpoint)
+skills/bmad-deep-recon/references/run.md	^Present as a compact checklist, get approval, then: bind	asks the user to approve the research plan and waits (user checkpoint)
+skills/bmad-deep-recon/references/run.md	^When workflow orchestration was approved at the plan gate, run the fan-out	refers to the user's choice at the plan gate (user checkpoint)
+skills/bmad-deep-recon/references/selection.md	interactive runs confirm it even though the plan gate approved the dimension list	refers to the user's plan-gate approval (user checkpoint)
+skills/bmad-deep-recon/references/lifecycle.md	merge into `research\.md`, update only the synthesis sections	combining new findings into the report text; not a code merge
+skills/bmad-deep-recon/references/verification.md	Everything else ships with its single source cited and confidence marked honestly\.	'ships' = appears in the report with its citation; not an instruction to ship
+skills/bmad-deep-recon/types/competitive.md	^1\. Offer & feature teardown — what they actually ship,	research subject: what competitors ship (data)

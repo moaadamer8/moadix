@@ -1,0 +1,6 @@
+# <path glob>	<line regex>	<reason>
+skills/bmad-prd/*	^(\d+\. )?Stop here and report what you produced\. The operator decides whether the phase is approved \(MOADIX gate\)\.$	MOADIX hand-back line: says the operator, not the agent, approves the phase
+skills/bmad-prd/customize.toml	^# --- Configurable below\. Overrides merge per BMad structural rules: ---$	describes how BMad config override layers are combined; not a code merge
+skills/bmad-prd/SKILL.md	\(overrides win per BMad merge rules\)\.	config override layering; not a code merge
+skills/bmad-prd/assets/prd-template.md	^- \*\*Stakeholders and Approvals\*\* — who must sign off, at what stage\.$	PRD content section about the product organisation's human approvals; not an agent action
+skills/bmad-prd/references/headless.md	\(the operator still reviews it; only the MOADIX gate approves a phase\)	MOADIX adaptation stating that only the gate approves
