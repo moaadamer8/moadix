@@ -1,0 +1,7 @@
+# <path glob>	<line regex>	<reason>
+skills/threat-model/bootstrap.md	through `stageN\.json` \*\*in order\*\*, merging keys into working	describes combining checkpoint JSON keys on resume; not a git/PR merge
+skills/threat-model/bootstrap.md	\*\*Infra reader\*\* \| Read deploy-time config	names deploy-time config files and a deploy/ directory to read; analysis input, not an instruction to deploy
+skills/threat-model/bootstrap.md	^would embed or deploy it, where it would run\.$	describes who would deploy the target system in the context prose; not an instruction to deploy
+skills/threat-model/bootstrap.md	Entry points & trust boundaries\.\*\* Merge Surface mapper \+ Infra reader	combine two subagents' table rows; not a git/PR merge
+skills/threat-model/bootstrap.md	\*\*Scope enforcement\*\*: where an automated approval, merge, or write path	threat-analysis question about the target's own automated approval/merge paths; not an instruction to approve or merge
+skills/threat-model/schema.md	`evidence`: CVE IDs, issue links, pentest finding IDs, or git commit	git commit hashes as an evidence data value; not an instruction to commit

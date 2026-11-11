@@ -1,0 +1,2 @@
+# <path glob>	<line regex>	<reason>
+skills/threat-mitigation-mapping/references/details.md	description="Deploy (WAF|DDoS)	description string of a security control in a code template (data value); not an instruction to deploy
