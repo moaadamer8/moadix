@@ -42,6 +42,22 @@ Still to measure in increment 1: the Keychain lock (another process asking for t
    | **Size-profile collapse** in the ledger replay (`hlib.collapsed_phases`) | A collapsed phase must become a recorded ruling, not a silent skip; the toy run is the first product with a size | **6** |
    | **WEB→APP transition mode** (`check_transition` and the transition workspace) | Only onlineMarket uses it | **7** (onlineMarket migration) |
 
+## Amendment 2 (2026-11-11) — feature cycles and onboarding
+Feature cycles (new features for a product with an approved baseline: released at phase 11, or onboarded):
+1. FEATURE <feature-id> <code> starts a cycle. One active feature per product at a time; parallel features come later.
+2. The cycle runs all 16 phases by default, scoped to the feature. Skipping a phase needs PROCEED-PAST with a reason.
+3. Feature documents live in sdlc/features/<feature-id>/ as additions to the product's documents: BRD and PRD additions (EARS), HLD and LLD changes, new SEC-IDs, UX, provisioning, tasks, test and verification evidence.
+4. The product's approved documents stay approved and frozen. Validators check each addition against them: traceability, no conflicting SEC-IDs, no contradicted requirements.
+5. APPROVE <phase> <code> applies to the active feature. Approving the feature's phase 11 merges its additions into the product documents, recorded in the ledger.
+6. Ledger lines carry the feature id; .sdlc/features/<feature-id>/phase.yaml is rebuilt from the ledger like the product's.
+Onboarding (an existing product not built with MOADIX):
+1. INIT <product-id> <code> on a repo that already has code starts the product in onboarding mode, at phase B (Baseline).
+2. In phase B the agent documents what exists: purpose and users (as-is BRD), current features as stories with EARS where possible (as-is PRD), architecture, a threat model of the current system with each SEC-ID's current status, the test inventory and coverage, a known-gaps register (untested acceptance criteria, open findings), and the accounts and services in use, without secrets.
+3. Validators check completeness and that every claim cites code that exists (path:line); the existing test suite runs in a test environment, never against production. A fresh-context verifier checks the baseline against the code.
+4. APPROVE B <code> approves the baseline. From then on every change is a feature cycle.
+5. The baseline records the current state; it does not certify that the existing code passed phases 8–10. Gaps go to the register, not into approvals.
+onlineMarket is not onboarded: it keeps its planned migration with the imported v1 ledger.
+
 ## Goals and non-goals
 
 **Goals**
