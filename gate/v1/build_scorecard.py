@@ -243,54 +243,33 @@ NA_KINDS = [
 NA_TAG = {k: t for k, _h, t in NA_KINDS}
 
 
-def registered_since(root, vid):
-    """(sha, state) for the commit that first introduced this validator id.
+def registered_at_approval(phase, vid):
+    """MOADIX v2 (change notice, increment 3, ruling 4): was `vid` registered when
+    this phase was approved? Read from the signed ledger, not git history.
 
-    P59. A validator registered AFTER a phase was approved reads as absent from
-    that phase's evidence, and item 2B fails closed on absence -- so registering
-    one check invalidates every earlier approval at once. That pressure runs
-    against registering checks, the behaviour this project most needs cheap.
-
-    DERIVED, NOT DECLARED, and the distinction from F44 is deliberate:
-      * F44 refused to derive WHICH PHASE depends on which config file: the only
-        source was a heuristic scan of validator source, and the probe that
-        tried counted `check-*` regardless of `kind` (F35). Deriving POLICY from
-        a guess.
-      * This derives a FACT -- when an id first appeared in registry.yaml --
-        from git history, the authoritative record of exactly that. A declared
-        `since:` could drift from the truth; git cannot drift from itself.
-
-    UNKNOWN IS NEVER COERCED. `git log -S` needs full history, and a shallow
-    clone or tarball export has none. An empty result there would read as
-    "registered after every approval" and silently excuse every gap, so the
-    caller keeps failing closed and says why.
-    """
-    try:
-        ok, out = hlib._git(root, "log", "--reverse", "--format=%H", "-S",
-                            "id: " + str(vid), "--", "harness/registry.yaml")
-    except Exception:
-        return None, "unknown"
-    if not ok:
-        return None, "unknown"
-    lines = [l.strip() for l in (out or "").splitlines() if l.strip()]
-    return (lines[0], "known") if lines else (None, "unknown")
+    True / False / None (unknown, never coerced):
+      evidence_source "gate"         the gate ran EVERY validator registered for
+                                     the phase and the APPROVE line lists them,
+                                     so present -> True, absent -> False
+      evidence_source "imported-v1"  the imported line's `registered` list if it
+                                     has one, else None
+      anything else                  None
+    This replaces registered_since() + predates(), which read v1's
+    harness/registry.yaml history: a v2 product repo has no such history, so
+    every gap came back UNKNOWN and phase 11 failed closed for that reason alone."""
+    src = str((phase or {}).get("evidence_source") or "")
+    if src == "gate":
+        return any(str(e.get("validator")) == str(vid) for e in (phase.get("evidence") or []))
+    if src == "imported-v1":
+        reg = phase.get("registered_at_approval")
+        if isinstance(reg, list):
+            return str(vid) in [str(x) for x in reg]
+    return None
 
 
-def predates(root, sha, approval_sha):
-    """True when `sha` is an ancestor of `approval_sha`. None when unknowable."""
-    # provenance.UNKNOWN, not hlib.UNKNOWN -- the same invented attribute that
-    # crashed P58. Imported HERE because this module imports provenance inside
-    # functions, not at module scope: the first fix referenced it at module
-    # level and raised NameError, which is the same mistake twice in one hour
-    # and the reason this line is verified by running rather than by reading.
-    import provenance as _prov
-    if not sha or not approval_sha or approval_sha == _prov.UNKNOWN:
-        return None
-    try:
-        ok, _out = hlib._git(root, "merge-base", "--is-ancestor", sha, approval_sha)
-    except Exception:
-        return None
-    return bool(ok)
+# MOADIX v2: registered_since() (git log -S on harness/registry.yaml) and
+# predates() (merge-base against approval_sha) were removed in increment 3;
+# registered_at_approval() answers the same question from the signed ledger.
 
 
 def recorded_validator_results(root, phase_doc, self_id="build-scorecard"):
@@ -376,25 +355,31 @@ def recorded_validator_results(root, phase_doc, self_id="build-scorecard"):
                 # approved? "Approved before this check existed" and "approved
                 # and skipped it" are two claims, and blocking on both makes
                 # every registry addition invalidate all history at once.
-                _sha, _st = registered_since(root, vid)
-                _pre = predates(root, _sha, p.get("approval_sha")) if _st == "known" else None
+                # MOADIX v2: answered from the signed ledger (registered_at_approval).
+                _pre = registered_at_approval(p, vid)
                 if _pre is False:
                     notes.append(
-                        "phase %s was approved before validator %r existed "
-                        "(registered at %s). Not counted against the approval: the "
-                        "phase was not verified against it, and could not have been."
-                        % (lbl, vid, str(_sha)[:12]))
+                        "phase %s was approved (ledger seq %s) before validator %r was "
+                        "registered: the gate's run for that approval lists every "
+                        "registered validator and this one is not among them. Not "
+                        "counted against the approval: the phase was not verified "
+                        "against it, and could not have been."
+                        % (lbl, p.get("ledger_seq"), vid))
                     continue
                 _why = ""
-                if _st != "known" or _pre is None:
-                    _why = (" Whether it predates the approval is UNKNOWN -- the "
-                            "registry history could not be read, so this is not "
-                            "excused as a later addition.")
+                if _pre is None:
+                    _why = (" Whether it was registered at approval is UNKNOWN -- the "
+                            "ledger line does not say which validators the gate ran, "
+                            "so this is not excused as a later addition.")
                 blockers.append(B(
                     "phase %s validator %r has NO recorded result. Absence is not a "
                     "pass -- it records that nothing consulted it, which is a "
                     "different claim from passing.%s" % (lbl, vid, _why),
                     kind="INSTRUMENT_ABSENT", phase=lbl))
+            elif str(rec.get("result")) == "n/a-by-profile":
+                # MOADIX v2: the gate records profile N/A in the approval's evidence.
+                # Neither a pass nor a failure (check-approvals reports it the same way).
+                notes.append("phase %s validator %r was n/a-by-profile at approval." % (lbl, vid))
             elif str(rec.get("result")) == "unknown":
                 # A run whose INSTRUMENT could not be reached is not evidence
                 # about the product. Recording it as a verified failure would
@@ -601,9 +586,9 @@ def main():
         else:
             blockers.append(B("HARD RULE: %d phase(s) were approved with approval_mode: "
                             "noninteractive (%s). There is NO waiver for this — the human gate is "
-                            "the point of the design. Re-approve them at a terminal: "
-                            "`harness/bin/gate.sh reopen <phase> --reason \"re-approve "
-                            "interactively\"` then approve." % (len(noninteractive), detail),
+                            "the point of the design. Re-approve them: the operator types "
+                            "`REOPEN <phase> <reason> <code>`, then `APPROVE <phase> <code>` "
+                            "(MOADIX v2)." % (len(noninteractive), detail),
                         kind='INTEGRITY'))
 
     # ---------- 2. tests ---------------------------------------------------
@@ -925,8 +910,9 @@ def main():
                          % (_x.get("path"), re.sub(r"\s+", " ",
                                                    str(_x.get("reason") or "")).strip())))
 
-    REMEDY = ("Reopen and re-approve it (`gate.sh reopen %s` then approve), or waive with "
-              "`gate.sh waive approval-staleness --path %s --reason \"...\" --approver \"...\"`.")
+    # MOADIX v2: the remedy names the typed operator commands, not v1's gate.sh.
+    REMEDY = ("Ask the operator to REOPEN %s and approve it again, or to WAIVE approval-staleness "
+              "for %s (owner, scope, expiry, reason).")
     for p in phases:
         lbl = str(p.get("label"))
         if str(p.get("status")) != "APPROVED":

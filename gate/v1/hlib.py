@@ -487,16 +487,86 @@ def load_phase_doc(root):
     return v1_phase_doc(load_yaml(os.path.join(root, ".sdlc", "phase.yaml")) or {})
 
 
+def _ledger_approvals(entries):
+    """{phase label: approval facts} from verified ledger bodies (MOADIX v2, increment 3).
+
+    The scorecard used to read these from v1's phase.yaml fields and v1's git
+    history. In v2 the signed ledger is the record:
+      approval_sha    the APPROVE line's source_commit (the commit the gate's
+                      validator run was keyed to)
+      approval_dirty  False: the gate refuses to run validators on a dirty tree,
+                      so a gate-recorded approval is always from a clean tree
+      approval_mode   "interactive": every v2 APPROVE is the operator's typed
+                      command with a one-time authenticator code
+      evidence        the validator results the APPROVE line carries; source
+                      "gate" means the gate ran EVERY validator registered for
+                      the phase at that moment, so a registered validator absent
+                      from it was registered later
+    Imported v1 lines (onlineMarket migration, increment 7) carry
+    payload.imported = {"from": "v1", "approval_sha", "approval_dirty",
+    "approval_mode", "approver", "evidence": [...], "registered": [...]}; their
+    facts are taken as recorded, and a missing field stays unknown.
+    A REOPEN clears that phase and every later one, as in the replay."""
+    import base64 as _b64
+    import json as _json
+    out = {}
+    order = []
+    for e in entries or []:
+        verb = str(e.get("action") or "").split(" ", 1)[0]
+        try:
+            pl = _json.loads(_b64.b64decode(e.get("payload_b64") or "e30=").decode())
+        except Exception:
+            pl = {}
+        label = str(pl.get("phase")) if pl.get("phase") is not None else None
+        if verb == "REOPEN" and label in order:
+            for lb in order[order.index(label):]:
+                out.pop(lb, None)
+            order = order[:order.index(label)]
+            continue
+        if verb != "APPROVE" or label is None:
+            continue
+        imp = pl.get("imported") if isinstance(pl.get("imported"), dict) else None
+        if imp:
+            fact = {"approval_sha": imp.get("approval_sha") or "unknown",
+                    "approval_dirty": imp.get("approval_dirty") if isinstance(imp.get("approval_dirty"), bool)
+                    else "unknown",
+                    "approval_mode": imp.get("approval_mode") or "unknown",
+                    "approver": imp.get("approver") or "unknown",
+                    "evidence": list(imp.get("evidence") or []), "evidence_source": "imported-v1",
+                    "registered_at_approval": imp.get("registered"), "ledger_seq": e.get("seq")}
+        else:
+            val = pl.get("validation") or {}
+            fact = {"approval_sha": val.get("commit") or pl.get("source_commit") or "unknown",
+                    "approval_dirty": False if val else "unknown",
+                    "approval_mode": "interactive", "approver": "operator",
+                    "evidence": [{"validator": r.get("validator"), "result": r.get("result"),
+                                  "exit_code": r.get("exit_code"), "checked_at": val.get("finished_at")}
+                                 for r in (val.get("results") or [])],
+                    "evidence_source": "gate" if val else "none", "validation_digest": val.get("digest"),
+                    "ledger_seq": e.get("seq")}
+        out[label] = fact
+        if label in order:
+            order.remove(label)
+        order.append(label)
+    return out
+
+
 def v1_phase_doc(st):
-    """v2 replay state (.sdlc/phase.yaml) -> v1 phase.yaml shape."""
+    """v2 replay state (.sdlc/phase.yaml) -> v1 phase.yaml shape. With the
+    verified ledger entries (st["_entries"], set by gate/state.replay) the
+    approval facts come from the signed ledger (_ledger_approvals)."""
+    facts = _ledger_approvals(st.get("_entries"))
     phases = []
     for i, p in enumerate(st.get("phases") or []):
         status = str(p.get("status") or "draft")
-        phases.append({"id": int(p.get("id", i)), "label": str(p.get("label")), "name": p.get("name"),
-                       "status": "APPROVED" if status == "APPROVED" else
-                                 ("in-review" if status == "PROCEED-PAST" else "draft"),
-                       "approver": "operator" if status == "APPROVED" else None,
-                       "timestamp": p.get("at"), "evidence": []})
+        ph = {"id": int(p.get("id", i)), "label": str(p.get("label")), "name": p.get("name"),
+              "status": "APPROVED" if status == "APPROVED" else
+                        ("in-review" if status == "PROCEED-PAST" else "draft"),
+              "approver": "operator" if status == "APPROVED" else None,
+              "timestamp": p.get("at"), "evidence": []}
+        if status == "APPROVED" and str(p.get("label")) in facts:
+            ph.update(facts[str(p.get("label"))])
+        phases.append(ph)
     waivers = []
     for w in st.get("waivers") or []:
         waivers.append({"rule": w.get("rule") or "waiver", "path": w.get("id"), "reason": w.get("reason"),

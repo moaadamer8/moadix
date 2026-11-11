@@ -450,6 +450,93 @@ def group_autoval():
            "NOT recorded" in ctx and "turn ends" in ctx, short(ctx))
 
 
+# ===================================================================== phase-11 scorecard (ruling 4)
+def _entry(seq, action, payload):
+    import base64
+    return {"seq": seq, "prev": "x", "ts": "2026-11-11T00:00:%02dZ" % seq, "product": "sc", "action": action,
+            "payload_b64": base64.b64encode(json.dumps(payload).encode()).decode()}
+
+
+def group_scorecard():
+    G = "scorecard"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import hlib
+    import build_scorecard as bs
+    from gate import state as gstate
+    # 1. a real gate-recorded approval -> approval facts from the signed ledger
+    p = E.repo("scprod", docs=("00-brd.md", "01-research.md"))
+    E.init(p, "scfx")
+    approve(p, "0")
+    head = fixtures.sh([fixtures.GIT, "-C", p, "rev-parse", "HEAD"]).stdout.strip()
+    bodies = [json.loads(ln["body"]) for ln in E.ledger(p)]
+    st = gstate.replay("scfx", bodies)
+    doc = hlib.v1_phase_doc(st)
+    ph0 = next(x for x in doc["phases"] if x["label"] == "0")
+    record(G, "a gate APPROVE gives the scorecard approval_sha = the commit the validators ran on",
+           ph0.get("approval_sha") == head, "approval_sha %s, HEAD %s" % (ph0.get("approval_sha"), head))
+    record(G, "... approval_mode interactive (typed command + one-time code), approver operator, clean tree",
+           ph0.get("approval_mode") == "interactive" and ph0.get("approver") == "operator" and
+           ph0.get("approval_dirty") is False, short({k: ph0.get(k) for k in ("approval_mode", "approver",
+                                                                               "approval_dirty")}))
+    record(G, "... evidence = the validator results on the APPROVE line, source 'gate', with the result digest",
+           ph0.get("evidence_source") == "gate" and ph0["evidence"][0]["validator"] == "check-handoff-0" and
+           str(ph0.get("validation_digest", "")).startswith("sha256:"), short(ph0.get("evidence")))
+    record(G, "approval freshness reads the ledger commit (no 'approval records no commit')",
+           __import__("provenance").approval_status(p, ph0, ["sdlc/00-*.md"])[0] == "current",
+           short(__import__("provenance").approval_status(p, ph0, ["sdlc/00-*.md"])))
+    # 2. registered-at-approval, from the ledger instead of v1 git history
+    record(G, "gate evidence: a validator absent from the APPROVE line was registered later -> False",
+           bs.registered_at_approval(ph0, "check-something-new") is False and
+           bs.registered_at_approval(ph0, "check-handoff-0") is True, "")
+    imp = hlib._ledger_approvals([_entry(1, "APPROVE 3", {"phase": "3", "imported": {
+        "from": "v1", "approval_sha": head, "approval_dirty": False, "approval_mode": "interactive",
+        "approver": "moad", "evidence": [{"validator": "check-x", "result": "pass"}]}})])["3"]
+    record(G, "imported v1 line without a `registered` list -> unknown (never coerced)",
+           bs.registered_at_approval(imp, "check-y") is None and imp["evidence_source"] == "imported-v1", "")
+    imp2 = dict(imp, registered_at_approval=["check-x"])
+    record(G, "imported v1 line with `registered` -> answered from it",
+           bs.registered_at_approval(imp2, "check-y") is False and bs.registered_at_approval(imp2, "check-x"), "")
+    reo = hlib._ledger_approvals([_entry(1, "APPROVE 0", {"phase": "0", "validation": {"commit": head}}),
+                                   _entry(2, "APPROVE 1", {"phase": "1", "validation": {"commit": head}}),
+                                   _entry(3, "REOPEN 0 x", {"phase": "0", "reason": "x"})])
+    record(G, "REOPEN clears that phase's approval facts and every later one", reo == {}, short(reo))
+    # 3. end to end: build-scorecard on a phase doc made from ledger lines (gate + imported v1)
+    entries = []
+    labels = [lb for _i, lb, _n, _g in __import__("gate.pathmap", fromlist=["PHASES"]).PHASES][:14]
+    for i, lb in enumerate(labels, 1):
+        if lb == "2":
+            entries.append(_entry(i, "APPROVE 2", {"phase": "2", "imported": {
+                "from": "v1", "approval_sha": head, "approval_dirty": False, "approval_mode": "noninteractive",
+                "approver": "agent", "evidence": []}}))
+        else:
+            entries.append(_entry(i, "APPROVE %s" % lb, {"phase": lb, "source_commit": head, "validation": {
+                "commit": head, "verdict": "pass", "finished_at": "2026-11-11T00:00:00Z",
+                "digest": "sha256:" + "0" * 64, "results": []}}))
+    st = gstate.replay("scfx", entries)
+    doc = hlib.v1_phase_doc(st)
+    dp = os.path.join(E.base, "sc-phase-doc.json")
+    with open(dp, "w") as f:
+        json.dump(doc, f)
+    env = E.env(MOADIX_PRODUCT_ROOT=p, MOADIX_PHASE_DOC=dp, MOADIX_GATE_RUN="1")
+    r = subprocess.run([PY, os.path.join(REPO, "gate", "v1", "_launch.py"),
+                        os.path.join(REPO, "gate", "v1", "build_scorecard.py"), "--no-write"], cwd=p, env=env,
+                       capture_output=True, text=True, timeout=300)
+    out = r.stdout + r.stderr
+    record(G, "build-scorecard runs on a ledger-derived phase doc (phases 0-11 approved) without a traceback",
+           "Traceback" not in out and r.returncode in (0, 1, 2, 3), "rc %d; %s" % (
+               r.returncode, short(out[-200:])))
+    record(G, "... it no longer reports v1-history UNKNOWNs (registry history, approvals with no commit)",
+           "registry history could not be read" not in out and "approval records no commit" not in out and
+           "ledger line does not say" not in out.split("phase 2")[0], short([ln for ln in out.splitlines()
+                                                                             if "UNKNOWN" in ln][:3]))
+    record(G, "... the HARD RULE still fires for an imported v1 approval with approval_mode noninteractive",
+           "HARD RULE" in out and "noninteractive" in out and r.returncode != 0, short(
+               [ln for ln in out.splitlines() if "HARD RULE" in ln][:1], 200))
+    record(G, "... gate approvals count as interactive (only phase 2 is named by the HARD RULE)",
+           "(2)" in out or "noninteractive (2" in out, short([ln for ln in out.splitlines() if "noninteractive" in ln][:2],
+                                                            240))
+
+
 # ===================================================================== ADOPT (ruling 3)
 def group_adopt():
     G = "adopt"
@@ -826,6 +913,7 @@ def main():
         group_approve()
         group_autoval()
         group_adopt()
+        group_scorecard()
         group_init()
         group_waive()
         group_proceed()
