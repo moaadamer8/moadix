@@ -85,6 +85,39 @@ Open sessions keep the old hooks until restarted, so close every Claude Code ses
 
 If the checker program itself changed in that version, the installer stops and says so. In that case uninstall, then install, and scan a new key. To add the plugin once this repo is on GitHub: `managed/install.sh --plugin <github-owner>/moadix`.
 
+## Running the attack corpus (Terminal)
+
+The corpus (`tests/corpus/run.py`) proves the real checker and the Keychain behave: approvals need a real code, forged ledgers are caught, the cooldown works, and other programs cannot read the secret. It needs the Keychain, so it runs in **Terminal**, not in Claude Code (the sandbox blocks Keychain access there).
+
+It uses only what it builds itself: two throwaway test keychains, two checkers compiled with those keychains baked in, and two fixture products, all under `~/moadix-scratch/corpus`. It never uses your login keychain, the installed checker in `/Library/Application Support/ClaudeCode`, or any real `.sdlc/`. A guard enforces this, and it runs its own self-test before anything else.
+
+```
+cd ~/moadix
+/usr/bin/python3 tests/corpus/run.py
+```
+
+It takes about 4–6 minutes and needs no password and no phone. What you see, in order:
+
+1. **Guard self-test (18 lines).** These lines start with `PASS  [guard] self-test:`.
+   - 17 of them hand the guard a real resource and must end in `-> ABORT`: the installed checker, the login keychain, a real product, `security` without a scratch keychain, and so on.
+   - The 18th is a control (a scratch test build) and must end in `-> accepted`.
+   - If any of the 18 does not pass, the run prints `ABORTED: the isolation guard did not fire …` and stops (exit 3) before building anything.
+2. `guard: scratch /Users/<you>/moadix-scratch/corpus; forbidden keychains …/login.keychain-db; installed home /Library/Application Support/ClaudeCode`
+3. The two checker builds (`Identifier=com.moadix.checker`, `flags=0x10002(adhoc,runtime)`), then `fixtures: …`.
+4. **Preflight**, one line per test keychain:
+   `health [preflight A] checker state: OK fails=0 paused_for=0 | get_status=0 (…) unlocked=1 readable=1 writable=1 totp_item=0 (…) | keychain file present`
+   and `PASS  [preflight] both test checkers read their own test keychains right after init`.
+   If a test checker cannot read its own keychain, the run **stops here** with `STOPPED after the preflight` and the health lines name the cause: a locked keychain (`unlocked=0`), a missing item, or the checker's own error. You get that one diagnosis instead of dozens of failures.
+5. The checks themselves, one `PASS`/`FAIL` line each: `[operator]` 43, `[pretool]` 40, `[measure]` 4, `[cooldown]` 9, `[keychain]` 11. After each group comes a `health [after <group> A|B] …` line. The keychain group deliberately swaps and deletes secrets in test keychain B, so B's health lines then show `ERR pin-mismatch`. That is expected.
+6. Two hygiene checks: your keychain search list is unchanged, and no gate process read or wrote a real product.
+7. The last line: **`128 checks, 128 passed, 0 failed`** (exit 0).
+
+If a check fails, the run prints `-- first failure: keychain health at this moment --` under it once, with both keychains' health. Send me the whole output: `/usr/bin/python3 tests/corpus/run.py 2>&1 | tee ~/moadix-scratch/corpus-run.txt`.
+
+If the guard ever stops the run (`ABORTED by the isolation guard: …`, exit 3), nothing real was touched. The message names what would have been used.
+
+To check only the guard, which needs no Keychain and also runs inside Claude Code: `/usr/bin/python3 tests/corpus/run.py --guard-selftest` (last line `guard self-test only: 18/18`).
+
 ## 5. Uninstall
 
 ```
