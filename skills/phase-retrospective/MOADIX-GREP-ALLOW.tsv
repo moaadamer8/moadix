@@ -1,0 +1,21 @@
+# <path glob>	<line regex>	<reason>
+skills/phase-retrospective/*	^(\d+\. )?Stop here and report what you produced\. The operator decides whether the phase is approved \(MOADIX gate\)\.$	MOADIX hand-back line: says the operator, not the agent, approves the phase
+skills/phase-retrospective/customize.toml	^# --- Configurable below\. Overrides merge per BMad structural rules: ---$	describes how BMad config override layers are combined; not a code merge
+skills/phase-retrospective/SKILL.md	merging base → team → user \(scalars override,	config override layering; not a code merge
+skills/phase-retrospective/SKILL.md	^Consolidate: merge, dedupe, and provenance-link findings\.	combining review findings; not a code merge
+skills/phase-retrospective/*	it approves nothing and gates nothing \(MOADIX gate\)	MOADIX adaptation stating the verdict approves nothing
+skills/phase-retrospective/references/acceptance-verdict.md	it does not approve the epic or the phase \(MOADIX gate\)\.$	MOADIX adaptation stating the verdict approves nothing
+skills/phase-retrospective/references/aggregate-views.md	^- \*\*God-class / size growth\*\* — files that grew past a healthy size	describes how git merge commits count in churn data; read-only analysis
+skills/phase-retrospective/references/evidence-gathering.md	^- \*\*Diff range and commits\*\* — the full set of changes the epic introduced\.	describes reading git history and merge-commit data; read-only analysis
+skills/phase-retrospective/scripts/sprint_status.py	# Pin the emitter to the indentation the sprint-status template ships with\.	'ships with' = the template's default indentation (data)
+skills/phase-retrospective/scripts/git_evidence.py	^"""Measure git commit and file-change evidence over a revision range\.$	docstring: reads git commit history (git log); writes nothing
+skills/phase-retrospective/scripts/git_evidence.py	^Two git passes\. The first lists every commit in the range \(merges included\)$	docstring about counting merge commits in git log; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^and sums the per-file churn of the non-merge commits, which is what `files`$	docstring about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^reports\. The second runs only when the range contains merges and measures$	docstring about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^those merges alone, reported separately as `merge_files` — never folded into$	docstring about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^`files`, because a merge's diff against its first parent restates the churn$	docstring about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^\s*(# restates the churn of|of) the commits it merged in, which (the first pass|pass 1) already	comment about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^\s*`merges_measured` and read as "the merges changed nothing"\.$	docstring about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^\s*# Under -m, git repeats a merge's header once per parent unless it$	comment about git log output format; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^\s*# (the range including merges, which is what per-story attribution reads\.|Merges contribute no numstat rows here, so `files` is non-merge churn\.)$	comment about merge commits as data; read-only
+skills/phase-retrospective/scripts/git_evidence.py	^\s*# (Pass 2 — merge churn, only when there is any\.|exactly one diff-against-first-parent block per merge sitting on it\.|Merges off that spine are counted in merge_count and never measured,|between the two is a visible statement that some merges went|unmeasured\. This never folds into `files` — a merge's first-parent diff)	comment about merge commits as data; read-only
