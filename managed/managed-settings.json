@@ -27,8 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 '__MOADIX_HOME__/gate/hook.py' prompt",
-            "timeout": 20,
+            "command": "/usr/bin/python3 -I '__MOADIX_HOME__/gate/hook.py' prompt",
+            "timeout": 90,
             "onFailure": "block"
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 '__MOADIX_HOME__/gate/hook.py' pretool",
+            "command": "/usr/bin/python3 -I '__MOADIX_HOME__/gate/hook.py' pretool",
             "timeout": 15,
             "onFailure": "block"
           }

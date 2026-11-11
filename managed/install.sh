@@ -105,16 +105,24 @@ created_cc=0; [[ -d "$CC_DIR" ]] || created_cc=1
 [[ $UPDATE == 1 ]] && created_cc="$(sed -n 's/^created_cc_dir=//p' "$MOADIX_HOME/install-record" 2>/dev/null || echo 0)"
 as_root /bin/mkdir -p "$MOADIX_HOME/bin"
 as_root /bin/rm -rf "$MOADIX_HOME/gate"
-as_root /bin/mkdir -p "$MOADIX_HOME/gate"
+as_root /bin/mkdir -p "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config"
 put 0755 "$work/moadix-checker" "$CHECKER"
 for f in "$HERE"/gate/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/$(basename "$f")"; done
+# increment 2: the ported v1 validators and the gate's own config (registry, policies)
+for f in "$HERE"/gate/v1/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/v1/$(basename "$f")"; done
+for f in "$HERE"/gate/config/*.yaml "$HERE"/gate/config/*.toml "$HERE"/gate/config/*.ini; do
+  put 0644 "$f" "$MOADIX_HOME/gate/config/$(basename "$f")"
+done
+[[ -e "$MOADIX_HOME/gate/_testguard.py" ]] && fail "a test guard is in the installed gate; it must never be installed"
 printf 'created_cc_dir=%s\ninstalled=%s\nsource=%s\n' "$created_cc" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   "$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)" > "$work/install-record"
 put 0644 "$work/install-record" "$MOADIX_HOME/install-record"
 if [[ $MODE == real ]]; then
-  as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate"
+  as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
+    "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config"
 fi
-as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate"
+as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
+  "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config"
 
 # ---- 4. secrets ------------------------------------------------------------------
 if [[ $UPDATE == 0 ]]; then
