@@ -9,12 +9,16 @@ PreToolUse fails closed inside the script too (any exception -> deny).
 UserPromptSubmit never blocks on purpose (Amendment 1 §2): an exception is
 reported to the agent as added context, and nothing is recorded.
 """
+import contextlib
+import importlib
 import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+with contextlib.suppress(ImportError):  # only in test fixtures' gate copies (tests/lib/_testguard.py)
+    importlib.import_module("gate._testguard")
 from gate import opcmd, pretool  # noqa: E402
 
 
@@ -31,10 +35,8 @@ def main():
             out = opcmd.handle(data)
         except Exception as e:
             out = opcmd._ctx("gate error (%s: %s). Nothing was recorded." % (type(e).__name__, e))
-            try:
+            with contextlib.suppress(Exception):  # best effort: the reply above already says nothing was recorded
                 opcmd._burn_all(data.get("prompt") or "")
-            except Exception:
-                pass
     else:
         sys.stderr.write("usage: hook.py prompt|pretool\n")
         return 1

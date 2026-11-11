@@ -22,6 +22,11 @@ from . import pathmap, yamlite
 
 SDLC = ".sdlc"
 PHASE_HEADER = "# MOADIX gate state, derived from ledger.jsonl. Written only by the gate.\n"
+# Bumped when the rendering changes. A phase.yaml with an OLDER version line is
+# regenerated from the verified ledger (a gate update), not reported as drift.
+RENDER_VERSION = 3
+GIT = "/usr/bin/git"
+GATE_FILES = ("product", "phase", "ledger")
 
 
 class GateError(Exception):
@@ -66,7 +71,8 @@ def paths(root):
 
 
 def load_product(root):
-    doc = yamlite.parse_flat(open(paths(root)["product"]).read())
+    with open(paths(root)["product"]) as f:
+        doc = yamlite.parse_flat(f.read())
     pid = str(doc.get("product") or "")
     if not re.match(r"^[A-Za-z0-9_.-]{1,64}$", pid):
         raise GateError("product.yaml: invalid product id")
@@ -145,7 +151,8 @@ def decode_payload(entry):
 
 def replay(product_id, entries):
     """Phase state from verified ledger entries."""
-    phases = [{"id": pid, "label": label, "name": name, "status": "draft", "seq": None, "at": None, "note": None}
+    phases = [{"id": pid, "label": label, "name": name, "status": "draft", "seq": None, "at": None, "note": None,
+               "commit": None, "evidence": None}
               for pid, label, name, _ in pathmap.PHASES]
     waivers, parked = {}, None
     for e in entries:
@@ -153,31 +160,39 @@ def replay(product_id, entries):
         pl = decode_payload(e)
         ph = next((p for p in phases if p["label"] == pl.get("phase")), None)
         if verb == "APPROVE" and ph:
-            ph.update(status="APPROVED", seq=e["seq"], at=e["ts"], note=None)
+            val = pl.get("validation") or {}
+            ph.update(status="APPROVED", seq=e["seq"], at=e["ts"], note=None, commit=pl.get("source_commit"),
+                      evidence=[{"validator": r.get("validator"), "result": r.get("result"),
+                                 "exit_code": r.get("exit_code")} for r in (val.get("results") or [])] or None)
         elif verb == "PROCEED-PAST" and ph:
-            ph.update(status="PROCEED-PAST", seq=e["seq"], at=e["ts"], note=pl.get("reason"))
+            ph.update(status="PROCEED-PAST", seq=e["seq"], at=e["ts"], note=pl.get("reason"),
+                      commit=pl.get("source_commit"),
+                      evidence=[{"validator": v, "result": "fail"} for v in (pl.get("failing") or [])] or None)
         elif verb == "REOPEN" and ph:
             for p in phases:
                 if p["id"] >= ph["id"]:
-                    p.update(status="draft", seq=None, at=None, note=None)
+                    p.update(status="draft", seq=None, at=None, note=None, commit=None, evidence=None)
             ph.update(status="REOPENED", seq=e["seq"], at=e["ts"], note=pl.get("reason"))
         elif verb == "WAIVE":
-            waivers[pl.get("id")] = {"id": pl.get("id"), "owner": pl.get("owner"), "expiry": pl.get("expiry"),
-                                     "reason": pl.get("reason"), "seq": e["seq"]}
+            waivers[pl.get("id")] = {"id": pl.get("id"), "owner": pl.get("owner"), "scope": pl.get("scope"),
+                                     "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
+                                     "at": e["ts"]}
         elif verb == "UNWAIVE":
             waivers.pop(pl.get("id"), None)
         elif verb == "PARK":
-            parked = {"seq": e["seq"], "at": e["ts"]}
+            parked = {"seq": e["seq"], "at": e["ts"], "commit": pl.get("source_commit"),
+                      "counts": pl.get("counts") or {}}
     current = next((p for p in phases if p["status"] not in ("APPROVED", "PROCEED-PAST")), None)
     head = entries[-1] if entries else None
     return {
-        "version": 2,
+        "version": RENDER_VERSION,
         "product": product_id,
         "ledger_seq": len(entries),
         "current_phase": current["label"] if current else "done",
-        "current_phase_id": current["id"] if current else len(phases) - 1,
+        "current_phase_id": current["id"] if current else None,
         "phases": [{k: v for k, v in p.items() if v is not None} for p in phases],
-        "waivers": sorted(waivers.values(), key=lambda w: w["seq"]),
+        "waivers": [{k: v for k, v in w.items() if v is not None}
+                    for w in sorted(waivers.values(), key=lambda w: w["seq"])],
         "parked": parked,
         "_head_ts": head["ts"] if head else None,
     }
@@ -188,16 +203,46 @@ def render_phase(st):
     return PHASE_HEADER + yamlite.emit(doc) + "\n"
 
 
+def hardlinked(root):
+    """Gate files with more than one directory entry. A hard link made from
+    outside .sdlc/ is a second, unprotected path to the same bytes, so writes
+    through it pass both the hook and the sandbox's .sdlc/ rule."""
+    p = paths(root)
+    out = []
+    for k in GATE_FILES:
+        try:
+            if os.lstat(p[k]).st_nlink > 1:
+                out.append(os.path.relpath(p[k], root))
+        except OSError:
+            pass
+    return out
+
+
+def _render_version(text):
+    m = re.search(r"^version: (\d+)$", text, re.M)
+    return int(m.group(1)) if m else 0
+
+
 def current_state(root):
     """(state, problems). On any problem the state is the last verified prefix's; callers fail closed."""
     prod = load_product(root)
     ok, problems, entries = verify_ledger(root, prod["product"])
+    links = hardlinked(root)
+    if links:
+        problems.append("hard link(s) to gate state: %s (a second path to these bytes bypasses .sdlc/ "
+                        "protection)" % ", ".join(links))
     st = replay(prod["product"], entries if ok else [])
     p = paths(root)["phase"]
     if ok:
-        on_disk = open(p).read() if os.path.exists(p) else ""
+        on_disk = ""
+        if os.path.exists(p):
+            with open(p) as f:
+                on_disk = f.read()
         if on_disk != render_phase(st):
-            problems.append("phase.yaml differs from the state the ledger replays to (drift)")
+            if on_disk and _render_version(on_disk) < RENDER_VERSION and not links:
+                write_phase(root, st)  # gate update: re-derive from the verified ledger
+            else:
+                problems.append("phase.yaml differs from the state the ledger replays to (drift)")
     return st, problems
 
 
@@ -217,8 +262,28 @@ def write_phase(root, st):
     os.replace(tmp, p)
 
 
+PRODUCT_TEMPLATE = """# MOADIX product definition. Gate-owned: created by INIT; agents cannot write
+# .sdlc/. The operator edits it in a terminal.
+product: %s
+created: "%s"
+path_map: default
+platform: null
+size: null
+app_run: null
+test_targets: null
+# PARK stops the stack, measures the declared counts, records them and tags.
+# argv lists (no shell); argv[0] must be docker or podman, resolved from the
+# gate's trusted directories. A count command prints one integer. Example:
+#   park:
+#     stop: [docker, compose, -p, myproduct, stop]
+#     counts:
+#       orders: [docker, compose, -p, myproduct, run, --rm, db, psql, -tAc, "select count(*) from orders"]
+park: null
+"""
+
+
 def init_product(root, product_id):
-    """Operator-only setup (managed/install.sh or a terminal), never the agent."""
+    """Creates .sdlc/ (INIT, recorded by the hook; or sdlc_init.py from a terminal)."""
     if not re.match(r"^[A-Za-z0-9_.-]{1,64}$", product_id):
         raise GateError("invalid product id")
     p = paths(root)
@@ -226,13 +291,13 @@ def init_product(root, product_id):
         raise GateError(".sdlc/ already exists")
     os.makedirs(p["evidence"], exist_ok=True)
     with open(p["product"], "w") as f:
-        f.write("# MOADIX product definition. Gate-owned.\n"
-                "product: %s\ncreated: \"%s\"\npath_map: default\nplatform: null\nsize: null\n"
-                "app_run: null\ntest_targets: null\n" % (product_id, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+        f.write(PRODUCT_TEMPLATE % (product_id, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
     open(p["ledger"], "a").close()
     for name, text in (("knowledge", "# Operational knowledge (read by verification)\n"),
                        ("untested", "# Acceptance criteria known to be untested; 10a reads this.\nuntested: []\n")):
         if not os.path.exists(p[name]):
             with open(p[name], "w") as f:
                 f.write(text)
+    with open(os.path.join(p["dir"], ".gitignore"), "w") as f:
+        f.write("# validator results are a per-machine cache\ncache/\n")
     write_phase(root, replay(product_id, []))
