@@ -113,21 +113,32 @@ def main():
     pol = json.load(open(os.path.join(CC, "managed-settings.json")))
     cmd = pol["hooks"]["PreToolUse"][0]["hooks"][0]
     check("policy: hooks run the installed gate copy, fail closed, with a timeout",
-          cmd["command"] == "/usr/bin/python3 '%s/moadix/gate/hook.py' pretool" % CC and cmd["onFailure"] == "block" and cmd["timeout"] == 15,
+          cmd["command"] == "/usr/bin/python3 -I '%s/moadix/gate/hook.py' pretool" % CC and cmd["onFailure"] == "block" and cmd["timeout"] == 15,
           json.dumps(cmd))
     check("policy: disableBypassPermissionsMode under permissions; pin set; no plugin keys without --plugin",
           pol["permissions"].get("disableBypassPermissionsMode") == "disable" and "disableBypassPermissionsMode" not in pol
           and len(pol["env"]["MOADIX_PIN"]) == 32 and "enabledPlugins" not in pol and pol["strictKnownMarketplaces"] == [],
           "permissions.disableBypassPermissionsMode=%r, pin=%s..., strictKnownMarketplaces=%r" % (
               pol["permissions"].get("disableBypassPermissionsMode"), pol["env"]["MOADIX_PIN"][:6], pol["strictKnownMarketplaces"]))
+    rels = [os.path.join(d, f) for d in ("", "v1", "config") for f in os.listdir(os.path.join(REPO, "gate", d))
+            if f.endswith((".py", ".yaml", ".toml", ".ini"))]
     same = all(open(os.path.join(REPO, "gate", f)).read() == open(os.path.join(CC, "moadix", "gate", f)).read()
-               for f in os.listdir(os.path.join(REPO, "gate")) if f.endswith(".py"))
+               for f in rels) and not os.path.exists(os.path.join(CC, "moadix", "gate", "_testguard.py"))
     check("installed gate copy matches the repo's gate/", same, "files: %s" % sorted(os.listdir(os.path.join(CC, "moadix", "gate"))))
 
     # The installed gate works end to end with the code the operator would scan.
     os.makedirs(PROD)
     sh(["git", "-C", PROD, "init", "-q"])
     sh(["/usr/bin/python3", os.path.join(CC, "moadix", "gate", "sdlc_init.py"), PROD, "toy"])
+    os.makedirs(os.path.join(PROD, "sdlc"))
+    shutil.copy(os.path.join(REPO, "tests", "fixtures", "product", "sdlc", "00-brd.md"), os.path.join(PROD, "sdlc"))
+    sh(["git", "-C", PROD, "add", "-A"])
+    sh(["git", "-C", PROD, "-c", "user.email=dryrun@example.invalid", "-c", "user.name=dryrun", "commit", "-qm", "brd"])
+    for _ in range(12):  # increment 2: APPROVE needs a fresh, passing validator run
+        o = hook("prompt", {"prompt": "REVIEW 0", "cwd": PROD})
+        if "still running" not in o and "have no current result" not in o:
+            break
+    check("installed gate: REVIEW 0 runs the ported validators", "check-handoff-0: PASS" in o, o[:200])
     o = hook("prompt", {"prompt": "APPROVE 0 %s" % totp(key), "cwd": PROD})
     check("installed gate: 'APPROVE 0 <code from the shown key>' is recorded", "APPROVE 0 recorded (ledger seq 1)" in o, o[:200])
     o = hook("pretool", {"tool_name": "Edit", "tool_input": {"file_path": ".sdlc/phase.yaml", "old_string": "a", "new_string": "b"}, "cwd": PROD})

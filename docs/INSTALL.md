@@ -64,18 +64,23 @@ Open a **new** Claude Code session in any folder and run `/status`. The `Setting
 
 ## 4. Use it
 
-- **Start a product** (in Terminal): `/usr/bin/python3 "/Library/Application Support/ClaudeCode/moadix/gate/sdlc_init.py" ~/path/to/repo <product-id>`
+- **Start a product:** open a Claude Code session in the product's git repo (`git init` it first if needed) and type `INIT <product-id> <code>`. The gate creates `.sdlc/` at the repo root and records ledger line 1. Each product needs its own id. The Terminal tool (`gate/sdlc_init.py`) still works, but INIT replaces it.
 - **In a Claude Code session in that repo**, type messages exactly like these, alone in the message:
   - `STATUS`: the agent relays the gate's state, which should start with `INTEGRITY OK`.
-  - `REVIEW 0`: the gate's summary of phase 0.
-  - `APPROVE 0 123456`: the phase, then the current code from the app. The agent relays `APPROVE 0 recorded (ledger seq 1). Proceed to phase 1.`
-  - Also: `REOPEN <phase> <reason> <code>`, `WAIVE <id> owner=<x> expiry=YYYY-MM-DD reason=<text> <code>`, `UNWAIVE <id> <code>`, `PROCEED-PAST <phase> <reason> <code>`, `PARK <code>`.
+  - `REVIEW 0`: runs phase 0's validators on the current commit (a few seconds) and prints their results. If it says they are still running, send it again.
+  - `APPROVE 0 123456`: the phase, then the current code from the app. APPROVE is refused, with the validators' findings, unless REVIEW's result for the **current commit** passed. Uncommitted changes, a newer commit or a newer gate all mean "send REVIEW again". The agent relays `APPROVE 0 recorded (ledger seq 2). Proceed to phase 1.`
+  - `WAIVE <id> owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>`: expiry at most 180 days out. A high- or critical-severity finding in `sdlc/09-security-report.md` cannot be waived.
+  - `PROCEED-PAST <phase> <reason> <code>`: only when REVIEW shows a definite failure on the current commit (not UNKNOWN, not passing).
+  - `PARK <code>`: stops the stack, measures the declared counts, records them and tags the repo. It runs only what `.sdlc/product.yaml` declares under `park:` (only `docker` or `podman` commands; see the example in that file), so add that section in Terminal first.
+  - Also: `REOPEN <phase> <reason> <code>`, `UNWAIVE <id> <code>`.
 - Each code works once. If one is refused as `already used`, wait for the next one.
 - **Wrong codes:** after 3 in a row, approvals pause for 15 minutes. Each further wrong code doubles the pause, up to 24 hours. Anything sent during a pause is refused without being checked, and does not extend it. After the pause, a valid code works and resets the count.
 
 ## Updating MOADIX
 
 After pulling a new version, run `managed/install.sh` again, again in Terminal. It detects the existing install, asks for your password once, re-copies the gate, rewrites the policy and re-runs the checks. Your key and your ledgers are kept.
+
+Open sessions keep the old hooks until restarted, so close every Claude Code session first. After an update, the first STATUS in each product re-derives `.sdlc/phase.yaml` from the ledger when the gate's format changed. Any cached validator results are discarded, so send REVIEW again before APPROVE.
 
 If the checker program itself changed in that version, the installer stops and says so. In that case uninstall, then install, and scan a new key. To add the plugin once this repo is on GitHub: `managed/install.sh --plugin <github-owner>/moadix`.
 
