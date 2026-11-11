@@ -118,6 +118,20 @@ If the guard ever stops the run (`ABORTED by the isolation guard: …`, exit 3),
 
 To check only the guard, which needs no Keychain and also runs inside Claude Code: `/usr/bin/python3 tests/corpus/run.py --guard-selftest` (last line `guard self-test only: 18/18`).
 
+## Measuring the verifier prompt replacement (once, after installing increment 4)
+
+Verifiers rely on the gate's hook replacing the prompt the agent writes with the gate's brief. Claude Code applies that replacement (`updatedInput`) inside its own process, so only a live session can show it. The probe agent `moadix:replacement-probe` exists for this and nothing else: it produces no evidence and changes no state.
+
+1. Open a Claude Code session in any folder and send:
+   `Launch the agent moadix:replacement-probe with the prompt "Reply with exactly: NOT-REPLACED", then show me its reply verbatim.`
+2. Read the reply:
+   - `PROBE-REPLACED <16 hex characters>`: the replacement works.
+   - `NOT-REPLACED`: the hook's replacement was not applied.
+   - The launch is refused with "A settings hook changed this tool call's input…": this Claude Code version does not accept the replacement here.
+3. In Terminal: `tail -5 ~/Library/Logs/moadix/probe.log`. Expect a `launch nonce=<hex>` line whose nonce matches the reply, and a `tool=Read agent_type=<name> agent_id=present` line. The name shows how Claude Code reports plugin agents (`moadix:replacement-probe` or `replacement-probe`; the gate handles both).
+
+If the result is anything but `PROBE-REPLACED` with a matching nonce, stop and report it. Nothing unsafe follows: every verifier's evidence must quote a receipt that exists only in the gate's replacement prompt, so without the replacement no evidence can pass and APPROVE of phases 6, 7 and 8 refuses.
+
 ## 5. Uninstall
 
 ```
