@@ -1,0 +1,7 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+7d035c84ea96ba9808bc9731533e1bafdbbdf113317ef151ead458d18242067b  modified  SKILL.md  BayramAnnakov_claude-reflect/SKILL.md
+2a0db299aa6e2ff219d029cdc761b3ad3b896d6ea444a1a907e8fd87f2ac55bc  modified  scripts/capture_learning.py  BayramAnnakov_claude-reflect/scripts/capture_learning.py
+380fd49a4513fdd7d2b59fe9243d25a5b6b42f41ce67986cb926401a4aac8817  modified  scripts/clear_queue.py  BayramAnnakov_claude-reflect/scripts/clear_queue.py
+56629bb5632f7e48c6caa9770ea886ff5e0a56a2829576aca6bd74427c671c69  modified  scripts/read_queue.py  BayramAnnakov_claude-reflect/scripts/read_queue.py
+8c06b919dca34bacb54f357d9a5aa10e6ee7c3e0020a47177d3dec0a4342a03f  verbatim  scripts/lib/__init__.py  BayramAnnakov_claude-reflect/scripts/lib/__init__.py
+0bd30d9c0e619bb78266e6c7ac7efc0ea0ab7848a32881acb1703e2766dd4b59  modified  scripts/lib/reflect_utils.py  BayramAnnakov_claude-reflect/scripts/lib/reflect_utils.py

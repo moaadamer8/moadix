@@ -1,0 +1,2 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+fcb1cde9ba7b21694b508766a8d6a79bc91bed9982f828f816210059934f46b4  modified  SKILL.md  anthropics_claude-plugins-official/plugins/pr-review-toolkit/agents/pr-test-analyzer.md

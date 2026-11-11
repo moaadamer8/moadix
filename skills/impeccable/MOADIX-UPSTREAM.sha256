@@ -1,0 +1,7 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+637b7b727122a273912454e6c7c2d7775186eb0c3c379c2a7c13bec595c61619  modified  SKILL.md  pbakaus_impeccable/.claude/skills/impeccable/SKILL.md
+43780abcf10ac12a569d98001ae38af2b337727a0f7ce66268246ac1d54b5d34  verbatim  reference/android.md  pbakaus_impeccable/.claude/skills/impeccable/reference/android.md
+e1637178d0b7588f0c07ff3bfcb93a16eed2917ffee3031dd93d74e9acb26e3a  modified  reference/audit.md  pbakaus_impeccable/.claude/skills/impeccable/reference/audit.md
+b4ad84428c37b60c6fc6d2e5f517746593c654a7b448176ff8f0d0d259b0f45f  modified  reference/audit.native.md  pbakaus_impeccable/.claude/skills/impeccable/reference/audit.native.md
+9fe5d7af0f2bb3618bfec633626ae157c0ae4effb18fd8f40e404ac69b8d0802  modified  reference/critique.md  pbakaus_impeccable/.claude/skills/impeccable/reference/critique.md
+40c87038b5f75147a5952a96237acf312a327bf70c1bcd8e0a5f064625ae9668  verbatim  reference/ios.md  pbakaus_impeccable/.claude/skills/impeccable/reference/ios.md

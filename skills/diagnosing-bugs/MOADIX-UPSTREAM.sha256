@@ -1,0 +1,4 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+849198df88cdb65fd0d97236604c1fca7ff2f22d2f705f9724a800d0266b118d  modified  SKILL.md  mattpocock_skills/skills/engineering/diagnosing-bugs/SKILL.md
+3e430dbe4334a87597488c060cb3dc3786bb00c9182877d6f5ec41f62490e90b  verbatim  agents/openai.yaml  mattpocock_skills/skills/engineering/diagnosing-bugs/agents/openai.yaml
+35103539fc36873eea36074769ad454f9379d6fc8b2dc0e26ce987fd3bfe5503  verbatim  scripts/hitl-loop.template.sh  mattpocock_skills/skills/engineering/diagnosing-bugs/scripts/hitl-loop.template.sh

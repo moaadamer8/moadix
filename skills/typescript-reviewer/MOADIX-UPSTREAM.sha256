@@ -1,0 +1,7 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+33753b05487c1aae4235fbff901cceb646735316015f79401569958d1507d2e4  modified  SKILL.md  affaan-m_ECC/agents/typescript-reviewer.md
+cb6fbe555d700a65d466fc27377fbb66d6da0e2bcf4411656918f6a45402af1a  verbatim  rules/coding-style.md  affaan-m_ECC/rules/typescript/coding-style.md
+930bbe5d5a66e0022a55c87d5a17765d1633669620f9a3be6815f3ab4ddcd6b4  verbatim  rules/hooks.md  affaan-m_ECC/rules/typescript/hooks.md
+20870f78aa32429fe13f35b415e9f6f8f7809e39c460cf8146d181b7306159fd  verbatim  rules/patterns.md  affaan-m_ECC/rules/typescript/patterns.md
+86b14a5a56f4e61750ab30ca50bd264f52f90f5358303f3028d41030a4c50f18  verbatim  rules/security.md  affaan-m_ECC/rules/typescript/security.md
+92e3d02b4fff30899bc1a2af043d74941adbf3b2c0e972d2fcd2c68c9c2ea70b  verbatim  rules/testing.md  affaan-m_ECC/rules/typescript/testing.md

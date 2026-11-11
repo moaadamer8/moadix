@@ -1,0 +1,10 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+d3f12423a0e456a7c2a25d5aa005df4eb4cb8c0b5cd400755b026c3c100b99dd  modified  SKILL.md  bmad/src/bmm-skills/ship/bmad-retrospective/SKILL.md
+33ce7da5bad6dfe1791218d8d607b749f9b58586b232df7ea0d3263ec50ec466  modified  customize.toml  bmad/src/bmm-skills/ship/bmad-retrospective/customize.toml
+09a65007c39af83e01e039331c252e6e670b134cd5e2a4b5e05ac9d9fb7e37f1  modified  references/acceptance-verdict.md  bmad/src/bmm-skills/ship/bmad-retrospective/references/acceptance-verdict.md
+5b278afce4a53692d8715b4af178e4233da0876921dc3154b5763d056cb5ff0b  verbatim  references/aggregate-views.md  bmad/src/bmm-skills/ship/bmad-retrospective/references/aggregate-views.md
+575bace78d7c03c48d86a209dd664f7dd22295a222b75e6d6298894cb7b7ce00  verbatim  references/evidence-gathering.md  bmad/src/bmm-skills/ship/bmad-retrospective/references/evidence-gathering.md
+de8164664cd2be7f73b8ba5552e9e0f58816d2a7c4be8efc7715461846bb7001  modified  references/retro-document.md  bmad/src/bmm-skills/ship/bmad-retrospective/references/retro-document.md
+a9c504c436038c7e47d08322413aa3c213d2859b36ae30e873cb8c60fd9e008e  verbatim  references/team-discussion.md  bmad/src/bmm-skills/ship/bmad-retrospective/references/team-discussion.md
+2acbb8b5804d0680b5939629a0c3786a72cde30f5f2cecd75858325c6e778d89  verbatim  scripts/git_evidence.py  bmad/src/bmm-skills/ship/bmad-retrospective/scripts/git_evidence.py
+7c9f0a514a6e0834182f3c30485de49e0a4decb9be51027cc8be58aecdb9fc44  modified  scripts/sprint_status.py  bmad/src/bmm-skills/ship/bmad-retrospective/scripts/sprint_status.py

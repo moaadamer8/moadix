@@ -1,0 +1,9 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+eafebb3fbebc4e276a055ca9916e20e36e95dca03f819eeeaaf80a3a9c16f07b  modified  SKILL.md  bmad/src/bmm-skills/plan/bmad-prd/SKILL.md
+d23707fe7ff5f5060a05b5b8bda3f170b9b1d9be61e409e9f7ae91f83572db6a  verbatim  customize.toml  bmad/src/bmm-skills/plan/bmad-prd/customize.toml
+4dad58ebee63933a53179016513ff94d143ce9f68e226489d390e2c36bf1d848  modified  references/headless.md  bmad/src/bmm-skills/plan/bmad-prd/references/headless.md
+19b2fa66d58cb4fef3d920cd09c81f8add4ee44dd4191bec87eaba84c2093338  verbatim  references/validate.md  bmad/src/bmm-skills/plan/bmad-prd/references/validate.md
+8d3621333a72400512bd62511bc4c73fc745711505e1f852c697ff8c5fa2de93  verbatim  assets/headless-schemas.md  bmad/src/bmm-skills/plan/bmad-prd/assets/headless-schemas.md
+b6fe8fc1390b8e46961d5eb5e6f2fe6c65dca2f30623d492677672e02868f7ab  modified  assets/prd-template.md  bmad/src/bmm-skills/plan/bmad-prd/assets/prd-template.md
+41d9f09064772a92ec908d970618e47ba63dc86b5c5a1a21d5a2c676d3ba8e3f  verbatim  assets/prd-validation-checklist.md  bmad/src/bmm-skills/plan/bmad-prd/assets/prd-validation-checklist.md
+a80becdd8205d2d7c18738855830b096172a496b96b5ca8a0820ec55c9bb8bf9  verbatim  assets/validation-report-template.html  bmad/src/bmm-skills/plan/bmad-prd/assets/validation-report-template.html

@@ -1,0 +1,6 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+1b3bf49217eec112dcac8466cc6c4239bb5d3e620d0608df83475ef28fbe8b02  verbatim  README.md  anthropics_defending-code-reference-harness/.claude/skills/threat-model/README.md
+1cdc1a19591e3347ff898bcf1c60bae470c484cd5a45902a965d5641eb3b608d  modified  SKILL.md  anthropics_defending-code-reference-harness/.claude/skills/threat-model/SKILL.md
+e7bbbfbeefda45a43d16e1caf8c5145188f3642539c06f69241bbec3a469d141  verbatim  bootstrap.md  anthropics_defending-code-reference-harness/.claude/skills/threat-model/bootstrap.md
+9d629e59f33cd752c5c1909cd31e8cd7b69e33ae210ed61e8bca34c74667de26  verbatim  interview.md  anthropics_defending-code-reference-harness/.claude/skills/threat-model/interview.md
+3486fa9ca4578bc023e10a0ecf4be3d0aa94c0e68d9042d606c65cf1760fd9d7  verbatim  schema.md  anthropics_defending-code-reference-harness/.claude/skills/threat-model/schema.md

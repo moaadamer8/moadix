@@ -1,0 +1,3 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+9c921a8d88138a41401d8897ca1bb852088ab1b7b605cdd04edc13e3e8aab6dd  modified  SKILL.md  mattpocock_skills/skills/engineering/code-review/SKILL.md
+8229ca854e11dc8e6aef2131ee03f31fb1561cf905fab9ccc325180cf3331352  verbatim  agents/openai.yaml  mattpocock_skills/skills/engineering/code-review/agents/openai.yaml

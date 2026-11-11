@@ -1,0 +1,3 @@
+# upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
+40cf933689b7783480fbf567c9b7573a9626977912acf7fcb808287934c7dfa8  verbatim  SKILL.md  wshobson_agents/plugins/security-scanning/skills/threat-mitigation-mapping/SKILL.md
+767e373e9a7b321095352f856499965a4abe999f247cde2415edcf2e038a045b  verbatim  references/details.md  wshobson_agents/plugins/security-scanning/skills/threat-mitigation-mapping/references/details.md
