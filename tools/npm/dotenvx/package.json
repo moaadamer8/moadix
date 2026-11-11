@@ -1,0 +1,7 @@
+{
+  "name": "moadix-tool-dotenvx",
+  "private": true,
+  "dependencies": {
+    "@dotenvx/dotenvx": "2.38.2"
+  }
+}

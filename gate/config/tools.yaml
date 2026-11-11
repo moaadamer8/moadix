@@ -1,0 +1,155 @@
+# MOADIX gate-run tools (increment 5; DESIGN.md §6 "Deterministic tools are run by the gate").
+# Installed root-owned with the gate. Every tool is pinned to an exact version, and every
+# download is checked against a sha256 taken from the upstream release's own checksum file
+# (or an npm/PyPI lockfile with integrity hashes). Pins are the newest release at least
+# 14 days old on 2026-11-11.
+#
+# The gate runs tools ONLY from <MOADIX_HOME>/tools (root-owned, written by
+# managed/install.sh through managed/fetch_tools.py), never from PATH: a session or project
+# setting could change PATH. The agent may run its own copies for feedback; only the
+# gate's run counts.
+#
+#   kind      binary   a single executable file
+#             archive  a .tar.gz/.zip holding `bin`
+#             npm      tools/npm/<name>/package-lock.json, installed with npm ci --ignore-scripts
+#             pypi     tools/py/<name>/requirements.txt (hash-locked), installed with uv
+#   assets    per platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64): url + sha256
+#   network   hosts the tool contacts when the AGENT runs it for feedback (managed sandbox
+#             allowlist). The gate's own run is offline where the tool allows it.
+version: 1
+tools:
+  - name: gitleaks
+    version: 8.30.1
+    phase: "9"
+    kind: archive
+    bin: gitleaks
+    network: []
+    assets:
+      darwin-arm64:
+        url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz
+        sha256: b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5
+      darwin-x64:
+        url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_x64.tar.gz
+        sha256: dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709
+      linux-x64:
+        url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+        sha256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      linux-arm64:
+        url: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz
+        sha256: e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
+  - name: osv-scanner
+    version: 2.7.0
+    phase: "9"
+    kind: binary
+    bin: osv-scanner
+    network: [api.osv.dev, api.deps.dev, osv-vulnerabilities.storage.googleapis.com]
+    assets:
+      darwin-arm64:
+        url: https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_darwin_arm64
+        sha256: d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b
+      darwin-x64:
+        url: https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_darwin_amd64
+        sha256: e82c5df7ab0a42dff29a1cd0660711447b56b4c0483ff66ad8634df10fd81a45
+      linux-x64:
+        url: https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
+        sha256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+      linux-arm64:
+        url: https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_arm64
+        sha256: 4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7
+  - name: trivy
+    version: 0.76.1
+    phase: "9"
+    kind: archive
+    bin: trivy
+    network: [mirror.gcr.io, ghcr.io, pkg-containers.githubusercontent.com]
+    assets:
+      darwin-arm64:
+        url: https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_macOS-ARM64.tar.gz
+        sha256: 11a9b6cd2752011b54f01ea4bd0dbfa9f0c41dc6538d5a3f9d23955f471bf4e5
+      darwin-x64:
+        url: https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_macOS-64bit.tar.gz
+        sha256: 7aa762eacd582052d053b62dcf972a1ab058abe39a57ccae234ed8894945b6b7
+      linux-x64:
+        url: https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz
+        sha256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+      linux-arm64:
+        url: https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-ARM64.tar.gz
+        sha256: e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f
+  - name: semgrep
+    version: 1.182.0
+    phase: "9"
+    kind: pypi
+    bin: semgrep
+    python: "3.12"
+    lock: tools/py/semgrep/requirements.txt
+    network: []
+  - name: k6
+    version: 2.3.0
+    phase: "10c"
+    kind: archive
+    bin: k6
+    network: []
+    assets:
+      darwin-arm64:
+        url: https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-macos-arm64.zip
+        sha256: b2417a3038edc5fe81dc178a889237724b595c5c9cfed875822008e46e862c7d
+      darwin-x64:
+        url: https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-macos-amd64.zip
+        sha256: c83bb16f54f0676afa4ea235fd757f3892d307dbd1bd201450de83af31986654
+      linux-x64:
+        url: https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+        sha256: 39c3117b6af817592dcd0ce4242105c0a7af10948c2a425306f0be8f7a8a8ab1
+      linux-arm64:
+        url: https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-arm64.tar.gz
+        sha256: 5ca3433e8201da72a284aaa241a1bb5fb47f4abb4e384d39410ddd8062f49b90
+  - name: github-mcp-server
+    version: 2.0.3
+    phase: "11"
+    kind: archive
+    bin: github-mcp-server
+    network: [api.github.com]
+    assets:
+      darwin-arm64:
+        url: https://github.com/github/github-mcp-server/releases/download/v2.0.3/github-mcp-server_Darwin_arm64.tar.gz
+        sha256: 5c95c01f75a7ec2370607e989b2968d314b02a54d78af8a9fdf38f3dfe6135f4
+      darwin-x64:
+        url: https://github.com/github/github-mcp-server/releases/download/v2.0.3/github-mcp-server_Darwin_x86_64.tar.gz
+        sha256: 115350858c3287843274efbf45e821d98f15d3304cb2c074740461ed32b45598
+      linux-x64:
+        url: https://github.com/github/github-mcp-server/releases/download/v2.0.3/github-mcp-server_Linux_x86_64.tar.gz
+        sha256: f797c20fe02a755865d0e2d46184ab47e31bf1619b0855b8d89c531e45a651c2
+      linux-arm64:
+        url: https://github.com/github/github-mcp-server/releases/download/v2.0.3/github-mcp-server_Linux_arm64.tar.gz
+        sha256: 5d2ddc71273fec8917e8f42cf19f26a6bd7acbb679b3a57de2917018b2eadf82
+  - name: redocly
+    version: 2.71.2
+    phase: "5"
+    kind: npm
+    package: "@redocly/cli"
+    bin: node_modules/@redocly/cli/bin/cli.js
+    lock: tools/npm/redocly/package-lock.json
+    network: []
+  - name: dotenvx
+    version: 2.38.2
+    phase: "6b"
+    kind: npm
+    package: "@dotenvx/dotenvx"
+    bin: node_modules/@dotenvx/dotenvx/src/cli/dotenvx.js
+    lock: tools/npm/dotenvx/package-lock.json
+    network: []
+  - name: release-please
+    version: 17.11.2
+    phase: "11"
+    kind: npm
+    package: release-please
+    bin: node_modules/release-please/build/src/bin/release-please.js
+    lock: tools/npm/release-please/package-lock.json
+    network: [api.github.com]
+  - name: playwright-mcp
+    version: 0.0.83
+    phase: "10a"
+    kind: npm
+    package: "@playwright/mcp"
+    bin: node_modules/@playwright/mcp/cli.js
+    lock: tools/npm/playwright-mcp/package-lock.json
+    network: []

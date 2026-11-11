@@ -1,0 +1,7 @@
+{
+  "name": "moadix-tool-redocly",
+  "private": true,
+  "dependencies": {
+    "@redocly/cli": "2.71.2"
+  }
+}
