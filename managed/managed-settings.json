@@ -6,16 +6,27 @@
         "source": "github",
         "repo": "__MARKETPLACE_REPO__"
       }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
     }
   },
   "strictKnownMarketplaces": [
     {
       "source": "github",
       "repo": "__MARKETPLACE_REPO__"
+    },
+    {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
     }
   ],
   "enabledPlugins": {
-    "moadix@moadix": true
+    "moadix@moadix": true,
+    "claude-security@claude-plugins-official": true
   },
   "disableSideloadFlags": true,
   "allowManagedHooksOnly": true,
@@ -109,7 +120,9 @@
         "~/.npm",
         "~/Library/Caches/ms-playwright",
         "~/Library/Caches/pip",
-        "~/.cache"
+        "~/.cache",
+        "~/Library/Caches/trivy",
+        "~/.semgrep"
       ]
     },
     "network": {
@@ -125,7 +138,15 @@
         "production.cloudflare.docker.com",
         "github.com",
         "codeload.github.com",
-        "objects.githubusercontent.com"
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "api.osv.dev",
+        "api.deps.dev",
+        "osv-vulnerabilities.storage.googleapis.com",
+        "mirror.gcr.io",
+        "ghcr.io",
+        "pkg-containers.githubusercontent.com",
+        "api.github.com"
       ]
     }
   }

@@ -34,11 +34,42 @@ def main():
     r = render("someone/moadix")
     pol = json.loads(r.stdout) if r.returncode == 0 else {}
     want = {"source": "github", "repo": "someone/moadix"}
-    check("--plugin: strictKnownMarketplaces allows exactly that one marketplace",
-          pol.get("strictKnownMarketplaces") == [want], json.dumps(pol.get("strictKnownMarketplaces")))
-    check("--plugin: the marketplace is registered as 'moadix' and moadix@moadix is force-enabled",
-          pol.get("extraKnownMarketplaces") == {"moadix": {"source": want}} and pol.get("enabledPlugins") == {"moadix@moadix": True},
-          "%s / %s" % (json.dumps(pol.get("extraKnownMarketplaces")), json.dumps(pol.get("enabledPlugins"))))
+    off = {"source": "github", "repo": "anthropics/claude-plugins-official"}
+    check("--plugin: strictKnownMarketplaces allows exactly this repo and anthropics/claude-plugins-official",
+          pol.get("strictKnownMarketplaces") == [want, off], json.dumps(pol.get("strictKnownMarketplaces")))
+    check("--plugin: both marketplaces registered (moadix, claude-plugins-official)",
+          pol.get("extraKnownMarketplaces") == {"moadix": {"source": want}, "claude-plugins-official": {"source": off}},
+          json.dumps(pol.get("extraKnownMarketplaces")))
+    ep = pol.get("enabledPlugins") or {}
+    on = sorted(k for k, v in ep.items() if v is True)
+    check("increment 5 policy test: the rendered policy enables EXACTLY moadix and claude-security",
+          on == ["claude-security@claude-plugins-official", "moadix@moadix"], "enabled: %s" % on)
+    names = [ln.strip() for ln in open(os.path.join(REPO, "managed", "official-plugins.txt"))
+             if ln.strip() and not ln.startswith("#")]
+    off_keys = sorted(k for k, v in ep.items() if v is False)
+    want_off = sorted("%s@claude-plugins-official" % n for n in names if n != "claude-security")
+    check("every other plugin of the official marketplace is force-DISABLED (%d plugins)" % len(want_off),
+          off_keys == want_off and all(k.endswith("@claude-plugins-official") for k in off_keys),
+          "%d false entries, e.g. %s" % (len(off_keys), off_keys[:3]))
+    check("no plugin from any other marketplace appears in enabledPlugins",
+          all(k.split("@", 1)[1] in ("moadix", "claude-plugins-official") for k in ep), "%d entries" % len(ep))
+    net = pol.get("sandbox", {}).get("network", {}).get("allowedDomains", [])
+    added = ["release-assets.githubusercontent.com", "api.osv.dev", "api.deps.dev",
+             "osv-vulnerabilities.storage.googleapis.com", "mirror.gcr.io", "ghcr.io",
+             "pkg-containers.githubusercontent.com", "api.github.com"]
+    check("increment 5 network allowlist entries are present, and nothing else was added",
+          all(h in net for h in added) and len(net) == 12 + len(added), "%d hosts" % len(net))
+
+    tpl = json.load(open(TPL))
+    tpl["enabledPlugins"]["security-guidance@claude-plugins-official"] = True
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(tpl, f)
+    try:
+        r2 = render("someone/moadix", f.name)
+    finally:
+        os.unlink(f.name)
+    check("negative control: a template enabling a third plugin from the official marketplace is refused",
+          r2.returncode != 0 and "exactly" in r2.stderr, r2.stderr.strip())
 
     r = render("none")
     pol = json.loads(r.stdout) if r.returncode == 0 else {}
