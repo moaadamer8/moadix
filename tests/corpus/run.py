@@ -1,7 +1,19 @@
 #!/usr/bin/python3
 """MOADIX increment-1 attack corpus. Fixtures only: no live product, no real repo.
 
-    /usr/bin/python3 tests/corpus/run.py [--scratch DIR]
+    /usr/bin/python3 tests/corpus/run.py [--scratch DIR]   in Terminal (needs the Keychain)
+    /usr/bin/python3 tests/corpus/run.py --guard-selftest  anywhere (no Keychain)
+
+ISOLATION (increment 3, tests/corpus/isolation.py). Before any check the run
+proves its guard fires (self-test), then asserts that every keychain, checker,
+gate copy and product it uses is its own scratch build, and arms an audit hook
+that refuses any command or file access naming the login keychain, the
+installed checker (/Library/Application Support/ClaudeCode) or a real .sdlc/.
+A guard hit ABORTS the run (exit 3); it is never reported as a failed check.
+A keychain health probe runs after the build and between groups, and the first
+failing check prints a diagnosis (keychain lock state, item present, what the
+checker says), so a Keychain problem is named instead of showing up as dozens
+of unrelated failures.
 
 Builds, under DIR (default ~/moadix-scratch/corpus):
   kcA/test.keychain-db, kcB/test.keychain-db   separate test keychains (never the login keychain)
@@ -36,12 +48,20 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import isolation  # noqa: E402
+
 PY = "/usr/bin/python3"
 KC_PW = "corpus-only-password"
 RESULTS = []
+ISO = None          # isolation.Isolation for this run, set in main()
+HEALTH = {}         # fixture tag -> callable returning a one-line keychain health report
+DIAGNOSED = [False]
 
 
 def sh(cmd, **kw):
+    if ISO is not None:
+        ISO.check_argv(cmd, kw.get("cwd"))
     kw.setdefault("capture_output", True)
     kw.setdefault("text", True)
     return subprocess.run(cmd, **kw)
@@ -50,6 +70,11 @@ def sh(cmd, **kw):
 def record(group, name, ok, evidence):
     RESULTS.append((group, name, ok, evidence))
     print("%s  [%s] %s\n      %s" % ("PASS" if ok else "FAIL", group, name, evidence.replace("\n", "\n      ")))
+    if not ok and not DIAGNOSED[0] and HEALTH:
+        DIAGNOSED[0] = True
+        print("      -- first failure: keychain health at this moment --")
+        for tag, fn in sorted(HEALTH.items()):
+            print("      %s: %s" % (tag, fn()))
 
 
 # ---------------------------------------------------------------- fixtures
@@ -67,7 +92,10 @@ class Fixture(object):
         self.offset = 0     # test clock offset (seconds), shared by the phone and the test checker
 
     def env(self):
-        return dict(os.environ, MOADIX_TEST_CLOCK_OFFSET=str(self.offset))
+        # MOADIX_GUARD_*: the fixture gate copy carries tests/lib/_testguard.py,
+        # which logs any read or write of a real product by a gate process.
+        return dict(os.environ, MOADIX_TEST_CLOCK_OFFSET=str(self.offset), MOADIX_GUARD_ROOT=ISO.base,
+                    MOADIX_GUARD_REPO=REPO)
 
     def now(self):
         return int(time.time()) + self.offset
@@ -76,12 +104,18 @@ class Fixture(object):
         return sh([self.checker] + list(args), env=self.env())
 
     def build(self):
+        ISO.assert_keychain(self.kc)
         os.makedirs(self.kcdir)
         os.makedirs(os.path.join(self.home, "bin"))
         shutil.copytree(os.path.join(REPO, "gate"), os.path.join(self.home, "gate"),
                         ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy(os.path.join(REPO, "tests", "lib", "_testguard.py"), os.path.join(self.home, "gate", "_testguard.py"))
         r = sh([os.path.join(REPO, "checker", "build.sh"), self.checker, "--test", self.kc, self.pinfile])
         assert r.returncode == 0, r.stderr
+        # Before the checker touches any keychain: it must be THIS run's test build,
+        # pinned to the scratch keychain, and the gate copy must resolve to it.
+        ISO.assert_checker(self.checker, self.kc, self.pinfile)
+        ISO.assert_gate_home(self.home, self.checker)
         for c in (["create-keychain", "-p", KC_PW, self.kc], ["set-keychain-settings", self.kc],
                   ["unlock-keychain", "-p", KC_PW, self.kc]):
             r = sh(["security"] + c)
@@ -93,6 +127,14 @@ class Fixture(object):
         # Stands in for the root-owned managed-settings.json the installer writes.
         with open(self.pinfile, "w") as f:
             json.dump({"env": {"MOADIX_PIN": pin}}, f)
+
+    def health(self, probe):
+        """One line: what the Keychain says about this fixture's test keychain, and
+        what its checker says. Never reads secret data (the probe asks for attributes)."""
+        st = sh([self.checker, "state"], env=self.env()).stdout.strip()
+        kc = sh([probe, self.kc, "status"]).stdout.strip() if probe else "(probe not built)"
+        return "checker state: %s | %s | keychain file %s" % (st, kc, "present" if os.path.exists(self.kc)
+                                                               else "MISSING")
 
     def remove(self):
         sh(["security", "delete-keychain", self.kc])
@@ -115,7 +157,9 @@ class Fixture(object):
             time.sleep(31 - int(time.time()) % 30)
 
     def hook(self, mode, payload):
-        r = sh([PY, os.path.join(self.home, "gate", "hook.py"), mode], input=json.dumps(payload), env=self.env())
+        ISO.check_payload(payload)
+        r = sh([PY, "-I", os.path.join(self.home, "gate", "hook.py"), mode], input=json.dumps(payload),
+               env=self.env())
         try:
             out = json.loads(r.stdout) if r.stdout.strip() else {}
         except ValueError:
@@ -137,6 +181,7 @@ class Fixture(object):
 
 
 def make_product(fx, path, pid):
+    ISO.assert_product(path)
     os.makedirs(path)
     sh(["git", "-C", path, "init", "-q"])
     r = sh([PY, os.path.join(fx.home, "gate", "sdlc_init.py"), path, pid])
@@ -447,10 +492,7 @@ def group_cooldown(fx, product):
 def group_keychain(fx, product, base):
     G = "keychain"
     # The approval secret, read by anything other than the checker.
-    probe = os.path.join(base, "kc-probe")
-    r = sh(["clang", "-Wall", "-framework", "Security", "-framework", "CoreFoundation", "-o", probe,
-            os.path.join(REPO, "tests", "probes", "kc-probe.c")])
-    sh(["codesign", "-s", "-", "-f", probe])
+    probe = build_probe(base)
     r = sh([probe, fx.kc, "nointeract"])
     record(G, "foreign process reads the TOTP secret (interaction off) -> no secret",
            "secret_bytes_returned=0" in r.stdout and "status=0 " not in r.stdout, r.stdout.strip())
@@ -549,36 +591,95 @@ def measure_secret_visibility(fx, product):
     record(G, "the only code the agent saw (in the operator's message) is already spent", "already used" in ctx2, short(ctx2))
 
 
+def build_probe(base):
+    probe = os.path.join(base, "kc-probe")
+    if not os.path.exists(probe):
+        sh(["clang", "-Wall", "-framework", "Security", "-framework", "CoreFoundation", "-o", probe,
+            os.path.join(REPO, "tests", "probes", "kc-probe.c")])
+        sh(["codesign", "-s", "-", "-f", probe])
+    return probe
+
+
+def guard_selftest():
+    res = isolation.selftest(REPO)
+    for name, fired, detail in res:
+        record("guard", "self-test: %s -> %s" % (name, "accepted" if name.startswith("control") else "ABORT"),
+               fired, detail)
+    return all(f for _n, f, _d in res)
+
+
+def health_line(tag, fx, probe):
+    line = fx.health(probe)
+    print("health [%s] %s" % (tag, line))
+    return line
+
+
 def main():
-    base = os.path.expanduser("~/moadix-scratch/corpus")
+    global ISO
+    if not guard_selftest():
+        print("\nABORTED: the isolation guard did not fire on every self-test case; no check was run.")
+        return 3
+    if "--guard-selftest" in sys.argv:
+        print("\nguard self-test only: %d/%d" % (len(RESULTS), len(RESULTS)))
+        return 0
+    base = os.path.realpath(os.path.expanduser("~/moadix-scratch/corpus"))
     if "--scratch" in sys.argv:
-        base = sys.argv[sys.argv.index("--scratch") + 1]
-    if os.path.exists(base):
-        for kc in ("kcA", "kcB"):
-            p = os.path.join(base, kc, "test.keychain-db")
-            if os.path.exists(p):
-                sh(["security", "delete-keychain", p])
-        shutil.rmtree(base)
-    os.makedirs(base)
-    before = sh(["security", "list-keychains", "-d", "user"]).stdout
-    A, B = Fixture(base, "A"), Fixture(base, "B")
+        base = os.path.realpath(os.path.expanduser(sys.argv[sys.argv.index("--scratch") + 1]))
+    ISO = isolation.Isolation(base, REPO)
+    before = A = B = None
     try:
+        ISO.assert_scratch()
+        print("guard: scratch %s; forbidden keychains %s; installed home %s\n" % (
+            base, ", ".join(sorted(ISO.forbidden_kc)), isolation.INSTALLED_HOME))
+        if os.path.exists(base):
+            for kc in ("kcA", "kcB"):
+                p = os.path.join(base, kc, "test.keychain-db")
+                if os.path.exists(p):
+                    sh(["security", "delete-keychain", p])
+            shutil.rmtree(base)
+        os.makedirs(base)
+        open(os.path.join(base, isolation.MARKER), "w").close()
+        ISO.arm()  # from here on, any command or file access naming a real resource aborts the run
+        before = sh(["security", "list-keychains", "-d", "user"]).stdout
+        A, B = Fixture(base, "A"), Fixture(base, "B")
         A.build()
         B.build()
         pa, pb = os.path.join(base, "productA"), os.path.join(base, "productB")
         make_product(A, pa, "toy")
         make_product(B, pb, "toy")
         print("fixtures: %s (keychains %s, %s)\n" % (base, A.kc, B.kc))
-        group_operator(A, pa)
-        group_inv(A, pa)
-        measure_secret_visibility(A, pa)
-        group_cooldown(A, pa)
-        group_keychain(B, pb, base)
+        probe = build_probe(base)
+        HEALTH.update(A=lambda: A.health(probe), B=lambda: B.health(probe))
+        pre = {t: health_line("preflight " + t, fx, probe) for t, fx in (("A", A), ("B", B))}
+        ok = all("checker state: OK fails=0 paused_for=0" in v and "unlocked=1" in v for v in pre.values())
+        record("preflight", "both test checkers read their own test keychains right after init", ok,
+               " || ".join("%s: %s" % kv for kv in sorted(pre.items())))
+        if not ok:
+            print("\nSTOPPED after the preflight: a test checker cannot read its own test keychain, so every "
+                  "Keychain-dependent check would fail for the same reason. The health lines above say why.")
+            return 1
+        for name, fn in (("operator", lambda: group_operator(A, pa)), ("pretool", lambda: group_inv(A, pa)),
+                         ("measure", lambda: measure_secret_visibility(A, pa)),
+                         ("cooldown", lambda: group_cooldown(A, pa)),
+                         ("keychain", lambda: group_keychain(B, pb, base))):
+            fn()
+            health_line("after %s A" % name, A, probe)
+            health_line("after %s B" % name, B, probe)
+    except isolation.IsolationError as e:
+        print("\nABORTED by the isolation guard: %s\nNothing further was run." % e)
+        return 3
     finally:
-        A.remove()
-        B.remove()
+        if ISO is not None:
+            ISO.armed = False
+        for fx in (A, B):
+            if fx is not None and os.path.exists(fx.kc):
+                fx.remove()
     after = sh(["security", "list-keychains", "-d", "user"]).stdout
     record("hygiene", "user keychain search list unchanged by the corpus", before == after, after.strip())
+    vlog = os.path.join(base, "guard-violations.log")
+    v = open(vlog).read().strip() if os.path.exists(vlog) else ""
+    record("hygiene", "no gate process read or wrote a real product (fixture gate guard log empty)", not v,
+           v[:400] or "empty")
     failed = [r for r in RESULTS if not r[2]]
     print("\n%d checks, %d passed, %d failed" % (len(RESULTS), len(RESULTS) - len(failed), len(failed)))
     for g, n, _, e in failed:
