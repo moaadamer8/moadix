@@ -336,10 +336,11 @@ def group_restrict(p):
            pol["env"]["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] == "1", "")
     agents = {f[:-3]: open(os.path.join(REPO, "agents", f)).read() for f in os.listdir(os.path.join(REPO, "agents"))
               if f.endswith(".md")}
+    probe = agents.pop("replacement-probe", "")
     tools_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write, Skill$", t, re.M) for t in agents.values())
-    record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools",
+    record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only",
            sorted(agents) == ["ac-coverage-critic", "code-reviewer", "design-reviewer", "typescript-reviewer"] and
-           tools_ok, sorted(agents))
+           tools_ok and re.search(r"^tools: Read$", probe, re.M), sorted(agents) + ["replacement-probe"])
 
 
 # ===================================================================== 4. evidence
@@ -458,6 +459,41 @@ def group_approve():
     record(G, "the APPROVE line records check-verifiers-7 as pass", res.get("check-verifiers-7") == "pass", res)
 
 
+# ===================================================================== 6. the live-measurement probe
+def group_probe(p):
+    G = "probe"
+    home = os.path.join(E.base, "probe-home")
+    os.makedirs(home)
+    real = os.environ["HOME"]
+    os.environ["HOME"] = home  # the hook logs to ~/Library/Logs/moadix/probe.log; keep it in the fixture
+    try:
+        log = os.path.join(home, "Library", "Logs", "moadix", "probe.log")
+        out = os.path.join(E.base, "plain")
+        os.makedirs(out, exist_ok=True)
+        for where, cwd in (("outside a product", out), ("in a product", p)):
+            d, why, ui, _ = launch(cwd, "moadix:replacement-probe", prompt="Reply with exactly: NOT-REPLACED")
+            pr = (ui or {}).get("prompt", "")
+            m = re.search(r"PROBE-REPLACED ([0-9a-f]{16})", pr)
+            logged = open(log).read() if os.path.exists(log) else ""
+            record(G, "%s: the probe's prompt is replaced by the gate's nonce line, and the nonce is logged" % where,
+                   d == "allow" and m and "NOT-REPLACED" not in pr and ("nonce=%s" % m.group(1)) in logged,
+                   short(pr))
+        d, why = as_verifier(p, PROBE_ROLE, "Read", {"file_path": "/dev/null"}, agent_type="moadix:replacement-probe")
+        logged = open(log).read()
+        record(G, "the probe's Read of /dev/null is allowed and its agent_type is logged",
+               d == "allow" and "tool=Read agent_type=moadix:replacement-probe agent_id=present" in logged, short(why))
+        d, why = as_verifier(p, PROBE_ROLE, "Bash", {"command": "ls"}, agent_type="moadix:replacement-probe")
+        record(G, "the probe has no other tools", d == "deny", short(why))
+        rows = [r for r in os.listdir(os.path.join(p, ".sdlc", "cache", "verify")) if PROBE_ROLE in r] if \
+            os.path.isdir(os.path.join(p, ".sdlc", "cache", "verify")) else []
+        record(G, "the probe produces no schedule or evidence", not rows, rows or "none")
+    finally:
+        os.environ["HOME"] = real
+
+
+PROBE_ROLE = "replacement-probe"
+
+
 def main():
     t0 = time.time()
     try:
@@ -466,6 +502,7 @@ def main():
         group_restrict(p)
         group_evidence(p)
         group_approve()
+        group_probe(p)
     finally:
         v = E.violations()
         record("guard", "no test read, wrote or started a real product or compose project", not v, short(v, 600))

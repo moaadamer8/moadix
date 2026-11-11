@@ -67,8 +67,49 @@ READONLY_GIT = {"log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "blam
                 "merge-base", "rev-list", "shortlog", "describe", "name-rev", "for-each-ref"}
 
 
+# Live measurement (increment 4): does Claude Code apply a managed hook's
+# updatedInput to an Agent call, and what agent_type does a plugin agent report?
+# moadix:replacement-probe's prompt is always replaced by a line with a one-time
+# nonce; the gate logs the nonce and the agent_type of the probe's own tool call.
+# The probe produces no evidence and is never scheduled as a verifier.
+PROBE = "replacement-probe"
+
+
 class VerifyError(Exception):
     pass
+
+
+def probe_log_path():
+    return os.path.join(os.path.expanduser("~"), "Library", "Logs", "moadix", "probe.log")
+
+
+def probe_log(line):
+    p = probe_log_path()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "a") as f:
+        f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), line))
+
+
+def is_probe(agent_type):
+    return bool(agent_type) and str(agent_type).rpartition(":")[2] == PROBE
+
+
+def probe_launch(tool_input):
+    nonce = secrets.token_hex(8)
+    probe_log("launch nonce=%s given_prompt_sha256=%s" % (
+        nonce, sha256(str((tool_input or {}).get("prompt") or ""))))
+    new = dict(tool_input)
+    new["prompt"] = ("MOADIX replacement probe. First call the Read tool once on /dev/null. Then reply with exactly "
+                     "this line and nothing else:\nPROBE-REPLACED %s\n" % nonce)
+    new["subagent_type"] = "%s:%s" % (PLUGIN, PROBE)
+    return "replace", new
+
+
+def probe_restrict(tool, tool_input, agent_type, agent_id):
+    probe_log("tool=%s agent_type=%s agent_id=%s" % (tool, agent_type, "present" if agent_id else "absent"))
+    if tool == "Read" and str((tool_input or {}).get("file_path")) == "/dev/null":
+        return "allow", "replacement probe: its one Read of /dev/null"
+    return "deny", "the replacement probe has no other tools"
 
 
 # ---------------------------------------------------------------- config
@@ -317,6 +358,8 @@ def on_agent_launch(tool_input, cwd):
     ('deny', reason) or ('replace', new tool_input)."""
     sub = str((tool_input or {}).get("subagent_type") or "")
     plugin, _, bare = sub.rpartition(":")
+    if bare == PROBE and plugin == PLUGIN:
+        return probe_launch(tool_input)
     root = state.find_root(cwd)
     if bare not in roles():
         return None

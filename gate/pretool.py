@@ -199,6 +199,9 @@ def decide(hook_input):
     if tool in TURN_TOOLS:
         return deny("%s is denied: the agent cannot schedule turns or message other sessions (invariant 4)" % tool)
     agent_id = hook_input.get("agent_id")
+    if verify.is_probe(hook_input.get("agent_type")):
+        r = verify.probe_restrict(tool, ti, hook_input.get("agent_type"), agent_id)
+        return deny(r[1]) if r[0] == "deny" else allow(r[1])
     vrole = verify.role_of_agent_type(hook_input.get("agent_type"))
     if vrole:
         r = verify.restrict(tool, ti, cwd, vrole)
