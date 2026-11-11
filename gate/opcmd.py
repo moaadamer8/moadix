@@ -3,7 +3,7 @@
 - The WHOLE message (surrounding whitespace trimmed) must match one command.
   Anything else (a quote, a pasted report, a longer message) records nothing.
 - State-changing commands end with a 6-digit authenticator code. The checker
-  alone verifies it (single use, lockout after 3 wrong codes) and alone signs
+  alone verifies it (single use, cooldown after 3 wrong codes) and alone signs
   the ledger line.
 - Never blocks: the outcome goes to the agent as added context, and the
   agent relays it. The ledger is the truth.
@@ -98,6 +98,27 @@ def _precheck(name, g, st):
     return None
 
 
+def _minutes(seconds):
+    m = max(1, (int(seconds) + 59) // 60)
+    return "%d minute%s" % (m, "" if m == 1 else "s") if m < 120 else "%d hours" % ((m + 59) // 60)
+
+
+def _refusal(out):
+    """Operator-facing text for a checker refusal."""
+    parts = out.split()
+    if out == "ERR wrong-code":
+        return "the code is wrong"
+    if len(parts) == 3 and parts[1] == "wrong-code-paused" and parts[2].isdigit():
+        return ("the code is wrong; after repeated wrong codes, approvals are PAUSED for %s. "
+                "A valid code after the pause works normally" % _minutes(parts[2]))
+    if len(parts) == 3 and parts[1] == "paused" and parts[2].isdigit():
+        return ("approvals are PAUSED for another %s after repeated wrong codes (this attempt was not "
+                "evaluated and does not extend the pause)" % _minutes(parts[2]))
+    if out == "ERR code-already-used":
+        return "that code was already used; wait for the next one"
+    return out
+
+
 def handle(hook_input):
     message = hook_input.get("prompt") or ""
     name, g = parse(message)
@@ -142,14 +163,11 @@ def handle(hook_input):
     prod = state.load_product(root)
     rc, out = state.run_checker(["record", "--product", prod["product"], "--action", action, "--code", code,
                                  "--payload-b64", base64.b64encode(json.dumps(payload, sort_keys=True).encode()).decode()])
-    _burn_all(message, keep=code)
     if rc != 0:
-        reason = {"ERR wrong-code": "the code is wrong",
-                  "ERR wrong-code-now-locked": "the code is wrong; that was the 3rd wrong code, so approvals are now "
-                                               "LOCKED until the operator unlocks at the Mac",
-                  "ERR locked": "approvals are LOCKED after 3 wrong codes; the operator must unlock at the Mac",
-                  "ERR code-already-used": "that code was already used; wait for the next one"}.get(out, out)
+        _burn_all(message)  # including this code: a refused valid code (e.g. during a pause) must not stay live
+        reason = _refusal(out)
         return _ctx("%s NOT recorded: %s. Nothing changed." % (name, reason))
+    _burn_all(message, keep=code)
     state.append_line(root, out)
     st2, problems2 = state.current_state(root)
     if not problems2 or all("phase.yaml differs" in p for p in problems2):

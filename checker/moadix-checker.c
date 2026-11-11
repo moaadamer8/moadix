@@ -4,7 +4,7 @@
  * Keychain items (generic passwords, account "operator" unless noted):
  *   moadix-totp        20-byte TOTP secret (RFC 6238, SHA-1, 30 s, 6 digits)
  *   moadix-ledger-key  32-byte HMAC-SHA256 key
- *   moadix-state       "laststep=N fails=N locked=N" + MAC   (single use, lockout)
+ *   moadix-state       "laststep=N fails=N until=T" + MAC   (single use, cooldown)
  *   moadix-anchor      account = product id: "seq hash" + MAC
  *
  * Threat model, measured 2026-11-11 on a file-based keychain:
@@ -19,8 +19,11 @@
  *   - state and anchor values carry an HMAC under the (pinned) ledger key, so a
  *     planted value is rejected. Their values cannot be read by others, so an
  *     old value cannot be replayed. A deleted item fails closed.
- *   - Lockout is lifted only through a macOS authorization dialog (the
- *     operator's password), not a Keychain item, which could be replaced.
+ *   - Wrong codes pause approvals (cooldown): after 3 consecutive wrong codes,
+ *     15 minutes, doubling on each further wrong code, capped at 24 hours.
+ *     Attempts during a pause are refused unevaluated and never extend it,
+ *     so a flood of wrong codes from any caller cannot push it past 24 h.
+ *     A valid code after the pause resets the count. No password dialog.
  *
  * A ledger line is produced only by `record`, after a valid unused code in the
  * same invocation. There is no standalone "sign". The checker chooses seq and
@@ -52,12 +55,25 @@
 #define SVC_ANCHOR "moadix-anchor"
 #define ACCT "operator"
 #define MAX_FAILS 3
+#define PAUSE_BASE (15 * 60)
+#define PAUSE_CAP (24 * 60 * 60)
 #define STEP 30
 #ifndef MOADIX_PINFILE
 #define MOADIX_PINFILE "/Library/Application Support/ClaudeCode/managed-settings.json"
 #endif
 
 static SecKeychainRef g_kc;
+
+/* The production build reads the real clock only. The test build adds
+ * MOADIX_TEST_CLOCK_OFFSET seconds so the corpus can step through pauses. */
+static long long now_s(void) {
+    long long t = (long long)time(NULL);
+#ifdef MOADIX_TEST
+    const char *o = getenv("MOADIX_TEST_CLOCK_OFFSET");
+    if (o) t += atoll(o);
+#endif
+    return t;
+}
 static unsigned char g_totp[64], g_key[64];
 static UInt32 g_totp_len, g_key_len;
 
@@ -229,17 +245,17 @@ static void put_macd(const char *svc, const char *acct, const char *val) {
     if (kc_put(svc, acct, buf, (UInt32)strlen(buf))) die(18, "item-write");
 }
 
-typedef struct { long long laststep; int fails; int locked; } State;
+typedef struct { long long laststep; int fails; long long until; } State;
 
 static State load_state(void) {
     State st = {0, 0, 0}; char v[256];
     if (!get_macd(SVC_STATE, ACCT, v, sizeof v)) die(11, "state-missing");
-    if (sscanf(v, "laststep=%lld fails=%d locked=%d", &st.laststep, &st.fails, &st.locked) != 3) die(11, "state-corrupt");
+    if (sscanf(v, "laststep=%lld fails=%d until=%lld", &st.laststep, &st.fails, &st.until) != 3) die(11, "state-corrupt");
     return st;
 }
 
 static void save_state(State st) {
-    char v[128]; snprintf(v, sizeof v, "laststep=%lld fails=%d locked=%d", st.laststep, st.fails, st.locked);
+    char v[128]; snprintf(v, sizeof v, "laststep=%lld fails=%d until=%lld", st.laststep, st.fails, st.until);
     put_macd(SVC_STATE, ACCT, v);
 }
 
@@ -261,7 +277,7 @@ static int valid_code_str(const char *c) {
 /* 0 = no match, -1 = matched an already-used step, else the matched step.
  * Accepts the previous, current and next 30 s step (clock skew). */
 static long long match_code(const char *code, long long laststep) {
-    long long want = atoll(code), now = (long long)time(NULL) / STEP, used = 0;
+    long long want = atoll(code), now = now_s() / STEP, used = 0;
     for (int d = -1; d <= 1; d++) {
         long long step = now + d;
         if (hotp(step) == want) { if (step > laststep) return step; used = -1; }
@@ -332,19 +348,28 @@ static int cmd_record(int argc, char **argv) {
         die(30, "bad-arguments");
     load_secrets();
     State st = load_state();
-    if (st.locked) die(31, "locked");
+    long long t = now_s();
+    if (t < st.until) { printf("ERR paused %lld\n", st.until - t); wipe(); exit(31); }
     long long step = match_code(code, st.laststep);
     if (step == -1) die(32, "code-already-used");
     if (step == 0) {
-        st.fails++; if (st.fails >= MAX_FAILS) st.locked = 1; save_state(st);
-        die(33, st.locked ? "wrong-code-now-locked" : "wrong-code");
+        st.fails++;
+        if (st.fails >= MAX_FAILS) {
+            long long pause = PAUSE_BASE;
+            for (int i = MAX_FAILS; i < st.fails && pause < PAUSE_CAP; i++) pause *= 2;
+            if (pause > PAUSE_CAP) pause = PAUSE_CAP;
+            st.until = t + pause; save_state(st);
+            printf("ERR wrong-code-paused %lld\n", pause); wipe(); exit(33);
+        }
+        save_state(st);
+        die(33, "wrong-code");
     }
-    st.laststep = step; st.fails = 0; save_state(st);
+    st.laststep = step; st.fails = 0; st.until = 0; save_state(st);
 
     char av[256]; long long seq = 0; char prev[65] = "GENESIS";
     if (get_macd(SVC_ANCHOR, product, av, sizeof av) && sscanf(av, "%lld %64s", &seq, prev) != 2) die(34, "anchor-corrupt");
 
-    char ts[32]; time_t now = time(NULL); struct tm g; gmtime_r(&now, &g); strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", &g);
+    char ts[32]; time_t now = (time_t)now_s(); struct tm g; gmtime_r(&now, &g); strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", &g);
     size_t blen = strlen(action) + strlen(payload) + 512;
     char *body = malloc(blen);
     snprintf(body, blen, "{\"seq\":%lld,\"prev\":\"%s\",\"ts\":\"%s\",\"product\":\"%s\",\"action\":\"%s\",\"payload_b64\":\"%s\"}",
@@ -405,34 +430,13 @@ static int cmd_anchor(int argc, char **argv) {
 static int cmd_state(void) {
     load_secrets();
     State st = load_state();
-    wipe(); printf("OK fails=%d locked=%d\n", st.fails, st.locked); return 0;
-}
-
-/* Lift a lockout: a macOS authorization dialog (the operator types their
- * password at the Mac) plus a valid code. A same-user process cannot answer
- * the dialog. */
-static int cmd_unlock(int argc, char **argv) {
-    const char *code = arg(argc, argv, "--code");
-    if (!valid_code_str(code)) die(60, "bad-arguments");
-    AuthorizationRef ar = NULL;
-    if (AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment, kAuthorizationFlagDefaults, &ar)) die(61, "auth-create");
-    AuthorizationItem item = {"com.moadix.unlock", 0, NULL, 0};
-    AuthorizationRights rights = {1, &item};
-    OSStatus s = AuthorizationCopyRights(ar, &rights, kAuthorizationEmptyEnvironment,
-        kAuthorizationFlagInteractionAllowed | kAuthorizationFlagExtendRights | kAuthorizationFlagDestroyRights, NULL);
-    AuthorizationFree(ar, kAuthorizationFlagDestroyRights);
-    if (s) { printf("ERR presence-denied %d\n", (int)s); return 62; }
-    load_secrets();
-    State st = load_state();
-    long long step = match_code(code, st.laststep);
-    if (step <= 0) die(63, "wrong-code");
-    st.laststep = step; st.fails = 0; st.locked = 0; save_state(st);
-    wipe(); printf("OK unlocked\n"); return 0;
+    long long t = now_s(), left = st.until > t ? st.until - t : 0;
+    wipe(); printf("OK fails=%d paused_for=%lld\n", st.fails, left); return 0;
 }
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);
-    if (argc < 2) die(2, "usage: init|record|burn|verify|anchor|state|unlock");
+    if (argc < 2) die(2, "usage: init|record|burn|verify|anchor|state");
     SecKeychainSetUserInteractionAllowed(false);
     open_kc();
     const char *c = argv[1];
@@ -442,7 +446,6 @@ int main(int argc, char **argv) {
     if (!strcmp(c, "verify")) return cmd_verify();
     if (!strcmp(c, "anchor")) return cmd_anchor(argc, argv);
     if (!strcmp(c, "state")) return cmd_state();
-    if (!strcmp(c, "unlock")) return cmd_unlock(argc, argv);
     die(2, "unknown-command");
     return 2;
 }
