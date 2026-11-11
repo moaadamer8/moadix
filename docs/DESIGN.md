@@ -14,6 +14,12 @@ v2 turns the harness into a Claude Code plugin whose gates are anchored in manag
 7. Measured and closed: Claude Code 2.1.322 supports onFailure "block"; no MDM or server-managed policy on this Mac; UserPromptSubmit fires for messages sent from the phone; a hook block reason is not shown to the agent.
 Still to measure in increment 1: the Keychain lock (another process asking for the secret must get a prompt, not the secret), and that the agent's turn after an approval cannot see the secret.
 
+**Rulings on increment 1 (2026-11-11), part of Amendment 1:**
+- Keychain pinning is accepted as built. The macOS file keychain protects reads of MOADIX's secrets but not writes or deletes. So a fingerprint of both secrets (the pin) is kept in the root-owned managed-settings file, and the lockout state and the ledger anchor are signed. **Residual risk:** a program running as the user can break approvals (they fail closed: `pin-mismatch`, `item-tampered`, `anchor mismatch`) but cannot forge one.
+- All hook definitions live in the managed-settings file and point at the root-owned gate copy. The plugin ships no hooks. **Every MOADIX update needs the operator's password once**, through the installer, which re-copies the gate and rewrites the policy. An update that changes the checker binary itself needs uninstall + install (a new QR code), because only the build that created the Keychain secrets can read them.
+- Wrong codes cause a cooldown, not a lockout. After 3 wrong codes approvals pause for 15 minutes, doubling with each further wrong code, up to 24 hours. Attempts during a pause are refused unevaluated and never extend it. A valid code after the pause resets the counter. The counter is signed. There is no password dialog.
+- `disableBypassPermissionsMode` sits under `permissions`. Nothing depends on the settings `env` block reaching hooks: the checker reads the pin from the policy file itself, and the gate finds the checker from its own install path.
+
 ## Goals and non-goals
 
 **Goals**

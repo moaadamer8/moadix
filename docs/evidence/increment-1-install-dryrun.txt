@@ -1,0 +1,57 @@
+BEFORE: root/ has 0 entries; keychain items: ['{"acct": "\\"someone\\"", "svce": "\\"unrelated-app\\""}']
+
+PASS  install.sh --dry-run refuses a system path
+      MOADIX SETUP FAILED: --dry-run must not point at a system path
+PASS  install (fresh) exits 0 and runs all six steps
+      == 1/6 Checking this Mac (fresh install, mode: dry)
+      == 2/6 Building the checker
+      == 3/6 Installing the gate to /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/moadix
+      == 4/6 Creating the approval secret and the ledger key in your test keychain
+      == 5/6 Installing managed settings to /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/managed-settings.json
+      == 6/6 Checking MOADIX is in effect
+      checker: OK fails=0 paused_for=0
+      installed gate denies a .sdlc/ write
+      installed gate STATUS: integrity OK
+      rc=0
+PASS  policy: hooks run the installed gate copy, fail closed, with a timeout
+      {"type": "command", "command": "/usr/bin/python3 '/Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/moadix/gate/hook.py' pretool", "timeout": 15, "onFailure": "block"}
+PASS  policy: disableBypassPermissionsMode under permissions; pin set; no plugin keys without --plugin
+      permissions.disableBypassPermissionsMode='disable', pin=d7cffd..., strictKnownMarketplaces=[]
+PASS  installed gate copy matches the repo's gate/
+      files: ['__init__.py', 'bashcls.py', 'hook.py', 'opcmd.py', 'pathmap.py', 'pretool.py', 'sdlc_init.py', 'state.py', 'yamlite.py']
+PASS  installed gate: 'APPROVE 0 <code from the shown key>' is recorded
+      {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "MOADIX gate: APPROVE 0 recorded (ledger seq 1). Proceed to phase 1. Tell the operator it was recorded."}}
+PASS  installed gate: Edit of .sdlc/phase.yaml is denied
+      {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "MOADIX: .sdlc/phase.yaml is MOADIX gate state;
+PASS  real-mode canary probes: positive control and sandbox probe pass the hook, the .sdlc probe is denied
+      decisions: ['allow', 'allow', 'deny']
+PASS  install again = update: exits 0, keeps the secrets (STATUS still clean, same checker cdhash)
+      rc=0; updated; STATUS:  "additionalContext": "MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatur
+PASS  uninstall exits 0
+      == 1/4 Managed settings
+      removed /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/managed-settings.json
+      == 2/4 Gate copy and checker
+      removed /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/moadix
+      removed /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode (install.sh had created it)
+      == 3/4 Keychain items
+      deleted moadix-totp
+      deleted moadix-ledger-key
+      deleted moadix-state
+      deleted 1 moadix-anchor item(s)
+      == 4/4 Claude Code plugin
+      (dry run: Claude Code's plugin config is not touched)
+      MOADIX is removed. Product repos keep their .sdlc/ (your records); delete them by hand if you want.
+      keychain items while installed: 5
+PASS  after uninstall: stand-in root/ exactly as before
+      before 0 entries, after 0 entries: empty
+PASS  after uninstall: keychain exactly as before (unrelated item kept, MOADIX items gone)
+      before ['{"acct": "\\"someone\\"", "svce": "\\"unrelated-app\\""}']
+       after ['{"acct": "\\"someone\\"", "svce": "\\"unrelated-app\\""}']
+PASS  user keychain search list unchanged
+      "/Users/moad/Library/Keychains/login.keychain-db"
+PASS  second uninstall is harmless (exits 0, changes nothing)
+      no /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/managed-settings.json / no /Users/moad/moadix-scratch/install-dryrun/root/ClaudeCode/moadix / no moadix-totp / no moadix-ledger-key / no moadix-state / deleted 0 moadix-anchor item(s) / (dry run: Claude Code's plugin config is not touched) / MOADIX is removed. Product repos keep their .sdlc/ (your records); delete them by hand if you want.
+PASS  user keychain search list identical to before the test began (stand-in keychain deleted)
+      "/Users/moad/Library/Keychains/login.keychain-db"
+
+15 checks, 15 passed

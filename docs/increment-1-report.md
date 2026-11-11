@@ -92,3 +92,15 @@ Positive controls (APPROVE, WAIVE, REOPEN, STATUS with real codes) all recorded,
 - The Bash classifier is interim. Gaps: one-line symlink tricks, compose files, and opaque scripts that don't name protected paths. Increment 2 rewrites it.
 - `/moadix:init` is an operator terminal tool (`sdlc_init.py`), not a typed command.
 - Skill/MCP manifest enforcement is increment 3.
+
+## Rulings applied (2026-11-11, later the same day)
+
+These supersede the lockout, `unlock` and `hooks.json` statements above.
+
+- **Cooldown instead of lockout.** After 3 wrong codes, approvals pause for 15 minutes, doubling with each further wrong code, up to 24 hours. Attempts during a pause are refused unevaluated, never extend it, and the codes in them are burned. A valid code after the pause resets the count. The state is signed. `unlock` and the password dialog are removed. The corpus `[cooldown]` group checks this, including a flood of 580 attempts from the hook and from direct checker calls.
+- **Hooks moved into managed settings** (`managed/managed-settings.json`, rendered by `managed/render_policy.py`), pointing at the root-owned gate copy. The plugin ships no `hooks.json`. Updates go through `install.sh`, which needs the operator's password once.
+- **Fix found while applying the cooldown:** a valid code refused by the checker (for example during a pause) was not burned, so it stayed live for up to 90 s while visible to the agent. Every refusal now burns every code in the message.
+- **`managed/uninstall.sh`** removes the policy (only if it carries MOADIX's pin), the gate copy, the managed directory (if install created it and it is empty), every MOADIX Keychain item, and in real mode the plugin and marketplace entries.
+- **Install and uninstall were dry-run end to end** (`tests/install/dryrun.py`, 15/15; output in `docs/evidence/increment-1-install-dryrun.txt`). The dry run used a stand-in directory and a stand-in keychain, with no sudo.
+- **Real-mode canary strengthened:** a positive control must succeed, and a script the hook cannot see into must be stopped by the sandbox. Not run; it needs the real policy.
+- **Measured in passing:** creating a keychain file named `login.keychain-db` (in any directory) added it to the user's keychain search list; deleting it removed the entry. The stand-in keychain is now named `standin.keychain-db`, which does not touch the list.

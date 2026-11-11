@@ -51,7 +51,7 @@ PASS  [operator] APPROVE of a phase that is not current -> refused, code spent
 PASS  [operator] lower-case 'approve 2 <code>' -> not a command
       ledger unchanged
 PASS  [operator] REVIEW 2 (no code) -> summary only, nothing recorded
-      MOADIX gate: REVIEW 2 (PRD): status draft; source commit aafe21dfb406aa58e9ec9492b92c4dd06784b44b; open waivers 0; validators: not yet ported (increment 2). Relay this to the operator verbatim.
+      MOADIX gate: REVIEW 2 (PRD): status draft; source commit 706d4ee94bc7a713e160191b30c65a3094f80f26; open waivers 0; validators: not yet ported (increment 2). Relay this to the operator verbatim.
 PASS  [operator] control: WAIVE with a fresh code -> recorded
       MOADIX gate: WAIVE W-01 owner=moad expiry=2026-12-31 reason=flaky upstream recorded (ledger seq 3). Tell the operator it was recorded.
 PASS  [operator] control: REOPEN 1 with a fresh code -> recorded, phase 1 open again
@@ -78,14 +78,14 @@ PASS  [operator] direct checker call record --product toy --action APPROVE 1 --c
       rc=30 out=ERR bad-arguments
 PASS  [operator] direct checker call record --product toy --action APPROVE 1 --code 12345a -> refused
       rc=30 out=ERR bad-arguments
-PASS  [operator] direct checker call sign {"seq":5,"prev":"87d069f246c49aa3cdd972b4bd541466f0dbc5 -> refused
+PASS  [operator] direct checker call sign {"seq":5,"prev":"ba43a4f47f007ae41994de21fe9c14e33c08c5 -> refused
       rc=2 out=ERR unknown-command
 PASS  [operator] direct checker call init -> refused
       rc=20 out=ERR already-initialised
 PASS  [operator] checker verify on a forged line -> bad
       out=bad
-PASS  [operator] state after all attacks: not locked (each success reset the count)
-      OK fails=0 locked=0
+PASS  [operator] state after all attacks: not paused (each success reset the count)
+      OK fails=0 paused_for=0
 PASS  [pretool] Bash {"command": "sudo ls"} -> deny
       MOADIX: sudo is denied (invariant 4)
 PASS  [pretool] Bash {"command": "FOO=1 sudo -n true"} -> deny
@@ -174,20 +174,24 @@ PASS  [measure] the session environment holds no secret
       hits: none
 PASS  [measure] the only code the agent saw (in the operator's message) is already spent
       MOADIX gate: APPROVE NOT recorded: that code was already used; wait for the next one. Nothing changed.
-PASS  [lockout] wrong code #1 -> refused
+PASS  [cooldown] wrong code #1 -> refused, no pause yet
       MOADIX gate: APPROVE NOT recorded: the code is wrong. Nothing changed.
-PASS  [lockout] wrong code #2 -> refused
+PASS  [cooldown] wrong code #2 -> refused, no pause yet
       MOADIX gate: APPROVE NOT recorded: the code is wrong. Nothing changed.
-PASS  [lockout] wrong code #3 -> refused
-      MOADIX gate: APPROVE NOT recorded: the code is wrong; that was the 3rd wrong code, so approvals are now LOCKED until the operator unlocks at the Mac. Nothing changed.
-PASS  [lockout] valid code after 3 wrong ones -> refused: locked
-      MOADIX gate: APPROVE NOT recorded: approvals are LOCKED after 3 wrong codes; the operator must unlock at the Mac. Nothing changed.
-PASS  [lockout] direct checker call with a valid code while locked -> refused
-      ERR locked
-PASS  [lockout] burn cannot reset the lockout
-      OK fails=3 locked=1
-PASS  [lockout] STATUS still reads the (locked) gate: ledger intact
-      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). current phase 2; ledger seq 5...
+PASS  [cooldown] wrong code #3 -> approvals PAUSED for 15 minutes
+      MOADIX gate: APPROVE NOT recorded: the code is wrong; after repeated wrong codes, approvals are PAUSED for 15 minutes. A valid code after the pause works normally. Nothin... | checker: OK fails=3 paused_for=900
+PASS  [cooldown] VALID code during the pause -> refused unevaluated, nothing recorded
+      MOADIX gate: APPROVE NOT recorded: approvals are PAUSED for another 15 minutes after repeated wrong codes (this attempt was not evaluated and does not extend the pause). Nothing changed.
+PASS  [cooldown] flood of 220 wrong codes during the pause (200 direct checker calls + 20 via the hook) -> pause not extended
+      checker answers: ['paused']; paused_for before 871s, after 867s
+PASS  [cooldown] after each pause, one more wrong code doubles it: 30, 60, ... minutes, capped at 24 h
+      pause minutes for wrong codes #4..#12: [30, 60, 120, 240, 480, 960, 1440, 1440, 1440]
+PASS  [cooldown] flood of 360 wrong codes and burns at the 24 h cap -> the pause never exceeds 24 h and only runs down
+      at cap: 86400s; 6 h and 360 attempts later: 64795s (OK fails=12 paused_for=64795)
+PASS  [cooldown] valid code after the pause -> recorded and the counter resets
+      MOADIX gate: APPROVE 2 recorded (ledger seq 6). Proceed to phase 3. Tell the operator it was recorded. | checker: OK fails=0 paused_for=0
+PASS  [cooldown] STATUS after the cooldown run: integrity OK
+      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). current phase 3; ledger seq 6...
 PASS  [keychain] foreign process reads the TOTP secret (interaction off) -> no secret
       status=-25293 (The user name or passphrase you entered is not correct.) secret_bytes_returned=0
 PASS  [keychain] impostor binary signed with the checker's identifier -> no secret
@@ -213,4 +217,4 @@ PASS  [keychain] STATUS after the swap -> integrity failure (signatures cannot b
 PASS  [hygiene] user keychain search list unchanged by the corpus
       "/Users/moad/Library/Keychains/login.keychain-db"
 
-106 checks, 106 passed, 0 failed
+108 checks, 108 passed, 0 failed

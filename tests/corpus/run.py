@@ -52,6 +52,16 @@ class Fixture(object):
         self.checker = os.path.join(self.home, "bin", "moadix-checker")
         self.secret = None
         self.used_step = 0  # the phone's knowledge of the last step spent
+        self.offset = 0     # test clock offset (seconds), shared by the phone and the test checker
+
+    def env(self):
+        return dict(os.environ, MOADIX_TEST_CLOCK_OFFSET=str(self.offset))
+
+    def now(self):
+        return int(time.time()) + self.offset
+
+    def run_checker(self, *args):
+        return sh([self.checker] + list(args), env=self.env())
 
     def build(self):
         os.makedirs(self.kcdir)
@@ -85,7 +95,7 @@ class Fixture(object):
     def fresh(self):
         """A valid code for a step after every step already spent (waits if needed)."""
         while True:
-            now = int(time.time()) // 30
+            now = self.now() // 30
             for step in (now - 1, now, now + 1):
                 if step > self.used_step:
                     self.used_step = step
@@ -93,7 +103,7 @@ class Fixture(object):
             time.sleep(31 - int(time.time()) % 30)
 
     def hook(self, mode, payload):
-        r = sh([PY, os.path.join(self.home, "gate", "hook.py"), mode], input=json.dumps(payload))
+        r = sh([PY, os.path.join(self.home, "gate", "hook.py"), mode], input=json.dumps(payload), env=self.env())
         try:
             out = json.loads(r.stdout) if r.stdout.strip() else {}
         except ValueError:
@@ -288,7 +298,7 @@ def group_operator(fx, product):
     r = sh([fx.checker, "verify"], input="%s %s\n" % (body.encode().hex(), "0" * 64))
     record(G, "checker verify on a forged line -> bad", r.stdout.strip() == "bad", "out=%s" % r.stdout.strip())
     r = sh([fx.checker, "state"])
-    record(G, "state after all attacks: not locked (each success reset the count)", "locked=0" in r.stdout, r.stdout.strip())
+    record(G, "state after all attacks: not paused (each success reset the count)", "fails=0 paused_for=0" in r.stdout, r.stdout.strip())
     return good
 
 
@@ -346,23 +356,62 @@ def group_inv(fx, product):
         record(G, "%s -> %s" % (label, want), d == want, short(why, 140) if why else "(no objection)")
 
 
-def group_lockout(fx, product):
-    G = "lockout"
-    n0 = len(ledger_lines(product))
+def group_cooldown(fx, product):
+    """Ruling 3: 3 wrong codes pause approvals 15 min, doubling per further wrong code, capped at 24 h.
+    The test checker's clock is shifted with MOADIX_TEST_CLOCK_OFFSET; the phone uses the same clock."""
+    G = "cooldown"
     cur = "2"  # phase 1 was approved by the visibility measurement
-    for i in (1, 2, 3):
-        ctx, _, _, _ = fx.prompt(product, "APPROVE %s %06d" % (cur, 111111 * i % 1000000))
-        record(G, "wrong code #%d -> refused" % i, "NOT recorded" in ctx, short(ctx, 170))
+    n0 = len(ledger_lines(product))
+
+    def paused_for():
+        out = fx.run_checker("state").stdout.strip()
+        return int(out.split("paused_for=")[1]), out
+
+    for i in (1, 2):
+        ctx, _, _, _ = fx.prompt(product, "APPROVE %s %06d" % (cur, 111111 * i))
+        record(G, "wrong code #%d -> refused, no pause yet" % i, "the code is wrong. Nothing changed." in ctx, short(ctx, 170))
+    ctx, _, _, _ = fx.prompt(product, "APPROVE %s 333333" % cur)
+    p, st = paused_for()
+    record(G, "wrong code #3 -> approvals PAUSED for 15 minutes", "PAUSED for 15 minutes" in ctx and 895 <= p <= 900,
+           "%s | checker: %s" % (short(ctx, 170), st))
     ctx, _, _, _ = fx.prompt(product, "APPROVE %s %s" % (cur, fx.fresh()))
-    record(G, "valid code after 3 wrong ones -> refused: locked",
-           "LOCKED" in ctx and len(ledger_lines(product)) == n0, short(ctx, 170))
-    r = sh([fx.checker, "record", "--product", "toy", "--action", "APPROVE 1", "--code", fx.fresh()])
-    record(G, "direct checker call with a valid code while locked -> refused", r.stdout.strip() == "ERR locked", r.stdout.strip())
-    r = sh([fx.checker, "burn", "--code", "000000"])
-    r2 = sh([fx.checker, "state"])
-    record(G, "burn cannot reset the lockout", "locked=1" in r2.stdout, r2.stdout.strip())
-    st = status(fx, product)
-    record(G, "STATUS still reads the (locked) gate: ledger intact", "INTEGRITY OK" in st, short(st, 120))
+    record(G, "VALID code during the pause -> refused unevaluated, nothing recorded",
+           "PAUSED for another" in ctx and "does not extend" in ctx and len(ledger_lines(product)) == n0, short(ctx, 200))
+    p0, _ = paused_for()
+    outs = set(fx.run_checker("record", "--product", "toy", "--action", "APPROVE %s" % cur, "--code", "%06d" % (k * 7919 % 1000000)).stdout.split()[1]
+               for k in range(200))
+    for k in range(20):
+        fx.prompt(product, "APPROVE %s %06d" % (cur, 424242 + k))
+    p1, st = paused_for()
+    record(G, "flood of 220 wrong codes during the pause (200 direct checker calls + 20 via the hook) -> pause not extended",
+           outs == {"paused"} and p1 <= p0, "checker answers: %s; paused_for before %ds, after %ds" % (sorted(outs), p0, p1))
+
+    # Escalation: let each pause end, then one wrong code.
+    seen = []
+    for _ in range(9):
+        fx.offset += paused_for()[0] + 1
+        out = fx.run_checker("record", "--product", "toy", "--action", "APPROVE %s" % cur, "--code", "000001").stdout.strip()
+        seen.append(int(out.split()[2]) // 60 if out.startswith("ERR wrong-code-paused") else out)
+    expect = [30, 60, 120, 240, 480, 960, 1440, 1440, 1440]
+    record(G, "after each pause, one more wrong code doubles it: 30, 60, ... minutes, capped at 24 h",
+           seen == expect, "pause minutes for wrong codes #4..#12: %s" % seen)
+    p_cap, st = paused_for()
+    for k in range(300):
+        fx.run_checker("record", "--product", "toy", "--action", "APPROVE %s" % cur, "--code", "%06d" % k)
+    fx.offset += 6 * 3600
+    for k in range(50):
+        fx.run_checker("burn", "--code", "%06d" % k)
+        fx.prompt(product, "APPROVE %s %06d" % (cur, 900000 + k)) if k < 10 else None
+    p_after, st2 = paused_for()
+    record(G, "flood of 360 wrong codes and burns at the 24 h cap -> the pause never exceeds 24 h and only runs down",
+           p_cap <= 86400 and p_after <= 86400 - 6 * 3600, "at cap: %ds; 6 h and 360 attempts later: %ds (%s)" % (p_cap, p_after, st2))
+    fx.offset += p_after + 1
+    ctx, _, _, _ = fx.prompt(product, "APPROVE %s %s" % (cur, fx.fresh()))
+    _, st = paused_for()
+    record(G, "valid code after the pause -> recorded and the counter resets",
+           "recorded" in ctx and "fails=0 paused_for=0" in st and len(ledger_lines(product)) == n0 + 1, "%s | checker: %s" % (short(ctx, 120), st))
+    s_ = status(fx, product)
+    record(G, "STATUS after the cooldown run: integrity OK", "INTEGRITY OK" in s_, short(s_, 120))
 
 
 def group_keychain(fx, product, base):
@@ -490,7 +539,7 @@ def main():
         group_operator(A, pa)
         group_inv(A, pa)
         measure_secret_visibility(A, pa)
-        group_lockout(A, pa)
+        group_cooldown(A, pa)
         group_keychain(B, pb, base)
     finally:
         A.remove()
