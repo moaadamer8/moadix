@@ -60,6 +60,12 @@ _CACHE: dict = {}
 
 # A verifier's tools. Everything else is refused for a verifier agent.
 VERIFIER_TOOLS = {"Read", "Grep", "Glob", "Bash", "Write", "Edit", "MultiEdit", "Skill", "TodoWrite"}
+# How a subagent returns its result to the agent that launched it (Claude Code
+# 2.1.322). Denying it does not stop the subagent's work, it only loses the
+# reply: the parent is told "no report was delivered". It carries text back to
+# the parent and writes nothing, so a verifier and the probe may always call it.
+# Exact name only.
+HANDBACK_TOOL = "SubagentHandback"
 READONLY_VERBS = {"git", "cat", "head", "tail", "sed", "grep", "egrep", "fgrep", "rg", "ls", "wc", "find", "sort",
                   "uniq", "nl", "shasum", "sha256sum", "file", "tree", "jq", "diff", "echo", "printf", "test", "true",
                   "pwd", "stat", "cut", "tr", "column", "basename", "dirname", "realpath", "["}
@@ -106,10 +112,17 @@ def probe_launch(tool_input):
 
 
 def probe_restrict(tool, tool_input, agent_type, agent_id):
-    probe_log("tool=%s agent_type=%s agent_id=%s" % (tool, agent_type, "present" if agent_id else "absent"))
-    if tool == "Read" and str((tool_input or {}).get("file_path")) == "/dev/null":
-        return "allow", "replacement probe: its one Read of /dev/null"
-    return "deny", "the replacement probe has no other tools"
+    ti = tool_input or {}
+    if tool == "Read" and str(ti.get("file_path")) == "/dev/null":
+        r = "allow", "replacement probe: its one Read of /dev/null"
+    elif tool == HANDBACK_TOOL:
+        r = "allow", "replacement probe: handing its reply back"
+    else:
+        r = "deny", "the replacement probe has no other tools"
+    extra = " file_path=%s" % ti.get("file_path") if tool == "Read" else ""
+    probe_log("tool=%s agent_type=%s agent_id=%s%s decision=%s" % (
+        tool, agent_type, "present" if agent_id else "absent", extra, r[0]))
+    return r
 
 
 # ---------------------------------------------------------------- config
@@ -433,6 +446,8 @@ def _readonly_bash(cmd, cwd):
 def restrict(tool, tool_input, cwd, role):
     """A verifier agent's own tool call. Returns ('deny', reason), ('allow', why) or None."""
     ti = tool_input or {}
+    if tool == HANDBACK_TOOL:
+        return "allow", "verifier %s handing its result back" % role
     if tool in AGENT_TOOLS:
         return "deny", "a verifier cannot start agents (no nesting)"
     if tool.startswith("mcp__") or tool in ("WebFetch", "WebSearch"):

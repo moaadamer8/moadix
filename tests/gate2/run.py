@@ -903,9 +903,17 @@ def group_upgrade():
     record(G, "a current-version phase.yaml that differs is still drift", "drift" in st, short(st, 160))
 
 
+def group_release():
+    sys.path.insert(0, os.path.join(REPO, "tests", "release"))
+    import run as release  # noqa: E402  (tests/release/run.py)
+    for name, ok, ev in release.results():
+        record("release", name, ok, ev)
+
+
 def main():
     t0 = time.time()
     try:
+        group_release()
         group_guard()
         p = group_classifier()
         group_symlinks(p)

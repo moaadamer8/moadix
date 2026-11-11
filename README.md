@@ -88,6 +88,8 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 
 ```sh
 /usr/bin/python3 tests/gate2/run.py        # gate suite (fixtures only; runs inside Claude Code)
+/usr/bin/python3 tests/verifiers/run.py    # verifiers: brief replacement, restrictions, evidence, probe
+/usr/bin/python3 tests/release/run.py      # shipped plugin folders changed => plugin.json version bumped
 /usr/bin/python3 tests/skills/run.py       # phase manifest, vendored sources, self-approval grep
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)

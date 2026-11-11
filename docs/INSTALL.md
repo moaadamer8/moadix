@@ -128,7 +128,7 @@ Verifiers rely on the gate's hook replacing the prompt the agent writes with the
    - `PROBE-REPLACED <16 hex characters>`: the replacement works.
    - `NOT-REPLACED`: the hook's replacement was not applied.
    - The launch is refused with "A settings hook changed this tool call's input…": this Claude Code version does not accept the replacement here.
-3. In Terminal: `tail -5 ~/Library/Logs/moadix/probe.log`. Expect a `launch nonce=<hex>` line whose nonce matches the reply, and a `tool=Read agent_type=<name> agent_id=present` line. The name shows how Claude Code reports plugin agents (`moadix:replacement-probe` or `replacement-probe`; the gate handles both).
+3. In Terminal: `tail -5 ~/Library/Logs/moadix/probe.log`. Expect a `launch nonce=<hex>` line whose nonce matches the reply, a `tool=Read agent_type=<name> agent_id=present file_path=/dev/null decision=allow` line, and a `tool=SubagentHandback … decision=allow` line (the probe handing its reply back). A `decision=deny` on SubagentHandback means the reply was lost before it reached you. The name shows how Claude Code reports plugin agents (`moadix:replacement-probe` or `replacement-probe`; the gate handles both).
 
 If the result is anything but `PROBE-REPLACED` with a matching nonce, stop and report it. Nothing unsafe follows: every verifier's evidence must quote a receipt that exists only in the gate's replacement prompt, so without the replacement no evidence can pass and APPROVE of phases 6, 7 and 8 refuses.
 

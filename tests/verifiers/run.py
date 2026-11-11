@@ -314,6 +314,21 @@ def group_restrict(p):
     for tool, ti, want, what in cases:
         d, why = as_verifier(p, "code-reviewer", tool, ti)
         record(G, "verifier: %s on %s -> %s" % (tool, what, want), d == want, short(why) or "(no objection)")
+    # The return path (Claude Code 2.1.322: the subagent hands its result back with SubagentHandback).
+    # Live on 2026-11-11 the probe's three SubagentHandback calls were denied and no reply reached the parent.
+    hb_ti = {"report": "findings written to evidence/findings.json"}
+    d_hb, why_hb = as_verifier(p, "code-reviewer", HANDBACK, hb_ti)
+    d_out, why_out = as_verifier(p, "code-reviewer", "Write", {"file_path": os.path.join(p, "src", "notes.ts"),
+                                                               "content": "x"})
+    d_ag, why_ag = as_verifier(p, "code-reviewer", "Agent", {"subagent_type": "general-purpose", "prompt": "x"})
+    d_tk, why_tk = as_verifier(p, "code-reviewer", "Task", {"subagent_type": "general-purpose", "prompt": "x"})
+    record(G, "a verifier can hand back its result, and still cannot write outside its evidence directory or start agents",
+           d_hb == "allow" and d_out == "deny" and "evidence directory" in why_out and d_ag == "deny" and
+           d_tk == "deny" and "nesting" in why_ag,
+           "handback=%s (%s) | write src=%s | Agent=%s | Task=%s" % (d_hb, short(why_hb, 80), d_out, d_ag, d_tk))
+    for near in ("SubagentHandbackX", "Handback", "subagenthandback"):
+        d, why = as_verifier(p, "code-reviewer", near, hb_ti)
+        record(G, "only the exact return tool is allowed: %s -> deny" % near, d == "deny", short(why))
     d, why = as_verifier(p, "code-reviewer", "Write", {"file_path": os.path.join(p, "src", "x.ts"), "content": "x"},
                          agent_type="code-reviewer")
     record(G, "the bare agent type 'code-reviewer' is held to the same restrictions", d == "deny", short(why))
@@ -482,8 +497,19 @@ def group_probe(p):
         logged = open(log).read()
         record(G, "the probe's Read of /dev/null is allowed and its agent_type is logged",
                d == "allow" and "tool=Read agent_type=moadix:replacement-probe agent_id=present" in logged, short(why))
-        d, why = as_verifier(p, PROBE_ROLE, "Bash", {"command": "ls"}, agent_type="moadix:replacement-probe")
-        record(G, "the probe has no other tools", d == "deny", short(why))
+        d, why = as_verifier(p, PROBE_ROLE, HANDBACK, {"report": "PROBE-REPLACED 0123456789abcdef"},
+                             agent_type="moadix:replacement-probe")
+        logged = open(log).read()
+        record(G, "the probe can hand its reply back, and the decision is logged",
+               d == "allow" and "tool=%s" % HANDBACK in logged and "decision=allow" in logged, short(why))
+        d, why = as_verifier(p, PROBE_ROLE, "Read", {"file_path": "/etc/hosts"}, agent_type="moadix:replacement-probe")
+        logged = open(log).read()
+        record(G, "the probe's Read of any other file is denied, and the log names the path",
+               d == "deny" and "file_path=/etc/hosts decision=deny" in logged, short(why))
+        for tool, ti in (("Bash", {"command": "ls"}), ("Agent", {"subagent_type": "general-purpose", "prompt": "x"}),
+                         ("Write", {"file_path": os.path.join(p, "x"), "content": "x"})):
+            d, why = as_verifier(p, PROBE_ROLE, tool, ti, agent_type="moadix:replacement-probe")
+            record(G, "the probe has no other tools: %s -> deny" % tool, d == "deny", short(why))
         rows = [r for r in os.listdir(os.path.join(p, ".sdlc", "cache", "verify")) if PROBE_ROLE in r] if \
             os.path.isdir(os.path.join(p, ".sdlc", "cache", "verify")) else []
         record(G, "the probe produces no schedule or evidence", not rows, rows or "none")
@@ -492,6 +518,7 @@ def group_probe(p):
 
 
 PROBE_ROLE = "replacement-probe"
+HANDBACK = "SubagentHandback"
 
 
 def main():
