@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 """Operator tool: create .sdlc/ in a product repo.  sdlc_init.py <repo> <product-id>
 
-Run from a terminal by the operator (the PreToolUse gate denies the agent any
-command naming the gate's files). Creates product.yaml, an empty ledger,
+Increment 2: the typed command `INIT <product-id> <code>` replaces this for the
+operator (it also records ledger line 1). This tool remains for the installer's
+canary and the tests. Run from a terminal (the PreToolUse gate denies the agent
+any command naming the gate's files). Creates product.yaml, an empty ledger,
 phase.yaml, knowledge.md, untested.yaml and evidence/.
 """
 import os
