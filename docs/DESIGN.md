@@ -4,6 +4,16 @@
 
 v2 turns the harness into a Claude Code plugin whose gates are anchored in managed settings, so every operator action becomes a typed chat command such as APPROVE 1, recorded by the gate itself, instead of a terminal command, and each product keeps its own state in its own repo. Frozen on 2026-11-10 after an independent review. Changes from here go through a proposal.
 
+## Amendment 1 (2026-11-11) — overrides the sections below where they differ
+1. Approval code = authenticator code. At install, MOADIX creates a TOTP secret. The operator scans it into an authenticator app (Microsoft Authenticator chosen). The Mac keeps the secret in the Keychain, readable only by MOADIX's signed checker. Approving is one message, from the Mac or the phone: `APPROVE 1 482913`. Codes are single use; 3 wrong codes lock approvals until a code is entered at the Mac. This replaces the two-step code shown in the hook's block reason.
+2. No silent blocks. The phone app does not display hook block messages (measured), so operator commands are never blocked. The hook records the action or refuses it, and tells the agent the outcome through added context. The agent relays it; the ledger stays the truth.
+3. Signed ledger. Each ledger line carries an HMAC made with a second Keychain-locked key. A line written by anything else fails verification on STATUS.
+4. Accepted risk, narrowed. Docker and Playwright run outside the sandbox (measured: Docker can write into sandbox-denied paths; Chromium crashes inside the sandbox). Code they run can still damage files, but cannot produce a valid approval code or a valid ledger signature, so forged approvals are detected.
+5. Sandbox config adds a network allowlist (package registries, browser downloads) and write access to the npm and Playwright caches; Playwright and Docker are listed in excludedCommands.
+6. Distribution: public marketplace. Licence obligations: rename the BMAD retrospective skill (BMad trademark), ship Impeccable's NOTICE, add change notices inside modified Apache-2.0 files, take pr-review-toolkit from anthropics/claude-plugins-official, add a not-affiliated line for awesome-design-md, and source the threat-model skill from anthropics/defending-code-reference-harness.
+7. Measured and closed: Claude Code 2.1.322 supports onFailure "block"; no MDM or server-managed policy on this Mac; UserPromptSubmit fires for messages sent from the phone; a hook block reason is not shown to the agent.
+Still to measure in increment 1: the Keychain lock (another process asking for the secret must get a prompt, not the secret), and that the agent's turn after an approval cannot see the secret.
+
 ## Goals and non-goals
 
 **Goals**
