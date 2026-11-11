@@ -1,0 +1,187 @@
+# harness/config/profiles.yaml — what the Target Platform Ruling actually DOES.
+#
+# Until v0.3 the ruling was a field in the BRD that nothing read. This file makes
+# it binding: it says which phases apply, which checks are added, and which are
+# explicitly NOT APPLICABLE for each ruling.
+#
+# The ruling is read from the BRD (sdlc/00-brd.md `**Target Platform Ruling:**`),
+# which is the single source of truth. Nothing else declares it.
+#
+# N/A is never silent. A check a ruling makes irrelevant is reported as N/A in
+# the phase-11 scorecard with the reason, so "not applicable" and "quietly
+# skipped" can never look the same (Constitution §6.3).
+
+version: 1
+default: WEB
+
+profiles:
+
+  WEB:
+    description: "Browser-delivered only; no native client planned."
+    status: implemented          # v0.3 implements this path end to end
+    active_phases: ["0","1","2","3","4","5","6","7","8","9","10a","10b","11"]
+    extra_checks: []
+    # The mirror of APP-FIRST's web entries. Before v0.4 these were missing, and
+    # check-live-verification-mobile self-disabled internally under WEB by
+    # returning 0 -- so the approval evidence recorded `result: pass` for a
+    # validator that never ran. Silently passing and being N/A looked identical,
+    # which is the thing §6.3 exists to prevent.
+    not_applicable:
+      - id: live-verification-mobile
+        phase: "10a"
+        validator: check-live-verification-mobile
+        superseded_by: live-verification-web
+        reason: >-
+          mobile-mcp verifies a device surface; a WEB product has none.
+          Verification happens in Chrome via check-live-verification.
+        blocks_release: false
+      - id: regression-suite-mobile
+        phase: "10b"
+        validator: check-regression-mobile
+        superseded_by: regression-suite-web
+        reason: >-
+          Maestro drives a device surface. The WEB equivalent is Playwright
+          (check-regression).
+        blocks_release: false
+      - id: store-readiness
+        phase: "11b"
+        validator: check-store-readiness
+        reason: "There is no app bundle to submit; phase 11b does not apply to a WEB ruling."
+        blocks_release: false
+    components: [chrome-devtools-mcp, check-live-verification, check-regression, ci-templates]
+
+  "WEB→APP":
+    description: "Ships web first; a native app is a committed future step."
+    status: checks-implemented   # the GATES exist; mobile EXECUTION is deferred
+    active_phases: ["0","1","2","3","4","5","6","7","8","9","10a","10b","11"]
+    extra_checks:
+      - id: portability-scoring
+        phase: "1"
+        enforced_by: check-handoff-1
+        requirement: >-
+          every DECIDED research entry carries a stack-portability score (1-5)
+          and a migration cost estimate. Committing to a future native app makes
+          each stack choice a bet on how cheaply it crosses over.
+      - id: app-architecture-sections
+        phase: "3"
+        enforced_by: check-profile
+        requirement: >-
+          the HLD covers offline behaviour, push notifications, deep links, and
+          an explicit app/API split. These are the four things a web-only design
+          gets wrong for free and that are expensive to retrofit.
+        required_sections: [offline, push, "deep link", "app/api split"]
+      - id: no-frontend-business-logic
+        phase: "5"
+        enforced_by: check-profile
+        requirement: >-
+          the LLD records that business logic lives behind the API, not in the
+          frontend, so the native client can reuse it. Partly manual: the check
+          requires an explicit, argued declaration, not a checkbox.
+        required_declaration: "business logic"
+    not_applicable: []
+    components: [chrome-devtools-mcp, check-live-verification, check-regression, ci-templates]
+
+  APP-FIRST:
+    description: "Native app is the primary delivery target from the start."
+    status: implemented          # v0.4 implements the mobile execution path
+    active_phases: ["0","1","2","3","4","5","6","7","8","9","10a","10b","10c","11","11b"]
+    extra_checks:
+      - id: app-architecture-sections
+        phase: "3"
+        enforced_by: check-profile
+        requirement: "as WEB→APP: offline, push, deep links, app/API split."
+        required_sections: [offline, push, "deep link", "app/api split"]
+    # Explicitly N/A, never silently passed. Each of these is a WEB-only check.
+    not_applicable:
+      # v0.4: these are now genuinely N/A rather than N/A-because-unbuilt. The
+      # mobile equivalents exist (check-live-verification-mobile,
+      # check-regression-mobile), so an APP-FIRST product IS fully verified --
+      # just not through the web tools. blocks_release is therefore false now.
+      - id: live-verification-web
+        phase: "10a"
+        validator: check-live-verification
+        superseded_by: live-verification-mobile
+        reason: >-
+          Chrome DevTools MCP verifies a browser surface; an APP-FIRST product has
+          none. Verification happens on a device/simulator via mobile-mcp
+          (check-live-verification-mobile), which IS implemented in v0.4.
+        blocks_release: false
+      - id: regression-suite-web
+        phase: "10b"
+        validator: check-regression
+        superseded_by: regression-suite-mobile
+        reason: >-
+          Playwright covers a browser surface. The APP-FIRST equivalent is Maestro
+          (check-regression-mobile), implemented in v0.4.
+        blocks_release: false
+      - id: lighthouse
+        phase: "11"
+        reason: "Lighthouse audits a web page; there is no web page."
+        blocks_release: false
+    components: [mobile-mcp, check-live-verification-mobile, check-regression-mobile, check-store-readiness, ci-templates-mobile]
+
+# Rulings whose execution path v0.3 does not implement. Declaring this here means
+# the harness says so out loud rather than appearing to support them.
+# v0.4 implements the mobile execution path for both mobile rulings. What
+# remains genuinely unbuilt is recorded here rather than implied.
+# --------------------------------------------------------------------------
+# THE SIZE DIMENSION (v0.7 task 5)
+#
+# Constitution 6.1: work is sized S / M / L, and S may collapse phases with an
+# explicit recorded ruling while M and L may not. The BRD has carried a `Size:`
+# field since v0.2 and check-handoff has validated it is one of S|M|L -- and
+# NOTHING HAS EVER READ IT. 3.9, inside the sizing rule.
+#
+# A COLLAPSE IS NOT A SKIP, AND MUST NOT BE ABLE TO BECOME ONE.
+#
+#   Every collapse names `checks_not_run`. Without that a size profile is a skip
+#   with better paperwork: the scorecard would say COLLAPSED and nobody could
+#   tell what stopped running because of it. check-size-profile verifies each
+#   named component EXISTS in the registry, because a declaration naming
+#   nothing is not a decision anyone can review.
+#
+#   The scorecard renders these as COLLAPSED -- a verdict distinct from PASS and
+#   from N/A. Those are three different claims: a decision about process depth,
+#   a statement about applicability, and a claim about the product. Before this
+#   the scorecard vocabulary was PASS / FAIL / RELEASABLE / BLOCKED: one slot
+#   for all three.
+sizes:
+  S:
+    description: >-
+      Small work: a single surface, one or two stories, no new trust boundary.
+      Collapses the phases whose cost is not repaid at this size.
+    collapse:
+      - phase: "1"
+        reason: >-
+          Research exists to record DECIDED dependency choices with primary
+          sources. At S the dependency set is the one the product already has,
+          so there is nothing to decide and no portability score to carry.
+        checks_not_run: [check-handoff-1]
+      - phase: "6b"
+        reason: >-
+          Provisioning gates the environment a product needs before it can run.
+          At S the product runs on what is already provisioned; if it does not,
+          the size ruling is wrong and should be M.
+        checks_not_run: [check-provisioning]
+      - phase: "10c"
+        reason: >-
+          Concurrency and load verification samples interleavings against
+          declared contended resources. At S there is no second writer, so the
+          CON-NNN set is empty and 10c would verify the absence of a thing the
+          threat model never claimed.
+        checks_not_run: [check-concurrency]
+  M:
+    description: >-
+      The default. No collapse: 6.1 says M and L may not collapse phases, and an
+      empty list here is the DECLARATION of that rather than an omission.
+    collapse: []
+  L:
+    description: >-
+      Large work. No collapse, for the same reason as M.
+    collapse: []
+
+deferred_execution:
+  - profile: APP-FIRST
+    missing: [android-execution]      # host has no emulator; NA-ENVIRONMENT, not a pass
+  - profile: "WEB→APP"
+    missing: [android-execution]

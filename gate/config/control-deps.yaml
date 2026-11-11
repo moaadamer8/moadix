@@ -1,0 +1,52 @@
+# Control-file dependencies for approval staleness.  F44.
+#
+# WHY THIS FILE EXISTS
+#   `provenance.approval_status` compares a phase's `verifies:` globs against
+#   its approval commit, and gate.py joins every one of those globs under the
+#   governed root -- so a verifies glob can NEVER name a harness/ path. Staleness
+#   therefore watched product artifacts and nothing else, while ten of the
+#   twenty-one phase-mapped validators depend on harness state it could not see.
+#
+#   The live case that found it: phase 8 was approved at 2026-09-04 12:33:29 and
+#   product-tests.yaml changed at 12:39:26 -- six minutes later, in the F20
+#   patch. check-traceability is phase 8's validator and reads that file.
+#   Nothing marked phase 8 stale, and nothing would have.
+#
+# WHY PER FILE, AND NOT PER KEY
+#   Registered, not built. Key-level granularity is the precise answer to the
+#   coarse question, and precision built before the coarse version has been used
+#   is precision aimed at a guess. Build per-file, watch what it fires on, and
+#   let that decide whether keys are worth it.
+version: 1
+
+phases:
+  "8":
+    - harness/config/product-tests.yaml
+    - harness/config/traceability-exemptions.yaml
+  "9":
+    - harness/config/product-surface.yaml
+  "10a":
+    - harness/config/product-surface.yaml
+    - harness/config/quality-thresholds.yaml
+  "11":
+    - harness/config/profiles.yaml
+    - harness/config/quality-thresholds.yaml
+
+# DELIBERATELY NOT WATCHED. Stated here and repeated in the scorecard's own
+# output, so a reader knows the gap is a decision rather than an oversight.
+excluded:
+  - path: harness/registry.yaml
+    reason: >-
+      49 edits against 115 across all control files -- by far the highest churn
+      in the harness. Both its readers (check-approvals, build-scorecard) are
+      PHASE-11 validators, and phase 11 is the release gate: it is run fresh
+      rather than approved once and trusted, so "phase 11's approval is stale"
+      is close to meaningless. Watching it would fire on every registry edit,
+      which is P59's amplification at the larger radius, and the pressure would
+      run against registering checks -- the one behaviour that must stay cheap.
+  - path: harness/status/phase.yaml
+    reason: >-
+      52 edits, the highest of any control file, and almost all of them are
+      approvals and waivers. The waiver case is already covered precisely by
+      P49: a revocation raises its own blocker rather than going through
+      staleness. It did not need a staleness declaration; it needed a verb.

@@ -1,0 +1,60 @@
+# harness/config/ruff.toml — static analysis of the CONTROL LAYER.
+#
+# OPERATOR-OWNED and protected_always. An agent widening `ignore` to make its
+# own finding disappear is the self-certification the harness exists to stop --
+# which is why every suppression is HERE, in one reviewable file, rather than as
+# `# noqa` scattered across thirty modules where each is invisible on its own.
+# The CODE still carries the argument at the site; this file carries the
+# machine-readable half. Per-line noqa was tried first and abandoned: S112
+# anchors to the `except` and S608 to the string literal, not to the statement a
+# reader would put the comment on, so a later edit silently detaches it.
+
+line-length = 100
+target-version = "py39"
+
+[lint]
+# Chosen on EVIDENCE, not taste: every group below was measured against the
+# real tree first. PTH (pathlib) alone produced 338 findings, none of them a
+# defect -- a gate that demands a 338-line rewrite of working code is a gate
+# people turn off. E702/E741 were 43 more of the same. They are excluded
+# because they are style, and this check exists to find defects.
+#
+# What it DID find, first run: `re.split(pattern, s, 1)` in three places, two of
+# them in gatecore -- the decision engine. Positional maxsplit is deprecated
+# since 3.13 and becomes a TypeError; the glob-specificity computation that
+# decides WHICH PHASE OWNS A PATH was on a countdown, and no test could see it
+# because a DeprecationWarning is not an error.
+# S (bandit) IS selected. An `ignore` list naming rules the selection never
+# enables is a declaration nothing reads -- the shape this version keeps
+# closing -- so the S entries below are live rules with live suppressions,
+# not decoration.
+select = ["E9", "F", "W", "B", "C4", "SIM", "RET", "S"]
+
+# Judged, not silenced. Each of these is a design decision this harness made on
+# purpose, and the finding is right to exist in general.
+ignore = [
+    # S603 subprocess-without-shell-equals-true. Every subprocess call here
+    # passes an ARGV LIST and never a shell string -- that is the entire point
+    # of the front doors, and the opaque-construct rule denies the alternative.
+    "S603",
+]
+
+[lint.per-file-ignores]
+# S314 (ElementTree): the JUnit XML is produced by the product's own test runner
+# inside the governed root, not fetched from anywhere. The residual risk is a
+# hostile PRODUCT planting an entity bomb to stall its own release gate, which
+# fails closed and loudly and is not a path to a false GREEN. If the harness
+# ever parses XML it did not cause to be written, this needs defusedxml.
+#
+# S112 (try/except/continue): in the file walkers, an unreadable file cannot
+# hide a secret from a scan it was never in. Failing the whole scan on one bad
+# encoding would make the gate hostage to any binary that lands in the tree.
+"**/build_scorecard.py"       = ["S314", "S112"]
+"**/check_traceability.py"    = ["S314"]
+"**/check_security.py"        = ["S112"]
+"**/check_hardcoded_state.py" = ["S112"]
+# S608 (SQL injection): ruff matched the English words "select ... by id/text"
+# in a sentence about accessibility locators. There is no SQL anywhere in this
+# harness. A finding that has to be JUDGED rather than obeyed, kept visible
+# here instead of hidden at the line.
+"**/check_regression_mobile.py" = ["S608"]

@@ -1,0 +1,41 @@
+# harness/config/quality-thresholds.yaml — Lighthouse (and future quality) gates.
+#
+# Scores are 0-100. A category BELOW its threshold FAILS the phase-11 scorecard
+# and requires a waiver with a reason and an approver, exactly like a security
+# finding. A category with no captured score is NOT silently passed: it is
+# reported as missing, and `required: true` makes that a failure.
+#
+# OPERATOR-OWNED and protected_always: an agent lowering a threshold to make its
+# own work pass is precisely the self-certification the harness exists to stop.
+
+version: 1
+
+lighthouse:
+  required: true          # a web product must capture Lighthouse at 10a
+  # `enforced: false` reports the score without blocking. Use it to introduce a
+  # category to a mature codebase without an immediate red build -- but say so.
+  categories:
+    # VERIFIED v0.4: the MCP's `lighthouse_audit` returns accessibility,
+    # best-practices, seo and agentic-browsing -- NOT performance, which needs a
+    # separate `performance_start_trace` flow. Enforcing performance here would
+    # be a gate no run could pass for a reason the product cannot fix, so it is
+    # reported-only until trace-based capture lands (pre-registered for v0.5).
+    performance:
+      threshold: 70
+      enforced: false
+    accessibility:
+      threshold: 90
+      enforced: true      # accessibility is a correctness property, not a nicety
+    best-practices:
+      threshold: 80
+      enforced: true
+    seo:
+      threshold: 70
+      enforced: false     # not meaningful for every product; reported, not blocking
+    agentic-browsing:
+      threshold: 70
+      enforced: false     # emitted by this Lighthouse build; reported for visibility
+
+  # Where the 10a run must leave the report. Any *.json under the run's evidence
+  # directory whose name contains "lighthouse" is picked up.
+  evidence_glob: "evidence/live/**/*lighthouse*.json"

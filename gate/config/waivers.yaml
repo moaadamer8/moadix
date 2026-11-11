@@ -1,0 +1,40 @@
+# harness/config/waivers.yaml — governance for exceptions.
+#
+# OPERATOR-OWNED and protected_always. A waiver is how a human takes
+# responsibility for shipping with a known hole. These settings decide how much
+# of that may accumulate, and for how long.
+
+version: 1
+
+# EXPIRY IS MANDATORY GOING FORWARD.
+#
+# Ruled deliberately rather than drifted into: SEC-001 and SF-1 carried
+# `[no expiry]` because they predate the field, not because anyone granted
+# permanence. The alternative on the table was explicit, visible grandfathering.
+# What was NOT on the table was letting them pass unremarked because the field
+# is absent -- silent grandfathering is the shape this version keeps closing.
+#
+# So: new waivers must carry an expiry, and existing no-expiry waivers are
+# reported as FINDINGS until an operator sets one.
+require_expiry: true
+
+# A waiver is a loan against a future fix. Past this horizon it is not an
+# exception any more, it is the design, and it should be argued for as one.
+max_expiry_days: 180
+
+# Above this many LIVE waivers the release fails. Not because the ninth
+# exception is worse than the eighth, but because a release resting on a dozen
+# of them is resting on a backlog nobody is tracking, and a number is the only
+# thing that reliably forces that conversation.
+max_active: 20  # raised 2026-11-03: AM-005 wording waivers retire at the next phase 4 reopen
+
+# Findings at these severities CANNOT be waived. There is no --force, and
+# adding one would defeat the rule.
+#
+# The second no-waiver rule in the harness, after interactive approval, and
+# narrower than it looks: it does not say a human may not decide to ship. It
+# says that decision may not be RECORDED AS A WAIVER, because a waiver is a
+# routine instrument and a high-severity security finding is not a routine
+# decision. Fix it, downgrade it with evidence, or accept that the release is
+# blocked and argue for it somewhere a waiver table cannot absorb.
+unwaivable_severities: ["high", "critical"]

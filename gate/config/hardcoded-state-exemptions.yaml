@@ -1,0 +1,85 @@
+# MOADIX gate: hardcoded-state exemptions for the gate's own tree (root-owned when installed).
+# Ported from sdlc-harness v1 harness/config/hardcoded-state-exemptions.yaml: the entries
+# for modules ported into gate/v1/, with `file:` rewritten from harness/lib/ to gate/v1/.
+# Reasons and owners are v1's, unchanged. Key: file + axis + token.
+
+version: 1
+exemptions:
+  - file: gate/v1/check_threat_model.py
+    axis: phase
+    token: 5
+    reason: "OWNER_PHASES/CON_OWNER_PHASES policy: which phases may discharge a SEC-ID or CON-ID. A decision about phases, not derived from them"
+    owner: operator
+  - file: gate/v1/check_threat_model.py
+    axis: phase
+    token: 7
+    reason: OWNER_PHASES/CON_OWNER_PHASES policy, see phase 5
+    owner: operator
+  - file: gate/v1/check_threat_model.py
+    axis: phase
+    token: 9
+    reason: OWNER_PHASES policy, see phase 5
+    owner: operator
+  - file: gate/v1/check_handoff.py
+    axis: phase
+    token: 0
+    reason: "CLI contract: `--phase choices=[0,1,2]` and the dispatch on it. This script implements checks for exactly those three phases; the list is its capability, not a copy of gate state"
+    owner: operator
+  - file: gate/v1/check_handoff.py
+    axis: phase
+    token: 1
+    reason: CLI contract, see phase 0
+    owner: operator
+  - file: gate/v1/check_handoff.py
+    axis: phase
+    token: 2
+    reason: CLI contract, see phase 0
+    owner: operator
+  - file: gate/v1/check_handoff.py
+    axis: ruling
+    token: APP-FIRST
+    reason: this is the validator that PARSES and validates the ruling; it names the vocabulary in its own error messages. The vocabulary itself now derives from check_profile.CANON rather than being a second copy
+    owner: operator
+  - file: gate/v1/check_handoff.py
+    axis: ruling
+    token: WEB→APP
+    reason: as APP-FIRST above, plus the WEB→APP-only research requirement (stack-portability score) which is a rule about that specific ruling
+    owner: operator
+  - file: gate/v1/build_scorecard.py
+    axis: phase
+    token: 11b
+    reason: "structural: the scorecard must know which phase is the store release, as it already knows RELEASE_LABEL. Excluding it by id-order is what fixed the v0.4 deadlock; the label is the anchor"
+    owner: operator
+  - file: gate/v1/build_scorecard.py
+    axis: ruling
+    token: APP-FIRST
+    reason: "REVIEW: `if profile in (WEB→APP, APP-FIRST)` at two sites decides whether the store gate applies. A ruling added to CANON would silently skip it. Same shared-predicate fix as coherence.py"
+    owner: operator
+  - file: gate/v1/build_scorecard.py
+    axis: ruling
+    token: WEB→APP
+    reason: "REVIEW: see APP-FIRST above"
+    owner: operator
+  - file: gate/v1/check_live_verification_mobile.py
+    axis: ruling
+    token: WEB
+    reason: "REVIEW: internal self-disable under WEB, duplicating the not_applicable declaration in profiles.yaml. This is the validator whose self-disable produced v0.4's false `result: pass`; profiles.yaml now covers it. Removal changes behaviour -- needs a decision, not a triage"
+    owner: operator
+  - file: gate/v1/check_store_readiness.py
+    axis: ruling
+    token: WEB
+    reason: "REVIEW: internal self-disable under WEB, see check_live_verification_mobile"
+    owner: operator
+  - file: gate/v1/check_regression_mobile.py
+    axis: ruling
+    token: WEB
+    reason: "REVIEW: internal self-disable under WEB, see check_live_verification_mobile"
+    owner: operator
+  # Added in the v2 port. v1's substring matcher suppressed a bare WEB on any
+  # line that also said WEB→APP, so this line's WEB was never reported; the
+  # token matcher (the v2 fix) finds it. Same justification as the two above.
+  - file: gate/v1/check_handoff.py
+    axis: ruling
+    token: WEB
+    reason: as APP-FIRST above; the error text enumerates the vocabulary it validates
+    owner: operator

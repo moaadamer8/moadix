@@ -1,0 +1,7 @@
+# MOADIX gate: directories PARK resolves docker/podman from (root-owned when installed).
+# PARK runs outside the sandbox with the operator's authority, so the executable
+# is never taken from PATH (a session or project setting could change PATH).
+dirs:
+  - /usr/local/bin
+  - /opt/homebrew/bin
+  - /Applications/Docker.app/Contents/Resources/bin

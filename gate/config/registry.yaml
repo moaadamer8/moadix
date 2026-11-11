@@ -1,0 +1,207 @@
+# MOADIX v2 validator registry. Generated once from sdlc-harness v1 harness/registry.yaml
+# (validators with a phase only; `entrypoint: harness/bin/X.sh` became `module: X`).
+# Root-owned when installed. Read by gate/validate.py and the ported scorecard.
+version: 2
+components:
+  - id: check-surface-coverage
+    kind: validator
+    phase: 9
+    status: active
+    module: check_surface_coverage
+  - id: check-authz-matrix
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_authz_matrix
+  - id: lighthouse-performance-trace
+    kind: validator
+    phase: 10a
+    status: planned
+    module: check_live_verification
+  - id: check-approvals
+    kind: validator
+    phase: 11
+    status: active
+    module: check_approvals
+  - id: check-handoff-0
+    kind: validator
+    phase: 0
+    status: active
+    module: check_handoff
+    args:
+      - --phase
+      - 0
+    verifies:
+      - sdlc/00-*.md
+  - id: check-handoff-1
+    kind: validator
+    phase: 1
+    status: active
+    module: check_handoff
+    args:
+      - --phase
+      - 1
+    verifies:
+      - sdlc/00-*.md
+      - sdlc/01-*.md
+      - sdlc/decisions/**
+  - id: check-handoff-2
+    kind: validator
+    phase: 2
+    status: active
+    module: check_handoff
+    args:
+      - --phase
+      - 2
+    verifies:
+      - sdlc/00-*.md
+      - sdlc/01-*.md
+      - sdlc/02-*.md
+  - id: check-profile-3
+    kind: validator
+    phase: 3
+    status: active
+    module: check_profile
+    args:
+      - --phase
+      - 3
+    verifies:
+      - sdlc/00-*.md
+      - sdlc/03-*.md
+  - id: check-profile-5
+    kind: validator
+    phase: 5
+    status: active
+    module: check_profile
+    args:
+      - --phase
+      - 5
+    verifies:
+      - sdlc/02-*.md
+      - sdlc/05-lld/**
+  - id: build-scorecard
+    kind: validator
+    phase: 11
+    status: active
+    module: build_scorecard
+    verifies:
+      - sdlc/02-*.md
+      - sdlc/04-*.md
+      - sdlc/09-*.md
+      - sdlc/10a-*.md
+      - sdlc/10b-*.md
+      - sdlc/10c-*.md
+      - test-results/**
+      - evidence/**
+      - src/**
+      - mobile/**
+  - id: check-store-readiness
+    kind: validator
+    phase: 11b
+    status: active
+    module: check_store_readiness
+    verifies:
+      - sdlc/11-*.md
+      - sdlc/11b-*.md
+      - release/store/**
+      - release/assets/**
+      - mobile/**
+  - id: check-regression-mobile
+    kind: validator
+    phase: 10b
+    status: active
+    module: check_regression_mobile
+    verifies:
+      - sdlc/10a-*.md
+      - e2e-mobile/**
+      - .maestro/**
+      - mobile/**
+  - id: check-live-verification-mobile
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_live_verification_mobile
+    verifies:
+      - sdlc/02-*.md
+      - mobile/**
+      - evidence/live-mobile/**
+  - id: check-regression
+    kind: validator
+    phase: 10b
+    status: active
+    module: check_regression
+    verifies:
+      - sdlc/10a-*.md
+      - e2e/**
+      - src/**
+      - public/**
+  - id: check-live-verification
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_live_verification
+    verifies:
+      - sdlc/02-*.md
+      - src/**
+      - public/**
+      - evidence/live/**
+  - id: check-concurrency
+    kind: validator
+    phase: 10c
+    status: active
+    module: check_concurrency
+    verifies:
+      - sdlc/04-*.md
+      - src/**
+      - mobile/**
+      - load/**
+      - evidence/concurrency/**
+  - id: check-provisioning
+    kind: validator
+    phase: 6b
+    status: active
+    module: check_provisioning
+    verifies:
+      - sdlc/02-*.md
+      - sdlc/05-lld/**
+      - .env.example
+  - id: check-security
+    kind: validator
+    phase: 9
+    status: active
+    module: check_security
+    verifies:
+      - sdlc/04-*.md
+      - sdlc/05-lld/**
+      - src/**
+      - mobile/**
+      - security/**
+  - id: check-traceability
+    kind: validator
+    phase: 8
+    status: active
+    module: check_traceability
+    verifies:
+      - sdlc/02-*.md
+      - sdlc/07-*.md
+      - tests/**
+      - test-results/**
+      - src/**
+      - mobile/**
+  - id: check-lld
+    kind: validator
+    phase: 5
+    status: active
+    module: check_lld
+    verifies:
+      - sdlc/02-*.md
+      - sdlc/04-*.md
+      - sdlc/05-lld/**
+  - id: check-threat-model
+    kind: validator
+    phase: 4
+    status: active
+    module: check_threat_model
+    verifies:
+      - sdlc/03-*.md
+      - sdlc/04-*.md
