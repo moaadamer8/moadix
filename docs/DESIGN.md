@@ -50,6 +50,7 @@ Feature cycles (new features for a product with an approved baseline: released a
 4. The product's approved documents stay approved and frozen. Validators check each addition against them: traceability, no conflicting SEC-IDs, no contradicted requirements.
 5. APPROVE <phase> <code> applies to the active feature. Approving the feature's phase 11 merges its additions into the product documents, recorded in the ledger.
 6. Ledger lines carry the feature id; .sdlc/features/<feature-id>/phase.yaml is rebuilt from the ledger like the product's.
+The two folders are intentional: sdlc/features/<feature-id>/ holds the documents the agent writes, and .sdlc/features/<feature-id>/ holds gate state that only the gate writes, the same split as the product's sdlc/NN-*.md and .sdlc/phase.yaml.
 Onboarding (an existing product not built with MOADIX):
 1. INIT <product-id> <code> on a repo that already has code starts the product in onboarding mode, at phase B (Baseline).
 2. In phase B the agent documents what exists: purpose and users (as-is BRD), current features as stories with EARS where possible (as-is PRD), architecture, a threat model of the current system with each SEC-ID's current status, the test inventory and coverage, a known-gaps register (untested acceptance criteria, open findings), and the accounts and services in use, without secrets.
