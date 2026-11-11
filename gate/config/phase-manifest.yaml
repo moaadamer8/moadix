@@ -1,0 +1,198 @@
+# MOADIX phase manifest (increment 3; DESIGN.md §6). Installed root-owned with the gate.
+# The PreToolUse hook denies, in a MOADIX product, any Skill/SlashCommand call or MCP tool
+# call that is not listed for the CURRENT phase, and names the phase in the reason.
+#   skills    vendored skills under skills/, invoked as moadix:<name> (bare or other
+#             plugins' names are refused: only MOADIX's stripped copies are allowed)
+#   mcp       MCP server names; a tool mcp__<server>__<tool> (or a plugin's
+#             mcp__plugin_<plugin>_<server>__<tool>) is allowed when <server> is listed
+#   gate_run  deterministic tools the GATE runs (increment 5 wires them); listed so the
+#             phase's tool set is in one place. The agent may run them for feedback only.
+#   during    phase 12 (Retro) is not a gated phase: its skills apply while the current
+#             phase is 11 (sdlc/12-*.md is in phase 11's path map) and after all are done.
+# Sizes: skill_md_bytes is what loading the skill puts in context; total_bytes is the
+# whole directory. tests/skills/run.py checks them against the files.
+version: 1
+always:
+  skills:
+    - request-review
+phases:
+  - label: "0"
+    name: BRD
+    skills:
+      - bmad-forge-idea
+    mcp: []
+    gate_run: []
+  - label: "1"
+    name: Research
+    skills:
+      - bmad-deep-recon
+    mcp:
+      - context7
+    gate_run: []
+  - label: "2"
+    name: PRD
+    skills:
+      - bmad-prd
+    mcp: []
+    gate_run: []
+  - label: "3"
+    name: HLD
+    skills:
+      - bmad-architecture
+    mcp: []
+    gate_run: []
+  - label: "4"
+    name: Threat Model
+    skills:
+      - threat-model
+      - threat-mitigation-mapping
+    mcp: []
+    gate_run: []
+  - label: "5"
+    name: LLD
+    skills: []
+    mcp: []
+    gate_run:
+      - tool: redocly-cli
+        purpose: "OpenAPI lint of the LLD contracts"
+        status: planned-increment-5
+  - label: "6"
+    name: UX
+    skills:
+      - ui-ux-pro-max
+      - impeccable
+      - apple-design
+    mcp: []
+    gate_run: []
+    templates:
+      - templates/DESIGN.md
+  - label: "6b"
+    name: Provisioning
+    skills: []
+    mcp: []
+    gate_run: []
+  - label: "7"
+    name: Tasks and Implementation
+    skills:
+      - code-review
+      - diagnosing-bugs
+      - test-driven-development
+      - verification-before-completion
+      - typescript-reviewer
+    mcp: []
+    gate_run: []
+  - label: "8"
+    name: Testing
+    skills:
+      - pr-test-analyzer
+      - javascript-testing-expert
+    mcp: []
+    gate_run: []
+  - label: "9"
+    name: Security Verification
+    skills: []
+    mcp: []
+    gate_run:
+      - tool: gitleaks
+        purpose: "secret scan"
+        status: planned-increment-5
+      - tool: osv-scanner
+        purpose: "dependency vulnerabilities"
+        status: planned-increment-5
+      - tool: trivy
+        purpose: "image and filesystem scan"
+        status: planned-increment-5
+      - tool: semgrep
+        purpose: "static analysis"
+        status: planned-increment-5
+  - label: "10a"
+    name: Live Verification
+    skills: []
+    mcp: []
+    gate_run: []
+  - label: "10b"
+    name: Regression Suites
+    skills: []
+    mcp: []
+    gate_run: []
+  - label: "10c"
+    name: Concurrency and Load
+    skills: []
+    mcp: []
+    gate_run:
+      - tool: k6
+        purpose: "load thresholds"
+        status: planned-increment-5
+  - label: "11"
+    name: Release
+    skills: []
+    mcp: []
+    gate_run: []
+  - label: "11b"
+    name: Store Release
+    skills: []
+    mcp: []
+    gate_run: []
+  - label: "12"
+    name: Retro
+    during: ["11", "done"]
+    skills:
+      - phase-retrospective
+      - reflect-queue
+    mcp: []
+    gate_run: []
+skills:
+  - name: bmad-forge-idea
+    skill_md_bytes: 10380
+    total_bytes: 28428
+  - name: bmad-deep-recon
+    skill_md_bytes: 9298
+    total_bytes: 78935
+  - name: bmad-prd
+    skill_md_bytes: 14047
+    total_bytes: 73548
+  - name: bmad-architecture
+    skill_md_bytes: 13869
+    total_bytes: 52891
+  - name: threat-model
+    skill_md_bytes: 7750
+    total_bytes: 66973
+  - name: threat-mitigation-mapping
+    skill_md_bytes: 3346
+    total_bytes: 29510
+  - name: ui-ux-pro-max
+    skill_md_bytes: 17562
+    total_bytes: 3356201
+  - name: impeccable
+    skill_md_bytes: 5324
+    total_bytes: 102019
+  - name: apple-design
+    skill_md_bytes: 23036
+    total_bytes: 25732
+  - name: code-review
+    skill_md_bytes: 7209
+    total_bytes: 11672
+  - name: diagnosing-bugs
+    skill_md_bytes: 8815
+    total_bytes: 13730
+  - name: test-driven-development
+    skill_md_bytes: 9572
+    total_bytes: 21206
+  - name: verification-before-completion
+    skill_md_bytes: 3836
+    total_bytes: 6858
+  - name: typescript-reviewer
+    skill_md_bytes: 9082
+    total_bytes: 22078
+  - name: pr-test-analyzer
+    skill_md_bytes: 5019
+    total_bytes: 18724
+  - name: javascript-testing-expert
+    skill_md_bytes: 16728
+    total_bytes: 18689
+  - name: phase-retrospective
+    skill_md_bytes: 13473
+    total_bytes: 70868
+  - name: reflect-queue
+    skill_md_bytes: 9587
+    total_bytes: 52580

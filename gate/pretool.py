@@ -7,6 +7,7 @@
  4. sudo, plugin install/enable/disable, `claude mcp add`, nested `claude`,
     scheduled tasks, cross-session messages, and edits to settings, plugin
     and managed paths are denied.
+ 5. Skill and MCP calls must be in the current phase's manifest (gate/manifest.py).
  6. Writes inside a product repo must fall in the current phase's path map.
 
 Returns a deny dict or None (no opinion: normal permission flow continues).
@@ -15,7 +16,7 @@ Any internal error is a deny (fail closed).
 import os
 import re
 
-from . import autoval, bashcls, pathmap, state
+from . import autoval, bashcls, manifest, pathmap, state
 
 TURN_TOOLS = {"CronCreate", "CronDelete", "ScheduleWakeup", "SendMessage", "ListAgents", "RemoteTrigger"}
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
@@ -184,6 +185,13 @@ def decide(hook_input):
     cache = {"_session": state.find_root(cwd)}
     if tool in TURN_TOOLS:
         return deny("%s is denied: the agent cannot schedule turns or message other sessions (invariant 4)" % tool)
+    if tool in manifest.SKILL_TOOLS or tool.startswith("mcp__"):
+        session = cache["_session"]
+        if session:
+            st, problems = state.current_state(session)
+            why = manifest.check(tool, ti, None if problems else st["current_phase"])
+            if why:
+                return deny(why + " (invariant 5)")
     if tool in WRITE_TOOLS:
         p = ti.get(WRITE_TOOLS[tool])
         if not p:

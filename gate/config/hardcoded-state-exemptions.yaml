@@ -83,3 +83,28 @@ exemptions:
     token: WEB
     reason: as APP-FIRST above; the error text enumerates the vocabulary it validates
     owner: operator
+  - file: gate/config/phase-manifest.yaml
+    axis: phase
+    token: 6b
+    reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
+    owner: operator
+  - file: gate/config/phase-manifest.yaml
+    axis: phase
+    token: 10a
+    reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
+    owner: operator
+  - file: gate/config/phase-manifest.yaml
+    axis: phase
+    token: 10b
+    reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
+    owner: operator
+  - file: gate/config/phase-manifest.yaml
+    axis: phase
+    token: 10c
+    reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
+    owner: operator
+  - file: gate/config/phase-manifest.yaml
+    axis: phase
+    token: 11b
+    reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
+    owner: operator

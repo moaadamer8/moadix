@@ -452,6 +452,12 @@ def handle(hook_input):
         val = ""
         if not problems and st["current_phase"] != "done":
             val = " " + _validation_text(*validation.read(root, st["current_phase"], st), st["current_phase"]) + "."
+        if not problems:
+            try:
+                from . import manifest
+                val += " Phase %s manifest: %s." % (st["current_phase"], manifest.budget(st["current_phase"]))
+            except Exception as e:  # STATUS still answers; the PreToolUse check fails closed on its own
+                val += " Phase manifest unreadable (%s)." % type(e).__name__
         props = adopt.pending(root)
         if props:
             try:
