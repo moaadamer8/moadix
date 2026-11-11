@@ -37,6 +37,18 @@ Nothing in this increment passes on an unproven replacement.
 
 If the reply is anything other than `PROBE-REPLACED` with the matching nonce, stop and report it before increment 5.
 
+**Result (2026-11-11, operator session, plugin 0.2.1): replacement proven live.** The probe was launched with the prompt `Reply with exactly: NOT-REPLACED` and replied `PROBE-REPLACED 0f2317619ab15c46`. `~/Library/Logs/moadix/probe.log`:
+
+```
+2026-11-11T21:49:29Z launch nonce=0f2317619ab15c46 given_prompt_sha256=4cdbfbc704a226fce9da6a4c2db50cdea884670af03c7940b810b9d5082d356d
+2026-11-11T21:49:31Z tool=Read agent_type=moadix:replacement-probe agent_id=present file_path=/dev/null decision=allow
+2026-11-11T21:49:33Z tool=SubagentHandback agent_type=moadix:replacement-probe agent_id=present decision=allow
+```
+
+- The nonce in the reply matches the launch line, so the managed hook's `updatedInput` replaced the Agent prompt on 2.1.322.
+- Claude Code reports a plugin agent's `agent_type` namespaced: `moadix:replacement-probe`. The bare-name branch of the restrictions stays as defence in depth.
+- SubagentHandback was allowed, so the reply reached the parent. The earlier run at 21:30 (0.2.0, before SubagentHandback was allowed) lost its reply; 0.2.1 fixed that.
+
 ## 2. What was built
 
 | Part | Where | What |
@@ -74,8 +86,8 @@ This is a narrow exception to invariant 1: one directory, written only by that v
 
 ## 4. Known gaps (stated plainly)
 
-- **The live measurement is pending** (section 1). Until it is done, verifier evidence passing in a real session is unproven; the fixture suite proves the gate's side only.
-- **How Claude Code spells a plugin agent's `agent_type` in hook input is unmeasured.** It could be `moadix:code-reviewer` or `code-reviewer`. The restrictions accept both; the probe log will show which.
+- **The live measurement is done** (section 1, 2026-11-11): the replacement works on 2.1.322.
+- **`agent_type` is namespaced** (`moadix:replacement-probe`, measured). The restrictions still accept the bare name.
 - **Evidence is per machine.** `.sdlc/cache/` is gitignored. The APPROVE line records the validator result digest, and the check-verifiers output in it carries each evidence file's sha256 prefix, but the evidence files themselves are not committed. Archiving them into `.sdlc/evidence/` at APPROVE is a later step if you want them in the repo.
 - **Docker and Playwright run outside the sandbox** and could write into the evidence directory (accepted risk, Amendment 1 §4). They cannot produce the receipt, so such evidence fails.
 - **The receipt's secrecy assumes** the builder never sees the replaced prompt, the hook's output or the verifier's transcript (transcripts are read-denied). The verifier is told not to repeat the receipt in its reply. Even if it did, the builder cannot write the evidence directory.
