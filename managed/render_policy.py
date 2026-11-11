@@ -5,9 +5,11 @@
 
 Placeholders: __CC_DIR__ (the managed-settings directory), __MOADIX_HOME__ (the
 root-owned gate copy), __PIN__ (fingerprint of the Keychain secrets),
-__MARKETPLACE_REPO__. With "none", the plugin keys are left out: the gate runs
-entirely from managed settings, and strictKnownMarketplaces stays [] (no
-plugin source allowed).
+__MARKETPLACE_REPO__ (owner/repo of this repo on GitHub, which serves as its own
+marketplace: strictKnownMarketplaces then allows exactly that one, and
+enabledPlugins force-enables moadix@moadix from it). With "none", the plugin
+keys are left out: the gate runs entirely from managed settings, and
+strictKnownMarketplaces stays [] (no plugin source allowed).
 """
 import json
 import re
@@ -39,6 +41,16 @@ def main():
         d["strictKnownMarketplaces"] = []
     d = sub(d, {"__CC_DIR__": cc_dir.rstrip("/"), "__MOADIX_HOME__": home.rstrip("/"), "__PIN__": pin,
                 "__MARKETPLACE_REPO__": repo})
+    if repo != "none":
+        # The repo is its own public marketplace (.claude-plugin/marketplace.json, name "moadix").
+        # Allow exactly that one marketplace, register it, and force-enable exactly its plugin.
+        want = {"source": "github", "repo": repo}
+        if d.get("strictKnownMarketplaces") != [want]:
+            sys.exit("strictKnownMarketplaces must allow exactly %s" % repo)
+        if d.get("extraKnownMarketplaces") != {"moadix": {"source": want}}:
+            sys.exit("extraKnownMarketplaces must register exactly moadix -> %s" % repo)
+        if d.get("enabledPlugins") != {"moadix@moadix": True}:
+            sys.exit("enabledPlugins must force-enable exactly moadix@moadix")
     text = json.dumps(d, indent=2) + "\n"
     left = sorted(set(re.findall(r"__(?:CC_DIR|MOADIX_HOME|PIN|MARKETPLACE_REPO)__", text)))
     if left:

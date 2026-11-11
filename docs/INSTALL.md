@@ -11,10 +11,10 @@ This takes about 10 minutes. You need your macOS password once, and your phone w
 - **Know the machine-wide effects.** Once installed, they apply to every Claude Code session on this Mac, not just MOADIX projects:
   - Every Bash command runs in the sandbox. `docker` and `playwright` are excluded from it.
   - Only MOADIX's hooks run (`allowManagedHooksOnly`). Hooks from your other plugins (for example superpowers' SessionStart hook) stop running.
-  - No plugin marketplace can be added (`strictKnownMarketplaces: []`). How this affects plugins you already have installed was **not measured**; check `/plugin` after installing.
+  - No other plugin marketplace can be added. Without `--plugin`, `strictKnownMarketplaces` is `[]`. With `--plugin <owner>/moadix` it allows exactly that repo, which serves as its own marketplace (`.claude-plugin/marketplace.json`), and `moadix@moadix` is force-enabled from it. How this affects plugins you already have installed was **not measured**; check `/plugin` after installing.
   - `sudo`, nested `claude`, scheduled tasks, cross-session messages and `--dangerously-skip-permissions` are refused.
   - In repos without `.sdlc/`, MOADIX records nothing, but the points above still apply.
-- **The plugin is optional for now.** The gate runs entirely from managed settings. The plugin only adds `/moadix:request-review`, and it needs this repo published on GitHub. Install without it now; to add it later, see "Updating".
+- **The plugin is optional for now.** The gate runs entirely from managed settings. The plugin only adds `/moadix:request-review`. It is served from this repo's public GitHub marketplace: `managed/install.sh --plugin moaadamer8/moadix`. Install without it now; to add it later, see "Updating".
 
 ## 1. Run the installer
 

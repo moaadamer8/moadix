@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "description": "SDLC gates for Claude Code: typed operator commands with authenticator codes, a signed ledger, and per-phase path maps. Requires the one-time admin setup in managed/install.sh.",
   "license": "MIT",
-  "repository": "https://github.com/__OWNER__/moadix",
+  "repository": "https://github.com/moaadamer8/moadix",
   "keywords": ["sdlc", "gates", "approval", "ledger"]
 }
