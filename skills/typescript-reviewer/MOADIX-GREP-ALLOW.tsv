@@ -1,0 +1,6 @@
+# <path glob>	<line regex>	<reason>
+skills/typescript-reviewer/SKILL.md	current branch's upstream/merge-base	names git merge-base for computing the review diff; not a merge
+skills/typescript-reviewer/SKILL.md	inspect merge readiness when metadata is available	reads PR mergeability/CI state as a precondition and stops if not green; never instructs merging
+skills/typescript-reviewer/SKILL.md	If the PR shows merge conflicts or a non-mergeable state, stop and report	tells the reviewer to stop and report conflicts; not an instruction to merge
+skills/typescript-reviewer/SKILL.md	If merge readiness cannot be verified from the available context, say so	tells the reviewer to report unknown mergeability; not an instruction to merge
+skills/typescript-reviewer/SKILL.md	\*\*Prototype pollution\*\*: Merging untrusted objects	JavaScript object merging as a vulnerability class (finding category)

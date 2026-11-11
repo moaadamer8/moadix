@@ -1,0 +1,2 @@
+skills/code-review/SKILL.md	\bmerge-base\b	git term: the common-ancestor commit a diff is taken against, not an instruction to merge
+skills/code-review/SKILL.md	Do \*\*not\*\* merge or rerank findings	forbids combining the two axes' findings in the report; not about merging code
