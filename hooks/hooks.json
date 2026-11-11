@@ -1,0 +1,30 @@
+{
+  "description": "MOADIX gate hooks. They run the root-owned copy that managed/install.sh puts in /Library/Application Support/ClaudeCode/moadix (not this plugin directory, which Docker mounts can write), with the SIP-protected /usr/bin/python3. If the setup has not been done the command fails, and onFailure: block refuses the action.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 '/Library/Application Support/ClaudeCode/moadix/gate/hook.py' prompt",
+            "timeout": 20,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 '/Library/Application Support/ClaudeCode/moadix/gate/hook.py' pretool",
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
