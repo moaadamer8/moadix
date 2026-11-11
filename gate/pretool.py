@@ -69,6 +69,7 @@ def _docker_mounts(toks):
             continue
         m = re.search(r"(?:^|,)(?:source|src)=([^,]+)", val)
         src = m.group(1) if m else val.split(":", 1)[0]
+        src = re.sub(r"^(?:\$PWD|\$\{PWD\}|\$\(pwd\)|`pwd`)", ".", src)
         if src.startswith(("/", "~", ".")):
             out.append(src)
     return out

@@ -154,7 +154,9 @@ def analyse(cmd):
         elif verb == "git" and args:
             sub = operands[0] if operands else ""
             rest = [o for o in operands[1:] if o != "--"]
-            if sub in ("checkout", "switch") and any(a in ("-b", "-B", "-c", "-C", "--orphan") for a in args) and len(rest) <= 2:
+            if sub == "stash" and rest[:1] in (["list"], ["show"]):
+                pass  # read-only (v1 false positive)
+            elif sub in ("checkout", "switch") and any(a in ("-b", "-B", "-c", "-C", "--orphan") for a in args) and len(rest) <= 2:
                 pass  # creating a branch at HEAD changes no files
             elif sub in ("rm", "mv", "restore") or (sub == "checkout" and "--" in args):
                 targets.extend(rest or [".sdlc"])
