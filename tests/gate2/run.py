@@ -263,7 +263,9 @@ def group_port():
     import hlib
     reg = hlib.load_yaml(os.path.join(REPO, "gate", "config", "registry.yaml"))
     comps = reg["components"]
-    record(G, "registry carries v1's %d phase validators" % len(comps), len(comps) == 21,
+    v1c = [c for c in comps if c["module"] != "check_verifiers"]  # increment 4 adds check-verifiers-6/7/8 (v2)
+    record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks)" % (
+        len(v1c), len(comps) - len(v1c)), len(v1c) == 21 and len(comps) - len(v1c) == 3,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")
