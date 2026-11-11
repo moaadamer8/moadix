@@ -20,6 +20,28 @@ Still to measure in increment 1: the Keychain lock (another process asking for t
 - Wrong codes cause a cooldown, not a lockout. After 3 wrong codes approvals pause for 15 minutes, doubling with each further wrong code, up to 24 hours. Attempts during a pause are refused unevaluated and never extend it. A valid code after the pause resets the counter. The counter is signed. There is no password dialog.
 - `disableBypassPermissionsMode` sits under `permissions`. Nothing depends on the settings `env` block reaching hooks: the checker reads the pin from the policy file itself, and the gate finds the checker from its own install path.
 
+**Rulings on increment 2 (2026-11-11), part of Amendment 1:**
+1. **Approved phases are frozen until REOPEN.** Accepted (v1's rule, restored in increment 2).
+2. **The gate runs the validators; REVIEW is optional.** When the agent finishes a phase, the gate runs that phase's validators itself and caches the result for the current commit. Two triggers start it: a managed Stop hook at the end of every agent turn, and the agent's `/moadix:request-review` call. Either way the tree must be clean and the cached result missing or stale. APPROVE reads that cache and refuses, with the findings, if it is missing, stale or failing. `REVIEW <phase>` stays as an optional read-only command. Only the gate writes the cache. Each APPROVE ledger line records `validation.digest`, the sha256 of the exact cache file it relied on. The Stop hook never answers and never blocks, because a blocking Stop hook keeps the agent running. Failing open there is safe, since a missing result makes APPROVE refuse. *(Built in increment 3.)*
+3. **`ADOPT <code>` replaces editing `.sdlc/` in Terminal.** The agent writes proposed product settings to `.sdlc-proposals/`, which is outside `.sdlc/` and writable in every phase:
+   - `product.yaml`, with the keys `platform`, `size`, `app_run`, `test_targets` and `park` only;
+   - `config/<name>.yaml`, for the product config files the validators read.
+
+   The operator types `ADOPT <code>`. The gate validates every proposal, records one signed line listing each target with its proposal and result sha256 (and the text when it is small), copies the settings into `.sdlc/` and removes the proposals. STATUS lists pending proposals and treats an adopted file edited outside ADOPT as an integrity failure. *(Built in increment 3.)*
+4. **The phase-11 scorecard reads the MOADIX ledger, not v1 git history,** and must work before onlineMarket migrates. Approval commit, mode, cleanliness and evidence now come from the verified ledger.
+   - "Was this validator registered when the phase was approved?" is answered from the APPROVE line: the gate ran every registered validator, so any validator absent from the line was registered later.
+   - Imported v1 lines carry `payload.imported` (`approval_sha`, `approval_dirty`, `approval_mode`, `approver`, `evidence`, optional `registered`). A missing field stays unknown and fails closed.
+
+   *(Built in increment 3.)*
+5. **Deferred from the increment-2 "did not port" list.** Each item has the increment it belongs to:
+
+   | Item | Why deferred | Increment |
+   |---|---|---|
+   | check-surface-coverage's **live probe** (HTTP to the running app) | Needs a front door to the running product (`app_run`) that a gate run may touch without touching the live product; phase 10a needs it again | **5** (new tools, with Playwright MCP), before the toy run reaches 10a |
+   | **check-seam's BMAD half** (the BMAD adapter checks) | Needs BMad core 6.12.4 installed in a product (`_bmad/`); the vendored BMAD skills also call `_bmad/scripts/*` | **6** (toy run, which installs BMad core) |
+   | **Size-profile collapse** in the ledger replay (`hlib.collapsed_phases`) | A collapsed phase must become a recorded ruling, not a silent skip; the toy run is the first product with a size | **6** |
+   | **WEB→APP transition mode** (`check_transition` and the transition workspace) | Only onlineMarket uses it | **7** (onlineMarket migration) |
+
 ## Goals and non-goals
 
 **Goals**
