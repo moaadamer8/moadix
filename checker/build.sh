@@ -3,7 +3,7 @@
 # (no DYLD_* injection, no debugger attach without root).
 #   build.sh <out>                      production: default (login) keychain
 #   build.sh <out> --test <keychain> <pinfile>
-#        test build: pinned test keychain and pin file; prints the URI on init;
+#        test build: pinned test keychain and pin file;
 #        skips the root-ownership check on the pin file
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; out="$1"; shift

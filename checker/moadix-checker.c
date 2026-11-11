@@ -27,8 +27,8 @@
  * prev from the anchor; the caller cannot.
  *
  * Build flags: MOADIX_KEYCHAIN="/abs/path" pins a keychain; MOADIX_PINFILE pins
- * the pin file; MOADIX_TEST prints the otpauth URI on stdout (the corpus plays
- * the phone) and skips the root-ownership check on the pin file. Nothing at run
+ * the pin file; MOADIX_TEST skips the root-ownership check on the pin file
+ * (test fixtures cannot be root-owned without sudo). Nothing at run
  * time (environment, arguments) changes which keychain or pin file is used.
  */
 #include <Security/Security.h>
@@ -316,15 +316,10 @@ static int cmd_init(void) {
     base32(g_totp, 20, b32);
     snprintf(uri, sizeof uri, "otpauth://totp/MOADIX:operator?secret=%s&issuer=MOADIX&algorithm=SHA1&digits=6&period=30", b32);
     compute_pin(g_totp, 20, g_key, 32, pin);
-#ifdef MOADIX_TEST
+    /* Printed once, to the installer (which renders the QR code). A later
+     * delete-and-re-init by anyone else yields secrets that fail the
+     * root-owned pin, so this output is only useful at install time. */
     printf("OK uri=%s pin=%s\n", uri, pin);
-#else
-    /* The URI goes to the terminal only, never to stdout (which a caller may capture). */
-    int tty = open("/dev/tty", O_WRONLY);
-    if (tty < 0) die(24, "no-terminal: run the installer in a real terminal");
-    dprintf(tty, "%s\n", uri); close(tty);
-    printf("OK pin=%s\n", pin);
-#endif
     memset(b32, 0, sizeof b32); memset(uri, 0, sizeof uri); wipe();
     return 0;
 }

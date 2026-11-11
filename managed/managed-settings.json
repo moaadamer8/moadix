@@ -1,0 +1,89 @@
+{
+  "requiredMinimumVersion": "2.1.295",
+
+  "extraKnownMarketplaces": {
+    "moadix": { "source": { "source": "github", "repo": "__MARKETPLACE_REPO__" } }
+  },
+  "strictKnownMarketplaces": [
+    { "source": "github", "repo": "__MARKETPLACE_REPO__" }
+  ],
+  "enabledPlugins": { "moadix@moadix": true },
+  "disableSideloadFlags": true,
+
+  "allowManagedHooksOnly": true,
+  "allowManagedPermissionRulesOnly": true,
+  "crossSessionInbound": "refuse",
+
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "deny": [
+      "CronCreate",
+      "CronDelete",
+      "ScheduleWakeup",
+      "SendMessage",
+      "ListAgents",
+      "RemoteTrigger",
+      "Read(~/.claude/projects/**)",
+      "Edit(~/.claude/**)",
+      "Edit(//Library/Application Support/ClaudeCode/**)",
+      "Bash(sudo *)",
+      "Bash(claude *)",
+      "Bash(security *)"
+    ]
+  },
+
+  "env": {
+    "CLAUDE_CODE_DISABLE_CRON": "1",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "MOADIX_PIN": "__PIN__"
+  },
+
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "docker *",
+      "npx playwright *",
+      "playwright *"
+    ],
+    "filesystem": {
+      "denyWrite": [
+        "~/**/.sdlc",
+        "~/**/.sdlc/**",
+        "~/**/.claude",
+        "~/**/.claude/**",
+        "~/.claude",
+        "~/.claude.json",
+        "/Library/Application Support/ClaudeCode",
+        "~/Library/Keychains"
+      ],
+      "denyRead": [
+        "~/.claude/projects"
+      ],
+      "allowWrite": [
+        "~/.npm",
+        "~/Library/Caches/ms-playwright",
+        "~/Library/Caches/pip",
+        "~/.cache"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "cdn.playwright.dev",
+        "playwright.download.prss.microsoft.com",
+        "storage.googleapis.com",
+        "registry-1.docker.io",
+        "auth.docker.io",
+        "production.cloudflare.docker.com",
+        "github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com"
+      ]
+    }
+  }
+}
