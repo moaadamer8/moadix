@@ -1,0 +1,2 @@
+# Global allowlist for tests/skills/selfapproval_grep.py (per-skill rows live in skills/<name>/MOADIX-GREP-ALLOW.tsv).
+# <path glob, repo-relative>\t<line regex>\t<reason this is not an instruction to approve/merge/ship/commit/mark done/auto-advance>

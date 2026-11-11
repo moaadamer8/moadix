@@ -1,0 +1,207 @@
+# Vendored skills: where each one comes from (DESIGN.md §6, increment 3).
+# Pinned at the commit below; fetched 2026-11-11. Every change MOADIX made is in
+# skills/<name>/MOADIX-CHANGES.md (removed self-approve / mark-done / auto-advance /
+# commit / merge / ship steps, and adaptations). Policy: skills/VENDORING.md.
+# Licence obligations from Amendment 1 §6 are marked `obligation:`.
+skills:
+  - name: bmad-forge-idea
+    phases: ["0"]
+    source: https://github.com/bmad-code-org/BMAD-METHOD
+    ref: v6.12.4
+    commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+    path: src/core-skills/bmad-forge-idea
+    licence: MIT (with trademark notice)
+    copyright: Copyright (c) 2025 BMad Code, LLC
+    attribution: BMad Method by BMad Code, LLC. BMad is a trademark of BMad Code, LLC; MOADIX is not affiliated with it.
+    licence_files: [LICENSE]
+  - name: bmad-deep-recon
+    phases: ["1"]
+    source: https://github.com/bmad-code-org/BMAD-METHOD
+    ref: v6.12.4
+    commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+    path: src/core-skills/bmad-deep-recon
+    licence: MIT (with trademark notice)
+    copyright: Copyright (c) 2025 BMad Code, LLC
+    attribution: BMad Method by BMad Code, LLC.
+    licence_files: [LICENSE]
+  - name: bmad-prd
+    phases: ["2"]
+    source: https://github.com/bmad-code-org/BMAD-METHOD
+    ref: v6.12.4
+    commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+    path: src/bmm-skills/plan/bmad-prd
+    licence: MIT (with trademark notice)
+    copyright: Copyright (c) 2025 BMad Code, LLC
+    attribution: BMad Method by BMad Code, LLC.
+    licence_files: [LICENSE, LICENSE.cc-sdd]
+    incorporates:
+      - what: EARS requirement patterns, copied into assets/prd-template.md
+        source: https://github.com/gotalab/cc-sdd
+        commit: e2a0c671aef37a482404905b409ab5c27092b25b
+        path: tools/cc-sdd/templates/shared/settings/rules/ears-format.md
+        licence: MIT
+        copyright: Copyright (c) 2025 gotalab
+  - name: bmad-architecture
+    phases: ["3"]
+    source: https://github.com/bmad-code-org/BMAD-METHOD
+    ref: v6.12.4
+    commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+    path: src/bmm-skills/plan/bmad-architecture
+    licence: MIT (with trademark notice)
+    copyright: Copyright (c) 2025 BMad Code, LLC
+    attribution: BMad Method by BMad Code, LLC.
+    licence_files: [LICENSE, LICENSE.spec-kit]
+    incorporates:
+      - what: data-model / contracts split, copied into assets/spine-template.md
+        source: https://github.com/github/spec-kit
+        commit: 40dd00f39763ccf653ccb18deb684d006f522176
+        path: templates/commands/plan.md (Phase 1 items 1-2), templates/plan-template.md
+        licence: MIT
+        copyright: Copyright GitHub, Inc.
+  - name: threat-model
+    phases: ["4"]
+    source: https://github.com/anthropics/defending-code-reference-harness
+    commit: d3bea6b5793b5f3d59a75ebe69a58efa88383145
+    path: .claude/skills/threat-model
+    licence: Apache-2.0
+    copyright: Copyright 2026 Anthropic PBC
+    licence_files: [LICENSE]
+    obligation: sourced from defending-code-reference-harness (Amendment 1); change notice in each modified file (SKILL.md)
+  - name: threat-mitigation-mapping
+    phases: ["4"]
+    source: https://github.com/wshobson/agents
+    commit: 9c61ab243def98f72da12abd41cfcf5bcd91af9d
+    path: plugins/security-scanning/skills/threat-mitigation-mapping
+    licence: MIT
+    copyright: Copyright (c) 2024 Seth Hobson
+    licence_files: [LICENSE]
+  - name: ui-ux-pro-max
+    phases: ["6"]
+    source: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+    commit: 6ae86f61f520d6ca229d2f40e070410638c908c5
+    path: .claude/skills/ui-ux-pro-max
+    licence: MIT
+    copyright: Copyright (c) 2024 Next Level Builder
+    licence_files: [LICENSE]
+    note: the repo's Apache-2.0 ui-styling sub-skill is NOT included. MOADIX runs it with --persist --output-dir design and --rtl=full.
+  - name: impeccable
+    phases: ["6"]
+    source: https://github.com/pbakaus/impeccable
+    commit: c1e0e5492fbb524f5df84d635ecfae7dc438ec45
+    path: .claude/skills/impeccable (trimmed to critique and audit)
+    licence: Apache-2.0
+    copyright: Copyright 2025 Paul Bakaus
+    licence_files: [LICENSE, NOTICE.md]
+    obligation: ship NOTICE.md (Amendment 1); change notice in each modified file (SKILL.md, critique.md, audit.md, audit.native.md); reference/ios.md and android.md derive from ehmo/platform-design-skills (MIT), credited in NOTICE.md
+  - name: apple-design
+    phases: ["6"]
+    source: https://github.com/emilkowalski/skills
+    commit: 715c1807e08c497cfd1dc4feb450a2a3300ef2a9
+    path: skills/apple-design
+    licence: MIT
+    copyright: Copyright (c) 2026 Emil Kowalski
+    licence_files: [LICENSE]
+    note: not affiliated with Apple Inc.
+  - name: code-review
+    phases: ["7"]
+    source: https://github.com/mattpocock/skills
+    commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
+    path: skills/engineering/code-review
+    licence: MIT
+    copyright: Copyright (c) 2026 Matt Pocock
+    licence_files: [LICENSE]
+  - name: diagnosing-bugs
+    phases: ["7"]
+    source: https://github.com/mattpocock/skills
+    commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
+    path: skills/engineering/diagnosing-bugs
+    licence: MIT
+    copyright: Copyright (c) 2026 Matt Pocock
+    licence_files: [LICENSE]
+  - name: test-driven-development
+    phases: ["7"]
+    source: https://github.com/obra/superpowers
+    commit: 22f0b463e7a5e579904dd6211a520321035526f7
+    path: skills/test-driven-development
+    licence: MIT
+    copyright: Copyright (c) 2025 Jesse Vincent
+    licence_files: [LICENSE]
+  - name: verification-before-completion
+    phases: ["7"]
+    source: https://github.com/obra/superpowers
+    commit: 22f0b463e7a5e579904dd6211a520321035526f7
+    path: skills/verification-before-completion
+    licence: MIT
+    copyright: Copyright (c) 2025 Jesse Vincent
+    licence_files: [LICENSE]
+  - name: typescript-reviewer
+    phases: ["7"]
+    source: https://github.com/affaan-m/ECC
+    commit: d2ef2680594f9a17526a6e1a2e18b3d242c5d17b
+    path: agents/typescript-reviewer.md (agent, vendored as a skill) + rules/typescript/
+    licence: MIT
+    copyright: Copyright (c) 2026 Affaan Mustafa
+    licence_files: [LICENSE]
+  - name: pr-test-analyzer
+    phases: ["8"]
+    source: https://github.com/anthropics/claude-plugins-official
+    commit: 43fd1f9db0941b2b83cb62268e35970d4a67c202
+    path: plugins/pr-review-toolkit/agents/pr-test-analyzer.md (agent, vendored as a skill)
+    licence: Apache-2.0
+    copyright: none stated in the licence (appendix placeholder); Anthropic
+    licence_files: [LICENSE]
+    obligation: taken from claude-plugins-official only, not anthropics/claude-code (Amendment 1); change notice in SKILL.md
+  - name: javascript-testing-expert
+    phases: ["8"]
+    source: https://github.com/dubzzz/fast-check
+    commit: 7c69eca58443340f2a37045b9cf5cb7e09973eac
+    path: skills/javascript-testing-expert
+    licence: MIT
+    copyright: Copyright (c) 2017 Nicolas DUBIEN
+    licence_files: [LICENSE]
+    note: the "fast-check guidance" of the Final selection
+  - name: phase-retrospective
+    phases: ["12"]
+    source: https://github.com/bmad-code-org/BMAD-METHOD
+    ref: v6.12.4
+    commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+    path: src/bmm-skills/ship/bmad-retrospective
+    licence: MIT (with trademark notice)
+    copyright: Copyright (c) 2025 BMad Code, LLC
+    attribution: Adapted from the BMad Method retrospective workflow (MIT). BMad is a trademark of BMad Code, LLC.
+    licence_files: [LICENSE]
+    obligation: renamed from bmad-retrospective (BMad trademark; Amendment 1)
+  - name: reflect-queue
+    phases: ["12"]
+    source: https://github.com/BayramAnnakov/claude-reflect
+    commit: b6c42326903af3dd2bf3772b979730a44d8548ca
+    path: scripts/{capture_learning,read_queue,clear_queue}.py, scripts/lib (adapted); SKILL.md newly written around the queue pattern of commands/reflect.md
+    licence: MIT
+    copyright: Copyright (c) 2025 Bayram Annakov
+    licence_files: [LICENSE]
+
+templates:
+  - name: DESIGN.md
+    phases: ["6"]
+    source: https://github.com/VoltAgent/awesome-design-md
+    commit: fcc70284932276d085f01ef9f83edde90b1258cb
+    path: design-md/notion/DESIGN.md
+    licence: MIT
+    copyright: Copyright (c) 2026 VoltAgent
+    licence_files: [templates/LICENSE.awesome-design-md]
+    obligation: not-affiliated line in the file header (Amendment 1)
+
+mcp_servers:
+  - name: context7
+    phases: ["1"]
+    source: https://github.com/upstash/context7
+    commit: 681554c5d3a688c67879d02d4f01d79ffd15df13
+    vendored: false
+    note: an MCP server, not vendored. The manifest allows tools named mcp__context7__* (or mcp__plugin_*_context7__*) in phase 1 only. Installing it is the operator's choice.
+
+gate_run_tools:
+  - name: redocly-cli
+    phases: ["5"]
+    source: https://github.com/Redocly/redocly-cli
+    vendored: false
+    note: run by the gate, not by the agent; wired in increment 5 (DESIGN.md §6).
