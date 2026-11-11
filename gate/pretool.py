@@ -9,6 +9,12 @@
     and managed paths are denied.
  5. Skill and MCP calls must be in the current phase's manifest (gate/manifest.py).
  6. Writes inside a product repo must fall in the current phase's path map.
+ Verifiers (increment 4, gate/verify.py): an Agent call that launches a MOADIX
+ verifier gets the gate's brief in place of the builder's prompt (updatedInput),
+ or is refused when the gate did not schedule it; a verifier's own tool calls
+ are held to its tool set (read-only Bash, writes only to its evidence
+ directory, no Agent, MCP or network tools); a subagent in a product cannot
+ start agents.
 
 Returns a deny dict or None (no opinion: normal permission flow continues).
 Any internal error is a deny (fail closed).
@@ -16,7 +22,7 @@ Any internal error is a deny (fail closed).
 import os
 import re
 
-from . import autoval, bashcls, manifest, pathmap, state
+from . import autoval, bashcls, manifest, pathmap, state, verify
 
 TURN_TOOLS = {"CronCreate", "CronDelete", "ScheduleWakeup", "SendMessage", "ListAgents", "RemoteTrigger"}
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
@@ -42,6 +48,13 @@ TRANSCRIPTS = os.path.join(pathmap.HOME, ".claude", "projects")
 def deny(reason):
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                    "permissionDecisionReason": "MOADIX: " + reason}}
+
+
+def allow(reason, updated_input=None):
+    out = {"hookEventName": "PreToolUse", "permissionDecision": "allow", "permissionDecisionReason": "MOADIX: " + reason}
+    if updated_input is not None:
+        out["updatedInput"] = updated_input
+    return {"hookSpecificOutput": out}
 
 
 def _phase_for(root, cache):
@@ -185,6 +198,22 @@ def decide(hook_input):
     cache = {"_session": state.find_root(cwd)}
     if tool in TURN_TOOLS:
         return deny("%s is denied: the agent cannot schedule turns or message other sessions (invariant 4)" % tool)
+    agent_id = hook_input.get("agent_id")
+    vrole = verify.role_of_agent_type(hook_input.get("agent_type"))
+    if vrole:
+        r = verify.restrict(tool, ti, cwd, vrole)
+        if r and r[0] == "deny":
+            return deny(r[1] + " (verifier %s)" % vrole)
+        if r and r[0] == "allow":
+            return allow(r[1])
+    if tool in verify.AGENT_TOOLS:
+        if agent_id and cache["_session"]:
+            return deny("a subagent cannot start agents in a MOADIX product (spawn depth is capped at 1)")
+        r = verify.on_agent_launch(ti, cwd)
+        if r and r[0] == "deny":
+            return deny(r[1])
+        if r and r[0] == "replace":
+            return allow("verifier launched with the gate's brief in place of the given prompt", r[1])
     if tool in manifest.SKILL_TOOLS or tool.startswith("mcp__"):
         session = cache["_session"]
         if session:
