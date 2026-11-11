@@ -1,0 +1,18 @@
+# <repo-relative path glob>	<narrow line regex>	<reason>
+skills/ui-ux-pro-max/data/icons.csv	^(22,Status,check-circle|74,Social,thumbs-up|99,Development,git-branch),	data value: icon search keywords (approved/approve/merge), not an instruction
+skills/ui-ux-pro-max/data/phosphor-icons-upstream.json	^\s*"(name": ")?(ship|ships|shipping|shipping-container|merge|merge request|git-merge|arrows-merge)",?\s*$	data value: Phosphor icon name/tag in the upstream icon catalogue
+skills/ui-ux-pro-max/data/motion.csv	^17,Carousel / Auto-Rotation,	data value: carousel auto-advance motion preset (UI behaviour), not an agent step
+skills/ui-ux-pro-max/data/products.csv	^175,E-signature / Document Workflow,	data value: product keywords (approval-chain) for an e-signature product type
+skills/ui-ux-pro-max/data/ux-guidelines.csv	^(106,Forms,Redundant Entry|108,Animation,Auto-Rotating Content Controls),	data value: UX guideline rows (shipping address example; carousel auto-advance)
+skills/ui-ux-pro-max/data/stacks/astro.csv	^(2,Architecture|38,Integrations|49,Security),	data value: Astro stack guideline row (framework ships JS / hosting adapter), search-result content not a workflow step
+skills/ui-ux-pro-max/data/stacks/javafx.csv	^(44,Packaging|61,Navigation|62,Workflow|64,TableView|70,Audit|71,Configuration),	data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+skills/ui-ux-pro-max/data/stacks/laravel.csv	^(24,Styling|30,Components),	data value: Laravel guideline rows (Tailwind purge; $attributes->merge())
+skills/ui-ux-pro-max/data/stacks/nextjs.csv	^(38,Performance|48,Deployment|49,Deployment),	data value: Next.js guideline rows on bundle size and hosting targets, search-result content not a workflow step
+skills/ui-ux-pro-max/data/stacks/react.csv	^(55,Tooling|60,Security),	data value: React guideline rows (lint rules ship in a preset; minimum safe version)
+skills/ui-ux-pro-max/data/stacks/uno.csv	^(14,Renderers|50,Styling),	data value: Uno Platform guideline rows (renderer ships; merge resource dictionaries)
+skills/ui-ux-pro-max/data/stacks/uwp.csv	^42,Accessibility,	data value: UWP accessibility guideline row
+skills/ui-ux-pro-max/data/stacks/winui.csv	^(30,Packaging|36,Accessibility|57,Styling),	data value: WinUI guideline rows (deployment model; merged dictionaries)
+skills/ui-ux-pro-max/scripts/design_system.py	^\s*# style ship with a light background\.	code comment describing style data
+skills/ui-ux-pro-max/scripts/reasoning_contract.py	"if_delivery": \("delivery", "courier", "shipping"\)	data value: keyword list for delivery products
+skills/ui-ux-pro-max/scripts/search.py	^# Embedded Python builds \(for example AutoClaw's bundled runtime, which ships a	code comment about Python runtimes
+skills/ui-ux-pro-max/scripts/validate_data.py	font absent from approved catalog	validator message: font missing from the font catalogue

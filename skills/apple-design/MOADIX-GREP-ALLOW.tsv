@@ -1,0 +1,4 @@
+# <repo-relative path glob>	<narrow line regex>	<reason>
+skills/apple-design/SKILL.md	^\*\*Concrete values Apple ships:\*\*$	design prose: values Apple's platform uses, not an instruction to ship
+skills/apple-design/SKILL.md	^Note: the physics-textbook `v²/\(2·decel\)` is \*not\* what Apple ships	design prose: describes Apple's scroll physics, not an instruction to ship
+skills/apple-design/SKILL.md	^- \*\*Default to the platform's system font\*\* before a custom face; it already ships optical sizing	design prose: the system font includes optical sizing, not an instruction to ship
