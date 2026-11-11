@@ -1,120 +1,202 @@
 #!/bin/bash
-# MOADIX one-time machine setup (macOS). Run by the operator in a real
-# terminal, NOT from Claude Code. Needs sudo once. Written in increment 1 and
-# NOT yet run on any machine.
+# MOADIX machine setup and update (macOS). Run by the operator in a real
+# terminal, NOT from inside Claude Code. See docs/INSTALL.md.
 #
-#   managed/install.sh <github-owner/moadix>
+#   managed/install.sh [--plugin <github-owner/repo>]
+#       Fresh install, or an update if MOADIX is already installed.
+#       Asks for your macOS password (sudo) once.
 #
-# Steps
-#   1. Preconditions: macOS, Claude Code >= 2.1.295, no MDM profile and no
-#      existing managed-settings file (either would override or clash with
-#      MOADIX's policy: Claude Code uses only the highest-ranked managed source).
+#   managed/install.sh --dry-run <stand-in-dir> <test-keychain> [--plugin ...]
+#       Test mode, no sudo: <stand-in-dir> plays /Library/Application Support/ClaudeCode,
+#       <test-keychain> plays your login keychain, and the checker is a test build
+#       pinned to both. Used by tests/install/dryrun.py.
+#
+# Fresh install
+#   1. Preconditions: Claude Code >= 2.1.295; no MDM profile for Claude Code
+#      and no other managed-settings file (Claude Code uses only the
+#      highest-ranked managed source, so either would replace MOADIX's).
 #   2. Build the checker and sign it (ad hoc, hardened runtime).
-#   3. Install the checker and the gate, root-owned, to
-#      /Library/Application Support/ClaudeCode/moadix.
-#   4. As YOU (not root): create both Keychain secrets in your login keychain,
-#      show the TOTP QR code once, and get the pin.
-#   5. Install managed-settings.json (root-owned) with the pin.
-#   6. Check the policy is in effect: the active source must be this file, and
-#      a canary write to .sdlc/ from a sandboxed command must fail.
+#   3. Install the checker and the gate, root-owned, to <cc-dir>/moadix.
+#   4. As you (not root): create the Keychain secrets, show the QR code once.
+#   5. Install managed-settings.json (root-owned): hooks, sandbox, deny lists, pin.
+#   6. Check it is in effect: the installed gate denies a .sdlc/ write and
+#      reads a clean STATUS; then (real mode) a sandboxed Claude Code command
+#      must fail to write .sdlc/.
+# Update (MOADIX already installed): steps 1-3, 5 and 6, keeping the Keychain
+# secrets and the pin. Refused if the checker binary itself changed, because
+# the Keychain only lets the exact checker build that created the secrets read
+# them; that case needs uninstall + install (a new QR code).
 set -euo pipefail
 
-REPO_SLUG="${1:-}"
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-DEST="/Library/Application Support/ClaudeCode"
-HOME_DIR="$DEST/moadix"
-POLICY="$DEST/managed-settings.json"
+REAL_CC_DIR="/Library/Application Support/ClaudeCode"   # the ONLY place the real path is set
 MIN_VERSION="2.1.295"
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+
+MODE=real; CC_DIR="$REAL_CC_DIR"; TEST_KC=""; PLUGIN=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) MODE=dry; CC_DIR="${2:?stand-in dir}"; TEST_KC="${3:?test keychain}"; shift 3 ;;
+    --plugin)  PLUGIN="${2:?owner/repo}"; shift 2 ;;
+    *) echo "usage: install.sh [--plugin owner/repo] [--dry-run <stand-in-dir> <test-keychain>]" >&2; exit 2 ;;
+  esac
+done
+MOADIX_HOME="$CC_DIR/moadix"
+POLICY="$CC_DIR/managed-settings.json"
+CHECKER="$MOADIX_HOME/bin/moadix-checker"
 
 say()  { printf '\n== %s\n' "$*"; }
-fail() { printf '\nMOADIX SETUP FAILED: %s\nMOADIX refuses to run until this is fixed.\n' "$*" >&2; exit 1; }
+fail() { printf '\nMOADIX SETUP FAILED: %s\nNothing further was changed. MOADIX refuses to run until this is fixed.\n' "$*" >&2; exit 1; }
 
-[[ -n "$REPO_SLUG" && "$REPO_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "usage: install.sh <github-owner/repo>"
-[[ "$(uname -s)" == "Darwin" ]] || fail "this installer is for macOS (Linux: see docs, increment 6)"
-[[ -t 0 && -t 1 ]] || fail "run this in a real terminal, not from Claude Code or a pipe"
-[[ -n "${CLAUDECODE:-}" ]] && fail "this shell is inside a Claude Code session; open a new terminal"
+if [[ $MODE == real ]]; then
+  SUDO=(sudo); OWN=(-o root -g wheel)
+  [[ -t 0 && -t 1 ]] || fail "run this in a real terminal, not from a pipe"
+  [[ -n "${CLAUDECODE:-}" ]] && fail "this shell is inside a Claude Code session; open a new terminal window"
+else
+  SUDO=(); OWN=()
+  [[ "$CC_DIR" == /Library/* || "$CC_DIR" == /etc/* ]] && fail "--dry-run must not point at a system path"
+fi
+as_root() { if [[ ${#SUDO[@]} -gt 0 ]]; then "${SUDO[@]}" "$@"; else "$@"; fi; }
+put()     { as_root /usr/bin/install ${OWN[@]+"${OWN[@]}"} -m "$1" "$2" "$3"; }   # mode src dst
+
+UPDATE=0
+if [[ -d "$MOADIX_HOME" ]]; then
+  grep -q '"MOADIX_PIN"' "$POLICY" 2>/dev/null || fail "$MOADIX_HOME exists but $POLICY is not MOADIX's; run managed/uninstall.sh first"
+  UPDATE=1
+fi
 
 # ---- 1. preconditions --------------------------------------------------------
-say "1/6 Preconditions"
-ver="$(claude --version 2>/dev/null | awk '{print $1}')" || fail "claude not found on PATH"
-/usr/bin/python3 -c 'import sys; v=lambda s: tuple(int(x) for x in s.split("."));sys.exit(v(sys.argv[1]) < v(sys.argv[2]))' "$ver" "$MIN_VERSION" || fail "Claude Code $ver is older than $MIN_VERSION (onFailure: block)"
+say "1/6 Checking this Mac ($([[ $UPDATE == 1 ]] && echo update || echo fresh install), mode: $MODE)"
+ver="$(claude --version 2>/dev/null | awk '{print $1}')" || true
+[[ -n "$ver" ]] || fail "claude not found on PATH"
+/usr/bin/python3 -c 'import sys; v=lambda s: tuple(int(x) for x in s.split(".")); sys.exit(v(sys.argv[1]) < v(sys.argv[2]))' "$ver" "$MIN_VERSION" \
+  || fail "Claude Code $ver is older than $MIN_VERSION"
 echo "Claude Code $ver"
-
 if defaults read "/Library/Managed Preferences/com.anthropic.claudecode" >/dev/null 2>&1 \
-   || defaults read "/Library/Managed Preferences/$USER/com.anthropic.claudecode" >/dev/null 2>&1; then
-  fail "an MDM profile configures Claude Code (com.anthropic.claudecode). It outranks the managed-settings file, so MOADIX's policy would be ignored."
+   || defaults read "/Library/Managed Preferences/$USER/com.anthropic.claudecode" >/dev/null 2>&1 \
+   || profiles list 2>/dev/null | grep -qi anthropic; then
+  fail "an MDM profile configures Claude Code; it outranks MOADIX's managed-settings file, so MOADIX would be ignored"
 fi
-if profiles list 2>/dev/null | grep -qi anthropic; then
-  fail "a configuration profile mentions Anthropic; remove it or merge MOADIX into it"
+echo "no MDM profile for Claude Code"
+if [[ $UPDATE == 0 ]]; then
+  [[ -e "$POLICY" ]] && fail "$POLICY already exists (another policy); MOADIX will not overwrite it"
+  [[ -e "$CC_DIR/managed-settings.d" ]] && fail "$CC_DIR/managed-settings.d exists (another policy)"
+  echo "no other managed settings"
 fi
-[[ -e "$POLICY" ]] && fail "$POLICY already exists; merge MOADIX's fragment by hand instead of overwriting another policy"
-[[ -d "$DEST/managed-settings.d" ]] && fail "$DEST/managed-settings.d exists; merge by hand"
-echo "no MDM profile, no existing managed settings"
 
-# ---- 2. build the checker ----------------------------------------------------
+# ---- 2. build ------------------------------------------------------------------
 say "2/6 Building the checker"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
-"$HERE/checker/build.sh" "$work/moadix-checker"
-
-# ---- 3. install root-owned ---------------------------------------------------
-say "3/6 Installing to $HOME_DIR (sudo)"
-sudo /bin/mkdir -p "$HOME_DIR/bin" "$HOME_DIR/gate"
-sudo /usr/bin/install -o root -g wheel -m 0755 "$work/moadix-checker" "$HOME_DIR/bin/moadix-checker"
-for f in "$HERE"/gate/*.py; do
-  sudo /usr/bin/install -o root -g wheel -m 0644 "$f" "$HOME_DIR/gate/$(basename "$f")"
-done
-sudo /usr/sbin/chown root:wheel "$DEST" "$HOME_DIR" "$HOME_DIR/bin" "$HOME_DIR/gate"
-sudo /bin/chmod 0755 "$DEST" "$HOME_DIR" "$HOME_DIR/bin" "$HOME_DIR/gate"
-
-# ---- 4. secrets (as the user, into the login keychain) ------------------------
-say "4/6 Creating the approval secret and the ledger key in your login keychain"
-out="$("$HOME_DIR/bin/moadix-checker" init)" || fail "checker init: $out"
-uri="$(sed -nE 's/^OK uri=([^ ]+) pin=.*/\1/p' <<<"$out")"
-pin="$(sed -nE 's/.* pin=([0-9a-f]{32})$/\1/p' <<<"$out")"
-[[ -n "$uri" && -n "$pin" ]] || fail "unexpected checker output"
-echo
-echo "Scan this into Microsoft Authenticator (Add account > Other account). It is shown ONCE."
-if command -v qrencode >/dev/null; then
-  qrencode -t ansiutf8 "$uri"
+if [[ $MODE == real ]]; then work="$(mktemp -d "${TMPDIR:-/tmp}/moadix-install.XXXXXX")"; else work="$(mktemp -d "$(dirname "$CC_DIR")/work.XXXXXX")"; fi
+canary=""
+cleanup() { rm -rf "$work"; [[ -n "$canary" ]] && rm -rf "$canary"; return 0; }
+trap cleanup EXIT
+if [[ $MODE == real ]]; then
+  "$HERE/checker/build.sh" "$work/moadix-checker"
 else
-  echo "(qrencode not installed: brew install qrencode to get a QR code. Manual entry:)"
-  echo "  Account: MOADIX operator    Key: $(sed -nE 's/.*secret=([A-Z2-7]+).*/\1/p' <<<"$uri")    Type: time based"
+  "$HERE/checker/build.sh" "$work/moadix-checker" --test "$TEST_KC" "$POLICY"
 fi
-unset uri out
-read -r -p "Press Enter once the account shows in the app... " _
-printf '\033[2J\033[3J\033[H'   # clear the screen and scrollback
+cdhash() { codesign -dvvv "$1" 2>&1 | sed -n 's/^CDHash=//p'; }
+if [[ $UPDATE == 1 && "$(cdhash "$work/moadix-checker")" != "$(cdhash "$CHECKER")" ]]; then
+  fail "the checker binary changed in this version. The Keychain secrets can only be read by the build that created them, so this update needs: managed/uninstall.sh, then managed/install.sh (new QR code)"
+fi
 
-# ---- 5. managed settings ------------------------------------------------------
-say "5/6 Installing managed settings"
-sed -e "s|__PIN__|$pin|" -e "s|__MARKETPLACE_REPO__|$REPO_SLUG|g" "$HERE/managed/managed-settings.json" > "$work/managed-settings.json"
-/usr/bin/python3 -m json.tool "$work/managed-settings.json" >/dev/null || fail "generated policy is not valid JSON"
-sudo /usr/bin/install -o root -g wheel -m 0644 "$work/managed-settings.json" "$POLICY"
+# ---- 3. install root-owned -------------------------------------------------------
+say "3/6 Installing the gate to $MOADIX_HOME$([[ $MODE == real ]] && echo ' (sudo asks for your macOS password)')"
+created_cc=0; [[ -d "$CC_DIR" ]] || created_cc=1
+[[ $UPDATE == 1 ]] && created_cc="$(sed -n 's/^created_cc_dir=//p' "$MOADIX_HOME/install-record" 2>/dev/null || echo 0)"
+as_root /bin/mkdir -p "$MOADIX_HOME/bin"
+as_root /bin/rm -rf "$MOADIX_HOME/gate"
+as_root /bin/mkdir -p "$MOADIX_HOME/gate"
+put 0755 "$work/moadix-checker" "$CHECKER"
+for f in "$HERE"/gate/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/$(basename "$f")"; done
+printf 'created_cc_dir=%s\ninstalled=%s\nsource=%s\n' "$created_cc" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  "$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)" > "$work/install-record"
+put 0644 "$work/install-record" "$MOADIX_HOME/install-record"
+if [[ $MODE == real ]]; then
+  as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate"
+fi
+as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate"
 
-# ---- 6. policy in effect -----------------------------------------------------
-say "6/6 Checking the policy is in effect"
-st="$("$HOME_DIR/bin/moadix-checker" state)" || fail "checker cannot verify its secrets against the pin: $st"
+# ---- 4. secrets ------------------------------------------------------------------
+if [[ $UPDATE == 0 ]]; then
+  say "4/6 Creating the approval secret and the ledger key in your $([[ $MODE == real ]] && echo login keychain || echo test keychain)"
+  out="$("$CHECKER" init)" || fail "checker init: $out"
+  uri="$(sed -nE 's/^OK uri=([^ ]+) pin=.*/\1/p' <<<"$out")"
+  pin="$(sed -nE 's/.* pin=([0-9a-f]{32})$/\1/p' <<<"$out")"
+  [[ -n "$uri" && -n "$pin" ]] || fail "unexpected checker output"
+  key="$(sed -nE 's/.*secret=([A-Z2-7]+).*/\1/p' <<<"$uri")"
+  echo
+  echo "Add this to Microsoft Authenticator now. It is shown ONCE."
+  if command -v qrencode >/dev/null; then
+    qrencode -t ansiutf8 "$uri"
+    echo "Or enter it by hand:"
+  else
+    echo "(Install qrencode with 'brew install qrencode' to get a QR code here. Enter it by hand instead:)"
+  fi
+  echo "    Account name: MOADIX operator"
+  echo "    Secret key:   $key"
+  echo "    Type:         time based, 6 digits"
+  unset uri out key
+  read -r -p "Press Enter once MOADIX shows a 6-digit code in the app... " _
+  [[ $MODE == real ]] && printf '\033[2J\033[3J\033[H'   # clear screen and scrollback
+else
+  say "4/6 Keeping the existing Keychain secrets (update)"
+  pin="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["env"]["MOADIX_PIN"])' "$POLICY")"
+  if [[ -z "$PLUGIN" ]]; then
+    PLUGIN="$(/usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("extraKnownMarketplaces",{}).get("moadix",{}).get("source",{}).get("repo","none"))' "$POLICY")"
+  fi
+fi
+
+# ---- 5. managed settings --------------------------------------------------------
+say "5/6 Installing managed settings to $POLICY"
+/usr/bin/python3 "$HERE/managed/render_policy.py" "$HERE/managed/managed-settings.json" "$CC_DIR" "$MOADIX_HOME" "$pin" "${PLUGIN:-none}" \
+  > "$work/managed-settings.json" || fail "could not render the policy"
+put 0644 "$work/managed-settings.json" "$POLICY"
+
+# ---- 6. in effect? ----------------------------------------------------------------
+say "6/6 Checking MOADIX is in effect"
+st="$("$CHECKER" state)" || fail "the checker cannot verify its secrets against the pin: $st"
 echo "checker: $st"
-
-canary="$(mktemp -d "$HOME/moadix-canary.XXXXXX")"
+if [[ $MODE == real ]]; then canary="$(mktemp -d "$HOME/moadix-canary.XXXXXX")"; else canary="$(mktemp -d "$(dirname "$CC_DIR")/canary.XXXXXX")"; fi
 git -C "$canary" init -q
-/usr/bin/python3 "$HOME_DIR/gate/sdlc_init.py" "$canary" canary >/dev/null
-( cd "$canary" && claude -p "Run this exact shell command once with the Bash tool, then report its output verbatim: sh -c 'echo x > .sdlc/canary-probe'" \
-    --allowedTools Bash --max-turns 3 >"$work/canary.txt" 2>&1 ) || true
-if [[ -e "$canary/.sdlc/canary-probe" ]]; then
-  cat "$work/canary.txt"
-  fail "a sandboxed command wrote .sdlc/ - the managed policy is NOT in effect (another source outranks it, or the sandbox is off)"
+/usr/bin/python3 "$MOADIX_HOME/gate/sdlc_init.py" "$canary" canary >/dev/null
+hook() { /usr/bin/python3 "$MOADIX_HOME/gate/hook.py" "$1"; }
+d="$(printf '{"tool_name":"Write","tool_input":{"file_path":".sdlc/ledger.jsonl","content":"x"},"cwd":"%s"}' "$canary" | hook pretool)"
+grep -q '"permissionDecision": "deny"' <<<"$d" || fail "the installed gate did not deny a .sdlc/ write: $d"
+echo "installed gate denies a .sdlc/ write"
+s="$(printf '{"prompt":"STATUS","cwd":"%s"}' "$canary" | hook prompt)"
+grep -q 'INTEGRITY OK' <<<"$s" || fail "the installed gate's STATUS is not clean: $s"
+echo "installed gate STATUS: integrity OK"
+if [[ $MODE == real ]]; then
+  # Three probes through a real Claude Code session under the new policy:
+  #   docs/canary-ok.txt  must be written  (positive control: commands do run)
+  #   sh probe.sh         must NOT write .sdlc/  (the hook cannot see inside the script: tests the SANDBOX rule)
+  #   sh -c '... .sdlc/'  must NOT write .sdlc/  (tests the HOOK)
+  mkdir -p "$canary/docs"
+  printf 'echo x > .sdlc/canary-sandbox\n' > "$canary/probe.sh"
+  ( cd "$canary" && claude -p "Run these three shell commands with the Bash tool, one call each, in this order, and report each output verbatim. Do not retry or change them. 1) echo ok > docs/canary-ok.txt 2) sh probe.sh 3) sh -c 'echo x > .sdlc/canary-hook'" \
+      --max-turns 6 > "$work/canary.txt" 2>&1 ) || true
+  if [[ ! -e "$canary/docs/canary-ok.txt" ]]; then
+    cat "$work/canary.txt"
+    fail "the Claude Code canary ran no command (positive control missing), so the policy could not be verified. Output above."
+  fi
+  if [[ -e "$canary/.sdlc/canary-sandbox" ]]; then
+    cat "$work/canary.txt"
+    fail "a sandboxed command wrote .sdlc/: the sandbox rule for .sdlc is NOT in effect"
+  fi
+  if [[ -e "$canary/.sdlc/canary-hook" ]]; then
+    cat "$work/canary.txt"
+    fail "a command naming .sdlc/ wrote it: MOADIX's hooks are NOT in effect"
+  fi
+  echo "Claude Code canary: commands run; the sandbox and the hooks both stopped .sdlc/ writes"
+else
+  echo "(dry run: the live Claude Code canary is skipped; the stand-in path is not a policy location)"
 fi
-echo "canary write to .sdlc/ was refused"
-rm -rf "$canary"
 
 cat <<EOF
 
-MOADIX is installed.
-  - In any Claude Code session run /status: 'Setting sources' must list
-    'Enterprise managed settings (file)'. If it names anything else, MOADIX's
-    policy is not the one in effect.
-  - After 3 wrong codes approvals lock. Unlock at the Mac, in a terminal:
-      "$HOME_DIR/bin/moadix-checker" unlock --code <current code>
-    macOS asks for your password; a process without you at the keyboard cannot answer.
-  - Start a product: /usr/bin/python3 "$HOME_DIR/gate/sdlc_init.py" <repo> <product-id>
+MOADIX is $([[ $UPDATE == 1 ]] && echo updated || echo installed).
+  Policy:  $POLICY
+  Gate:    $MOADIX_HOME
+Next: open Claude Code, run /status, and check 'Setting sources' lists
+'Enterprise managed settings (file)'. See docs/INSTALL.md.
 EOF

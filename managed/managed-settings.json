@@ -1,19 +1,53 @@
 {
   "requiredMinimumVersion": "2.1.295",
-
   "extraKnownMarketplaces": {
-    "moadix": { "source": { "source": "github", "repo": "__MARKETPLACE_REPO__" } }
+    "moadix": {
+      "source": {
+        "source": "github",
+        "repo": "__MARKETPLACE_REPO__"
+      }
+    }
   },
   "strictKnownMarketplaces": [
-    { "source": "github", "repo": "__MARKETPLACE_REPO__" }
+    {
+      "source": "github",
+      "repo": "__MARKETPLACE_REPO__"
+    }
   ],
-  "enabledPlugins": { "moadix@moadix": true },
+  "enabledPlugins": {
+    "moadix@moadix": true
+  },
   "disableSideloadFlags": true,
-
   "allowManagedHooksOnly": true,
   "allowManagedPermissionRulesOnly": true,
   "crossSessionInbound": "refuse",
-
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 '__MOADIX_HOME__/gate/hook.py' prompt",
+            "timeout": 20,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 '__MOADIX_HOME__/gate/hook.py' pretool",
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "disableBypassPermissionsMode": "disable",
     "deny": [
@@ -25,19 +59,17 @@
       "RemoteTrigger",
       "Read(~/.claude/projects/**)",
       "Edit(~/.claude/**)",
-      "Edit(//Library/Application Support/ClaudeCode/**)",
+      "Edit(/__CC_DIR__/**)",
       "Bash(sudo *)",
       "Bash(claude *)",
       "Bash(security *)"
     ]
   },
-
   "env": {
     "CLAUDE_CODE_DISABLE_CRON": "1",
     "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
     "MOADIX_PIN": "__PIN__"
   },
-
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
@@ -56,7 +88,7 @@
         "~/**/.claude/**",
         "~/.claude",
         "~/.claude.json",
-        "/Library/Application Support/ClaudeCode",
+        "__CC_DIR__",
         "~/Library/Keychains"
       ],
       "denyRead": [

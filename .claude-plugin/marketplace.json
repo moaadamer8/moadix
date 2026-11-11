@@ -1,0 +1,11 @@
+{
+  "name": "moadix",
+  "owner": { "name": "MOADIX maintainers" },
+  "plugins": [
+    {
+      "name": "moadix",
+      "source": "./",
+      "description": "SDLC gates for Claude Code. The gate itself runs from managed settings; this plugin carries the commands."
+    }
+  ]
+}
