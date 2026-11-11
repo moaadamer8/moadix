@@ -1,0 +1,315 @@
+ALLOWED skills/apple-design/SKILL.md:88 [ship] 'ships'  **Concrete values Apple ships:**
+        reason: design prose: values Apple's platform uses, not an instruction to ship
+ALLOWED skills/apple-design/SKILL.md:139 [ship] 'ships'  Note: the physics-textbook `v²/(2·decel)` is *not* what Apple ships — use the exponential-decay form above. This is the standard behavior in
+        reason: design prose: describes Apple's scroll physics, not an instruction to ship
+ALLOWED skills/apple-design/SKILL.md:234 [ship] 'ships'  - **Default to the platform's system font** before a custom face; it already ships optical sizing, tracking tables, and legibility tuning. O
+        reason: design prose: the system font includes optical sizing, not an instruction to ship
+ALLOWED skills/bmad-architecture/SKILL.md:46 [merge] 'merged'  - `{workflow.<name>}` → a merged `customize.toml` field; `{doc_workspace}` → the bound run folder.
+        reason: config layers combined into one table; not a code merge
+ALLOWED skills/bmad-architecture/SKILL.md:54 [merge] 'merges'  2. Resolve config: `uv run {project-root}/_bmad/scripts/resolve_config.py --project-root {project-root}` (merges `_bmad/config.toml`, `_bmad
+        reason: describes what the config resolver combines; not a code merge
+ALLOWED skills/bmad-architecture/SKILL.md:78 [approve] 'approved'  9. Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/bmad-architecture/customize.toml:11 [merge] 'merge'  # --- Configurable below. Overrides merge per BMad structural rules: ---
+        reason: describes how BMad config override layers are combined; not a code merge
+ALLOWED skills/bmad-architecture/customize.toml:15 [approve] 'approved'  # Use for pre-flight loads, approved-stack policy checks, etc.
+        reason: 'approved stack' = an organisation's allowed-technology list (data)
+ALLOWED skills/bmad-architecture/customize.toml:23 [approve] 'approved'  # (approved stacks, banned dependencies, platform constraints, compliance guardrails).
+        reason: 'approved stacks' = an organisation's allowed-technology list (data)
+ALLOWED skills/bmad-architecture/customize.toml:69 [approve] 'approved'  # internal systems the LLM may consult ON DEMAND during the run (not preemptively) — approved-stack
+        reason: 'approved-stack' registry = allowed-technology list (data)
+ALLOWED skills/bmad-architecture/references/headless.md:26 [approve] 'approves'  `complete` means no open questions remain (the operator still reviews it; only the MOADIX gate approves a phase) · `partial` (spine produced
+        reason: MOADIX adaptation stating that only the gate approves
+ALLOWED skills/bmad-deep-recon/SKILL.md:33 [merge] 'merged'  - `{workflow.<name>}` → a merged `customize.toml` field; `{doc_workspace}` → the bound run folder.
+        reason: config layers combined into one table; not a code merge
+ALLOWED skills/bmad-deep-recon/SKILL.md:41 [merge] 'merged'  2. Resolve config: `uv run {project-root}/_bmad/scripts/resolve_config.py --project-root {project-root}`. From the merged JSON resolve `{use
+        reason: resolved config JSON; not a code merge
+ALLOWED skills/bmad-deep-recon/SKILL.md:48 [ship] 'shipped'  The type set is whatever `{workflow.research_types}` resolves to — shipped: `market`, `domain`, `technical`, `competitive`, `user-voice`, `a
+        reason: 'shipped' = the research types bundled with the skill (data), not an instruction to ship
+ALLOWED skills/bmad-deep-recon/customize.toml:11 [merge] 'merge'  # --- Configurable below. Overrides merge per BMad structural rules: ---
+        reason: describes how BMad config override layers are combined; not a code merge
+ALLOWED skills/bmad-deep-recon/customize.toml:116 [ship] 'shipped'  # Theme for the HTML briefing: empty = the shipped neutral professional
+        reason: 'shipped' = bundled default theme
+ALLOWED skills/bmad-deep-recon/customize.toml:167 [ship] 'shipped'  # Keyed by `code`: an override with a matching code replaces the shipped
+        reason: 'shipped' = bundled default entry
+ALLOWED skills/bmad-deep-recon/assets/research.template.md:18 [approve] 'approved'  _Sections are appended per the approved research plan; the executive summary is written last and placed here, first._
+        reason: the user's approval of the research plan at the plan gate (a user checkpoint), not agent self-approval
+ALLOWED skills/bmad-deep-recon/references/finalize.md:12 [approve] 'approved'  8. Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/bmad-deep-recon/references/html-briefing.md:16 [ship] 'shipped'  `{workflow.html_theme}` governs: a `file:` path loads a theme/brand spec to follow; inline text is applied as directives; empty means the sh
+        reason: 'shipped' = bundled default theme
+ALLOWED skills/bmad-deep-recon/references/lifecycle.md:11 [merge] 'merge'  Drill into one dimension or add a new one without touching the rest: mini plan gate, acquire → verify for that slice only (or a drafted foll
+        reason: combining new findings into the report text; not a code merge
+ALLOWED skills/bmad-deep-recon/references/run.md:3 [approve] 'approved'  Native research, when chosen: resolve effort, hold the plan gate, then run the acquisition loop once per dimension of the approved plan, in 
+        reason: plan approved by the user at the plan gate (user checkpoint)
+ALLOWED skills/bmad-deep-recon/references/run.md:26 [approve] 'approval'  Present as a compact checklist, get approval, then: bind `{doc_workspace}` under `{workflow.research_output_path}` — expand the folder name 
+        reason: asks the user to approve the research plan and waits (user checkpoint)
+ALLOWED skills/bmad-deep-recon/references/run.md:58 [approve] 'approved'  When workflow orchestration was approved at the plan gate, run the fan-out as a workflow: dimensions as parallel pipelines, assistants retur
+        reason: refers to the user's choice at the plan gate (user checkpoint)
+ALLOWED skills/bmad-deep-recon/references/selection.md:5 [approve] 'approved'  1. **Requirements frame.** What must the winner do, under what constraints — scale, compliance, budget, team skills, existing stack, exit-co
+        reason: refers to the user's plan-gate approval (user checkpoint)
+ALLOWED skills/bmad-deep-recon/references/verification.md:13 [ship] 'ships'  - **normal** — spot-check the **load-bearing claims only**: the handful per dimension the recommendation actually rests on. One independent-
+        reason: 'ships' = appears in the report with its citation; not an instruction to ship
+ALLOWED skills/bmad-deep-recon/types/competitive.md:7 [ship] 'ship'  1. Offer & feature teardown — what they actually ship, tried directly where possible
+        reason: research subject: what competitors ship (data)
+ALLOWED skills/bmad-forge-idea/SKILL.md:21 [merge] 'merged'  - `{workflow.<name>}` resolves to fields in the merged `customize.toml` `[workflow]` table.
+        reason: config layers combined into one table; not a code merge
+ALLOWED skills/bmad-forge-idea/SKILL.md:27 [merge] 'merged'  3. Resolve central config: `uv run {project-root}/_bmad/scripts/resolve_config.py --project-root {project-root} --key core`; from the merged
+        reason: resolved config JSON; not a code merge
+ALLOWED skills/bmad-forge-idea/SKILL.md:108 [approve] 'approved'  Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/bmad-forge-idea/customize.toml:11 [merge] 'merge'  # --- Configurable below. Overrides merge per BMad structural rules: ---
+        reason: describes how BMad config override layers are combined; not a code merge
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:79 [merge] 'merged'  of tables (depending on how the layers merged); normalize both to a dict.
+        reason: docstring about combining config layers
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:111 [merge] 'Merged'  """Merged [workflow] table for bmad-party-mode (base + user overrides)."""
+        reason: docstring about combining config layers
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:118 [merge] 'merge'  # Fallback: base customize.toml directly, no override merge.
+        reason: comment about combining config layers
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:127 [merge] 'merge'  scalars). No base roster exists in this path, so a shallow merge is enough.
+        reason: comment about combining dicts
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:134 [merge] 'merged'  merged = dict(team)
+        reason: Python variable named merged (dict of config values)
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:136 [merge] 'merged'  if isinstance(val, list) and isinstance(merged.get(key), list):
+        reason: Python variable named merged (dict of config values)
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:137 [merge] 'merged'  merged[key] = merged[key] + val
+        reason: Python variable named merged (dict of config values)
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:139 [merge] 'merged'  merged[key] = val
+        reason: Python variable named merged (dict of config values)
+ALLOWED skills/bmad-forge-idea/scripts/resolve_personas.py:140 [merge] 'merged'  return merged
+        reason: Python variable named merged (dict of config values)
+ALLOWED skills/bmad-prd/SKILL.md:12 [merge] 'merge'  - `{workflow.<name>}` resolves to fields in `customize.toml`'s `[workflow]` table (overrides win per BMad merge rules).
+        reason: config override layering; not a code merge
+ALLOWED skills/bmad-prd/SKILL.md:95 [approve] 'approved'  9. Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/bmad-prd/customize.toml:11 [merge] 'merge'  # --- Configurable below. Overrides merge per BMad structural rules: ---
+        reason: describes how BMad config override layers are combined; not a code merge
+ALLOWED skills/bmad-prd/assets/prd-template.md:156 [approve] 'Approvals'  - **Stakeholders and Approvals** — who must sign off, at what stage.
+        reason: PRD content section about the product organisation's human approvals; not an agent action
+ALLOWED skills/bmad-prd/references/headless.md:31 [approve] 'approves'  Populate `assumptions[]` with every value you inferred without direct caller confirmation; populate `open_questions[]` with every gap that n
+        reason: MOADIX adaptation stating that only the gate approves
+ALLOWED skills/code-review/SKILL.md:3 [merge] 'merge'  description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow th
+        reason: git term: the common-ancestor commit a diff is taken against, not an instruction to merge
+ALLOWED skills/code-review/SKILL.md:23 [merge] 'merge'  Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list 
+        reason: git term: the common-ancestor commit a diff is taken against, not an instruction to merge
+ALLOWED skills/code-review/SKILL.md:80 [merge] 'merge'  Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, becau
+        reason: forbids combining the two axes' findings in the report; not about merging code
+ALLOWED skills/diagnosing-bugs/SKILL.md:98 [ship] 'deployed'  **Show the ranked list to the user before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to
+        reason: example of the user's domain knowledge (a past deployment) that re-ranks hypotheses; not an instruction to deploy
+ALLOWED skills/impeccable/SKILL.md:16 [ship] 'ships'  - Verify by looking at the rendered result at the sizes it ships at, and batch the checks: fix what one look shows before looking again, rat
+        reason: design prose: "the sizes it ships at" describes viewport sizes, not an instruction to ship
+ALLOWED skills/impeccable/SKILL.md:35 [ship] 'Ship'  - **Persuade:** the visitor decides and acts; design is the product. Landing pages, marketing, campaigns, pricing. Earn attention and action
+        reason: design prose: "ship real imagery" means include real images in the design, not a release step
+ALLOWED skills/impeccable/reference/android.md:3 [ship] 'shipping'  For native Android apps: Jetpack Compose, Android Views, React Native, Expo, Flutter shipping to Android hardware.
+        reason: platform prose: target hardware and a layout rule ("never ship a phone bottom-bar on a tablet" = design guidance), not an instruction to ship
+ALLOWED skills/impeccable/reference/android.md:5 [ship] 'ships'  On native, the visitor mode narrows what expression may override. Material Design 3 governs structure, navigation, and interaction in every 
+        reason: platform prose: target hardware and a layout rule ("never ship a phone bottom-bar on a tablet" = design guidance), not an instruction to ship
+ALLOWED skills/impeccable/reference/android.md:13 [ship] 'ship'  - **Material navigation, matched to size.** Navigation bar (bottom, 3–5 destinations) on compact width; navigation rail or drawer on expande
+        reason: platform prose: target hardware and a layout rule ("never ship a phone bottom-bar on a tablet" = design guidance), not an instruction to ship
+ALLOWED skills/impeccable/reference/android.md:44 [ship] 'ships'  - **Screenshots come from the emulator or a connected device, never a browser.** Build and install, then capture with `adb exec-out screenca
+        reason: platform prose: target hardware and a layout rule ("never ship a phone bottom-bar on a tablet" = design guidance), not an instruction to ship
+ALLOWED skills/impeccable/reference/audit.md:60 [ship] 'ship'  - **Directional icons and assets**: arrows, chevrons, and navigation icons that point the wrong direction for the reading order. An RTL-only
+        reason: design prose: describes assets a page contains, not an instruction to ship
+ALLOWED skills/impeccable/reference/critique.md:187 [ship] 'ship'  - Don't soften criticism. Developers need honest feedback to ship great design.
+        reason: design prose about feedback tone, not an instruction to ship
+ALLOWED skills/impeccable/reference/ios.md:3 [ship] 'shipping'  For native iOS / iPadOS apps: SwiftUI, UIKit, React Native, Expo, Flutter shipping to Apple hardware.
+        reason: platform prose: names target hardware / device classes, not an instruction to ship
+ALLOWED skills/impeccable/reference/ios.md:49 [ship] 'ships'  - **Screenshots come from the Simulator, never a browser.** Build and run, then capture with `xcrun simctl io booted screenshot <path>` (wit
+        reason: platform prose: names target hardware / device classes, not an instruction to ship
+ALLOWED skills/phase-retrospective/SKILL.md:30 [merge] 'merging'  1. **Resolve the workflow block.** Run `uv run --no-cache {project-root}/_bmad/scripts/resolve_customization.py --skill {skill-root} --proje
+        reason: config override layering; not a code merge
+ALLOWED skills/phase-retrospective/SKILL.md:83 [merge] 'merge'  Consolidate: merge, dedupe, and provenance-link findings. Drop any finding you cannot tie to a source.
+        reason: combining review findings; not a code merge
+ALLOWED skills/phase-retrospective/SKILL.md:92 [approve] 'approves'  - **Acceptance verdict** — judge the final state against the epic's declared acceptance criteria (profile it from the diff and stories if no
+        reason: MOADIX adaptation stating the verdict approves nothing
+ALLOWED skills/phase-retrospective/SKILL.md:98 [approve] 'approved'  Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/phase-retrospective/customize.toml:8 [merge] 'merge'  # --- Configurable below. Overrides merge per BMad structural rules: ---
+        reason: describes how BMad config override layers are combined; not a code merge
+ALLOWED skills/phase-retrospective/references/acceptance-verdict.md:55 [approve] 'approve'  The verdict and its evidence carry into the Phase 5 document. The verdict is a recommendation for the operator; it does not approve the epic
+        reason: MOADIX adaptation stating the verdict approves nothing
+ALLOWED skills/phase-retrospective/references/aggregate-views.md:11 [merge] 'merge'  - **God-class / size growth** — files that grew past a healthy size *over the epic*, invisible per-commit because each session added only a 
+        reason: describes how git merge commits count in churn data; read-only analysis
+ALLOWED skills/phase-retrospective/references/evidence-gathering.md:11 [merge] 'merge'  - **Diff range and commits** — the full set of changes the epic introduced. Establish the range from the first and last story commits (or as
+        reason: describes reading git history and merge-commit data; read-only analysis
+ALLOWED skills/phase-retrospective/references/retro-document.md:9 [approve] 'approves'  Open the document with YAML frontmatter a machine can read without parsing the prose. The `verdict` is a recommendation for the operator; it
+        reason: MOADIX adaptation stating the verdict approves nothing
+ALLOWED skills/phase-retrospective/references/retro-document.md:44 [approve] 'approved'  Stop here and report what you produced. The operator decides whether the phase is approved (MOADIX gate).
+        reason: MOADIX hand-back line: says the operator, not the agent, approves the phase
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:4 [commit] 'git commit'  """Measure git commit and file-change evidence over a revision range.
+        reason: docstring: reads git commit history (git log); writes nothing
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:11 [merge] 'merges'  Two git passes. The first lists every commit in the range (merges included)
+        reason: docstring about counting merge commits in git log; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:12 [merge] 'merge'  and sums the per-file churn of the non-merge commits, which is what `files`
+        reason: docstring about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:13 [merge] 'merges'  reports. The second runs only when the range contains merges and measures
+        reason: docstring about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:14 [merge] 'merges'  those merges alone, reported separately as `merge_files` — never folded into
+        reason: docstring about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:15 [merge] 'merge'  `files`, because a merge's diff against its first parent restates the churn
+        reason: docstring about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:16 [merge] 'merged'  of the commits it merged in, which the first pass already counted.
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:16 [commit] 'commits it'  of the commits it merged in, which the first pass already counted.
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:75 [merge] 'merges'  `merges_measured` and read as "the merges changed nothing".
+        reason: docstring about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:134 [merge] 'merge'  # Under -m, git repeats a merge's header once per parent unless it
+        reason: comment about git log output format; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:264 [merge] 'merges'  # the range including merges, which is what per-story attribution reads.
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:265 [merge] 'Merges'  # Merges contribute no numstat rows here, so `files` is non-merge churn.
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:269 [merge] 'merge'  # Pass 2 — merge churn, only when there is any. `-m --first-parent
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:271 [merge] 'merge'  # exactly one diff-against-first-parent block per merge sitting on it.
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:272 [merge] 'Merges'  # Merges off that spine are counted in merge_count and never measured,
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:274 [merge] 'merges'  # between the two is a visible statement that some merges went
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:275 [merge] 'merge'  # unmeasured. This never folds into `files` — a merge's first-parent diff
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:276 [merge] 'merged'  # restates the churn of the commits it merged in, which pass 1 already
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/git_evidence.py:276 [commit] 'commits it'  # restates the churn of the commits it merged in, which pass 1 already
+        reason: comment about merge commits as data; read-only
+ALLOWED skills/phase-retrospective/scripts/sprint_status.py:29 [ship] 'ships'  # Pin the emitter to the indentation the sprint-status template ships with.
+        reason: 'ships with' = the template's default indentation (data)
+ALLOWED skills/threat-mitigation-mapping/references/details.md:212 [ship] 'Deploy'  description="Deploy WAF to filter malicious requests",
+        reason: description string of a security control in a code template (data value); not an instruction to deploy
+ALLOWED skills/threat-mitigation-mapping/references/details.md:311 [ship] 'Deploy'  description="Deploy DDoS mitigation services",
+        reason: description string of a security control in a code template (data value); not an instruction to deploy
+ALLOWED skills/threat-model/bootstrap.md:79 [merge] 'merging'  `stage1.json` through `stageN.json` **in order**, merging keys into working
+        reason: describes combining checkpoint JSON keys on resume; not a git/PR merge
+ALLOWED skills/threat-model/bootstrap.md:110 [ship] 'deploy'  | **Infra reader** | Read deploy-time config: `*.tf`/`*.tfvars`, k8s manifests (`*.yaml` under `k8s/`/`deploy/`/`manifests/`), `Dockerfile*`
+        reason: names deploy-time config files and a deploy/ directory to read; analysis input, not an instruction to deploy
+ALLOWED skills/threat-model/bootstrap.md:167 [ship] 'deploy'  would embed or deploy it, where it would run.
+        reason: describes who would deploy the target system in the context prose; not an instruction to deploy
+ALLOWED skills/threat-model/bootstrap.md:172 [merge] 'Merge'  **Section 3: Entry points & trust boundaries.** Merge Surface mapper + Infra reader
+        reason: combine two subagents' table rows; not a git/PR merge
+ALLOWED skills/threat-model/bootstrap.md:319 [approve] 'approval'  - **Scope enforcement**: where an automated approval, merge, or write path
+        reason: threat-analysis question about the target's own automated approval/merge paths; not an instruction to approve or merge
+ALLOWED skills/threat-model/bootstrap.md:319 [merge] 'merge'  - **Scope enforcement**: where an automated approval, merge, or write path
+        reason: threat-analysis question about the target's own automated approval/merge paths; not an instruction to approve or merge
+ALLOWED skills/threat-model/schema.md:93 [commit] 'git commit'  - `evidence`: CVE IDs, issue links, pentest finding IDs, or git commit
+        reason: git commit hashes as an evidence data value; not an instruction to commit
+ALLOWED skills/typescript-reviewer/SKILL.md:20 [merge] 'merge'  - For PR review, use the actual PR base branch when available (for example via `gh pr view --json baseRefName`) or the current branch's upst
+        reason: names git merge-base for computing the review diff; not a merge
+ALLOWED skills/typescript-reviewer/SKILL.md:23 [merge] 'merge'  2. Before reviewing a PR, inspect merge readiness when metadata is available (for example via `gh pr view --json mergeStateStatus,statusChec
+        reason: reads PR mergeability/CI state as a precondition and stops if not green; never instructs merging
+ALLOWED skills/typescript-reviewer/SKILL.md:25 [merge] 'merge'  - If the PR shows merge conflicts or a non-mergeable state, stop and report that conflicts must be resolved first.
+        reason: tells the reviewer to stop and report conflicts; not an instruction to merge
+ALLOWED skills/typescript-reviewer/SKILL.md:26 [merge] 'merge'  - If merge readiness cannot be verified from the available context, say so explicitly before continuing.
+        reason: tells the reviewer to report unknown mergeability; not an instruction to merge
+ALLOWED skills/typescript-reviewer/SKILL.md:43 [merge] 'Merging'  - **Prototype pollution**: Merging untrusted objects without `Object.create(null)` or schema validation
+        reason: JavaScript object merging as a vulnerability class (finding category)
+ALLOWED skills/ui-ux-pro-max/data/icons.csv:23 [approve] 'approved'  22,Status,check-circle,success verified approved complete,Phosphor,import { CheckCircle } from '@phosphor-icons/react',"<CheckCircle size={2
+        reason: data value: icon search keywords (approved/approve/merge), not an instruction
+ALLOWED skills/ui-ux-pro-max/data/icons.csv:75 [approve] 'approve'  74,Social,thumbs-up,like approve agree positive,Phosphor,import { ThumbsUp } from '@phosphor-icons/react',"<ThumbsUp size={20} weight=""regu
+        reason: data value: icon search keywords (approved/approve/merge), not an instruction
+ALLOWED skills/ui-ux-pro-max/data/icons.csv:100 [merge] 'merge'  99,Development,git-branch,version control branch merge,Phosphor,import { GitBranch } from '@phosphor-icons/react',"<GitBranch size={20} weig
+        reason: data value: icon search keywords (approved/approve/merge), not an instruction
+ALLOWED skills/ui-ux-pro-max/data/motion.csv:18 [auto-advance] 'auto-advanc'  17,Carousel / Auto-Rotation,Standard,"carousel, auto-rotate, pause, focus, hover, reduced-motion, stop animation offscreen, visibility pause
+        reason: data value: carousel auto-advance motion preset (UI behaviour), not an agent step
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:623 [ship] 'ships'  "ships"
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:646 [ship] 'ships'  "ships"
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:2668 [merge] 'merge'  "name": "arrows-merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:4389 [ship] 'ship'  "ship",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:14759 [merge] 'merge'  "name": "git-merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:14791 [merge] 'merge'  "merge request",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:17169 [merge] 'merge'  "merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:17899 [ship] 'ships'  "ships",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:17965 [ship] 'ships'  "ships"
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:21573 [ship] 'shipping'  "shipping"
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:24947 [ship] 'ship'  "ship",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:25763 [ship] 'shipping'  "name": "shipping-container",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:25776 [ship] 'shipping'  "shipping",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:28138 [merge] 'merge'  "merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:28160 [merge] 'merge'  "merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30163 [ship] 'shipping'  "shipping",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30215 [ship] 'shipping'  "shipping",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30652 [ship] 'shipping'  "shipping",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30675 [ship] 'shipping'  "shipping",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30823 [merge] 'merge'  "merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/phosphor-icons-upstream.json:30846 [merge] 'merge'  "merge",
+        reason: data value: Phosphor icon name/tag in the upstream icon catalogue
+ALLOWED skills/ui-ux-pro-max/data/products.csv:176 [approve] 'approval'  175,E-signature / Document Workflow,"esignature, e-sign, docusign, digital-signature, document-workflow, approval-chain, contract-signing, s
+        reason: data value: product keywords (approval-chain) for an e-signature product type
+ALLOWED skills/ui-ux-pro-max/data/ux-guidelines.csv:107 [ship] 'shipping'  106,Forms,Redundant Entry,All,WCAG 2.2 A avoids requiring the same information twice in one process,Auto-populate prior values or let users 
+        reason: data value: UX guideline rows (shipping address example; carousel auto-advance)
+ALLOWED skills/ui-ux-pro-max/data/ux-guidelines.csv:109 [auto-advance] 'Auto-advanc'  108,Animation,Auto-Rotating Content Controls,All,Auto-rotating content needs user control,Provide previous next and play/pause; stop on focu
+        reason: data value: UX guideline rows (shipping address example; carousel auto-advance)
+ALLOWED skills/ui-ux-pro-max/data/stacks/astro.csv:3 [ship] 'ships'  2,Architecture,Default to zero JS,Astro ships zero JS by default - add only when needed,Static components without client directive,Add clien
+        reason: data value: Astro stack guideline row (framework ships JS / hosting adapter), search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/astro.csv:39 [ship] 'deploy'  38,Integrations,Use adapter for deployment,Platform-specific adapters,Correct adapter for host,Wrong or no adapter,@astrojs/vercel for Verce
+        reason: data value: Astro stack guideline row (framework ships JS / hosting adapter), search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/astro.csv:50 [ship] 'Deploy'  49,Security,Use HTTPS in production,Deploy behind a host or proxy that terminates TLS,HTTPS for all production sites,HTTP in production,http
+        reason: data value: Astro stack guideline row (framework ships JS / hosting adapter), search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:45 [ship] 'ship'  44,Packaging,Use jlink or jpackage for desktop delivery,JavaFX apps should ship with the runtime they need,Package a runtime image or native
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:62 [approve] 'approve'  61,Navigation,Use role-aware navigation models,Menus toolbars and shortcuts should reflect the same permission model,Build navigation items 
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:63 [approve] 'Approval'  62,Workflow,Represent workflow states visibly,Approval and processing screens need clear business state signals,Use semantic badges row styl
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:65 [approve] 'Approve'  64,TableView,Keep row actions predictable,Inline actions in dense tables should be limited and permission-aware,Use context menus or a side 
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:71 [approve] 'approve'  70,Audit,Log business actions through services,Enterprise desktop apps need traceability for sensitive changes,Record user action entity res
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/javafx.csv:72 [ship] 'deploy'  71,Configuration,Separate user preferences from application config,Enterprise apps need deploy-time config and per-user preferences,Use conf
+        reason: data value: JavaFX guideline rows about app approval workflows and packaging, search-result content
+ALLOWED skills/ui-ux-pro-max/data/stacks/laravel.csv:25 [ship] 'ship'  24,Styling,Purge unused styles via content config,Tailwind scans Blade and JS files to tree-shake unused classes,"content: ['./resources/vie
+        reason: data value: Laravel guideline rows (Tailwind purge; $attributes->merge())
+ALLOWED skills/ui-ux-pro-max/data/stacks/laravel.csv:31 [merge] 'merge'  30,Components,Forward extra attributes with $attributes,Pass through HTML attributes like class id aria to root element,$attributes->merge()
+        reason: data value: Laravel guideline rows (Tailwind purge; $attributes->merge())
+ALLOWED skills/ui-ux-pro-max/data/stacks/nextjs.csv:39 [ship] 'Ship'  38,Performance,Analyze bundle size,Use @next/bundle-analyzer,Bundle analyzer in dev,Ship large bundles blindly,ANALYZE=true npm run build,No
+        reason: data value: Next.js guideline rows on bundle size and hosting targets, search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/nextjs.csv:49 [ship] 'deploy'  48,Deployment,Use Vercel for easiest deploy,Vercel optimized for Next.js,Deploy to Vercel,Self-host without knowledge,vercel deploy,Complex 
+        reason: data value: Next.js guideline rows on bundle size and hosting targets, search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/nextjs.csv:50 [ship] 'deploying'  49,Deployment,Configure output for self-hosting,Set output option for deployment target,output: 'standalone' for Docker,Default output for c
+        reason: data value: Next.js guideline rows on bundle size and hosting targets, search-result content not a workflow step
+ALLOWED skills/ui-ux-pro-max/data/stacks/react.csv:56 [ship] 'ship'  55,Tooling,Use eslint-plugin-react-hooks recommended preset,React Compiler lint rules now ship through eslint-plugin-react-hooks recommended
+        reason: data value: React guideline rows (lint rules ship in a preset; minimum safe version)
+ALLOWED skills/ui-ux-pro-max/data/stacks/react.csv:61 [ship] 'Ship'  60,Security,Require React 19.2.1+ for RSC code paths,React Server Components had an unauthenticated RCE in 19.2.0; treat 19.2.1+ as the secu
+        reason: data value: React guideline rows (lint rules ship in a preset; minimum safe version)
+ALLOWED skills/ui-ux-pro-max/data/stacks/uno.csv:15 [ship] 'ships'  14,Renderers,Use unified net10.0-desktop target,Uno 5.2+ ships a single Skia Desktop shell that auto-selects X11 Win32 or AppKit per OS — Sk
+        reason: data value: Uno Platform guideline rows (renderer ships; merge resource dictionaries)
+ALLOWED skills/ui-ux-pro-max/data/stacks/uno.csv:51 [merge] 'Merge'  50,Styling,Merge XamlControlsResources in App.xaml,Required for Fluent control styles to load — without it controls render with no template,
+        reason: data value: Uno Platform guideline rows (renderer ships; merge resource dictionaries)
+ALLOWED skills/ui-ux-pro-max/data/stacks/uwp.csv:43 [ship] 'Shipping'  42,Accessibility,Test with Narrator and Accessibility Insights,Validate screen reader and automation compliance,Regular Narrator walkthrough
+        reason: data value: UWP accessibility guideline row
+ALLOWED skills/ui-ux-pro-max/data/stacks/winui.csv:31 [ship] 'deploy'  30,Packaging,Use unpackaged or packaged appropriately,Choose deployment model for your scenario,Packaged (MSIX) for Store distribution,Unpac
+        reason: data value: WinUI guideline rows (deployment model; merged dictionaries)
+ALLOWED skills/ui-ux-pro-max/data/stacks/winui.csv:37 [ship] 'Ship'  36,Accessibility,Test with Accessibility Insights,Validate accessibility compliance,Accessibility Insights for Windows scanning,Manual acces
+        reason: data value: WinUI guideline rows (deployment model; merged dictionaries)
+ALLOWED skills/ui-ux-pro-max/data/stacks/winui.csv:58 [merge] 'merged'  57,Styling,Organize resources with merged dictionaries,Share styles and brushes via App.xaml MergedDictionaries instead of duplicating per p
+        reason: data value: WinUI guideline rows (deployment model; merged dictionaries)
+ALLOWED skills/ui-ux-pro-max/scripts/design_system.py:517 [ship] 'ship'  # style ship with a light background.
+        reason: code comment describing style data
+ALLOWED skills/ui-ux-pro-max/scripts/reasoning_contract.py:21 [ship] 'shipping'  "if_delivery": ("delivery", "courier", "shipping"),
+        reason: data value: keyword list for delivery products
+ALLOWED skills/ui-ux-pro-max/scripts/search.py:34 [ship] 'ships'  # Embedded Python builds (for example AutoClaw's bundled runtime, which ships a
+        reason: code comment about Python runtimes
+ALLOWED skills/ui-ux-pro-max/scripts/validate_data.py:592 [approve] 'approved'  problems.append(f"[typography:{pairing}] font absent from approved catalog: {family}")
+        reason: validator message: font missing from the font catalogue
+selfapproval grep: 157 match(es) in 57 file(s); 157 allowlisted with a reason; 0 NOT allowed

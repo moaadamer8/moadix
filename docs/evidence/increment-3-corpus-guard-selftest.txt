@@ -1,0 +1,38 @@
+PASS  [guard] self-test: the installed checker as a fixture checker -> ABORT
+      checker /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker is not a scratch build
+PASS  [guard] self-test: the login keychain as the test keychain -> ABORT
+      keychain /Users/moad/Library/Keychains/login.keychain-db is outside the scratch directory
+PASS  [guard] self-test: a keychain outside the scratch dir -> ABORT
+      keychain /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/x.keychain-db is outside the scratch directory
+PASS  [guard] self-test: a checker built without the test keychain (a production build) -> ABORT
+      checker /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/scratch/homeP/bin/moadix-checker is not pinned to the test keychain /private/tmp/claude-503/m
+PASS  [guard] self-test: control: a scratch test build passes the guard -> accepted
+      accepted
+PASS  [guard] self-test: a gate copy whose checker resolves to the installed one -> ABORT
+      gate in /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/scratch/homeL would run /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker, no
+PASS  [guard] self-test: a fixture product outside the scratch dir (a real .sdlc/) -> ABORT
+      product /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/realproduct is outside the scratch directory
+PASS  [guard] self-test: a hook payload whose cwd is a real product -> ABORT
+      hook payload cwd /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/realproduct is outside the scratch directory
+PASS  [guard] self-test: a command running the installed checker -> ABORT
+      command names the installed MOADIX home: /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker state
+PASS  [guard] self-test: security without a keychain argument (acts on the login keychain) -> ABORT
+      security find-generic-password must name exactly one scratch keychain as its last argument (otherwise it acts on the default keychain): security find-generic-pa
+PASS  [guard] self-test: security naming the login keychain -> ABORT
+      command names a real keychain: security unlock-keychain -p x /Users/moad/Library/Keychains/login.keychain-db
+PASS  [guard] self-test: security subcommand off the allowlist (dump-keychain) -> ABORT
+      security dump-keychain is not on the corpus allowlist
+PASS  [guard] self-test: a command whose cwd is a real product -> ABORT
+      command runs in /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/realproduct, outside the scratch directory and this repo
+PASS  [guard] self-test: a scratch dir inside a real product -> ABORT
+      scratch /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/realproduct/scratch is inside the real product /private/tmp/claude-503/moadix-isolation-selft
+PASS  [guard] self-test: an existing scratch dir the corpus did not make (would be deleted) -> ABORT
+      scratch /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/notours exists and was not made by the corpus (unexpected: thesis.tex); refusing to delete it
+PASS  [guard] self-test: audit hook: subprocess.run of a program in the installed MOADIX home, bypassing sh() -> ABORT
+      command names the installed MOADIX home: /Library/Application Support/ClaudeCode/moadix/bin/selftest-never-exists state
+PASS  [guard] self-test: audit hook: os.posix_spawn naming the login keychain, bypassing sh() -> ABORT
+      command names a real keychain: /usr/bin/true /Users/moad/Library/Keychains/login.keychain-db
+PASS  [guard] self-test: audit hook: opening a real product's ledger -> ABORT
+      open of a real product's gate state: /private/tmp/claude-503/moadix-isolation-selftest-hzg708rn/realproduct/.sdlc/product.yaml
+
+guard self-test only: 18/18
