@@ -6,7 +6,10 @@ first match wins:
   1. protected_exceptions  -> fall through to 3/4 (skip tier 2)
   2. protected_always      -> DENY (gate state, Claude Code config, BMAD, secrets)
   3. always_allow          -> ALLOW
-  4. phase-gated           -> ALLOW only if the path belongs to a phase <= current
+  4. phase-gated           -> ALLOW only if the path belongs to the CURRENT phase
+                              (v1: earlier phases are approved and frozen until
+                              REOPEN; later ones have not started). The most
+                              specific glob decides; a glob may be shared.
   5. anything else in repo -> DENY (deny by default, as v1's governed root)
 Outside the repo: protected_external -> DENY, else ALLOW (sandbox still applies).
 """
@@ -79,7 +82,7 @@ PHASES = [
 ]
 LABELS = [p[1] for p in PHASES]
 
-_CACHE = {}
+_CACHE: dict = {}
 
 
 def glob_to_re(pattern):
@@ -142,12 +145,17 @@ class Decision(object):
         return "Decision(%s, %s)" % ("ALLOW" if self.allow else "DENY", self.klass)
 
 
-def classify(abspath, root, current_phase_id):
-    """Decision for writing `abspath`. root is the product repo (or None)."""
+def classify(abspath, root, current_phase_id, foreign=False):
+    """Decision for writing `abspath`. root is the product repo (or None).
+    current_phase_id is None when every phase is approved. foreign: root is not
+    the session's product, so only tiers 1-2 (protected) apply."""
     for pat, klass, why in PROTECTED_EXTERNAL:
         full = _expand(pat)
         if glob_match(full, abspath) or abspath == full.rstrip("/*"):
             return Decision(False, "%s %s" % (abspath, why), klass)
+    if not root and (os.path.basename(abspath) == ".sdlc" or "/.sdlc/" in abspath):
+        return Decision(False, "%s is MOADIX gate state; only INIT (typed by the operator) creates .sdlc/" % abspath,
+                        "gate-state")
     if not root:
         return Decision(True, "outside any MOADIX product", "outside")
     root = os.path.realpath(root)
@@ -170,10 +178,66 @@ def classify(abspath, root, current_phase_id):
                 return Decision(False, "%s contains %s, which %s" % (rel, base, why), klass)
     if any_glob(ALWAYS_ALLOW, rel):
         return Decision(True, "%s is always writable" % rel, "always-allow")
-    owners = [pid for pid, _l, _n, pats in PHASES if any_glob(pats, rel)]
-    if owners:
-        if min(owners) <= current_phase_id:
-            return Decision(True, "%s belongs to phase %s" % (rel, LABELS[min(owners)]), "phase")
-        return Decision(False, "%s belongs to phase %s; the current phase is %s" % (
-            rel, LABELS[min(owners)], LABELS[current_phase_id]), "phase-later")
-    return Decision(False, "%s is in no phase's path map (deny by default)" % rel, "unmapped")
+    if foreign:
+        return Decision(True, "%s is in another product (%s); its phase map is enforced in its own session" % (
+            rel, root), "foreign-product")
+    owners = phase_owners(rel)
+    if not owners:
+        return Decision(False, "%s is in no phase's path map (deny by default); a real deliverable must be "
+                               "added to a phase's allow list" % rel, "unmapped")
+    names = ", ".join("%s (%s)" % (LABELS[o], PHASES[o][2]) for o in owners)
+    if current_phase_id is None:
+        return Decision(False, "%s belongs to phase %s; every phase is approved, so it is frozen. Ask the operator "
+                               "to REOPEN %s first" % (rel, names, LABELS[owners[0]]), "all-approved")
+    if current_phase_id in owners:
+        return Decision(True, "%s belongs to the current phase %s" % (rel, LABELS[current_phase_id]), "phase-current")
+    cur = "%s (%s)" % (LABELS[current_phase_id], PHASES[current_phase_id][2])
+    if all(o > current_phase_id for o in owners):
+        return Decision(False, "%s belongs to phase %s, which has not started; the current phase is %s and must "
+                               "be approved first" % (rel, names, cur), "phase-later")
+    return Decision(False, "%s belongs to phase %s, which is approved and therefore frozen (editing it would "
+                           "silently invalidate the approval); the current phase is %s. Ask the operator to REOPEN %s "
+                           "first" % (rel, names, cur, LABELS[max(o for o in owners if o < current_phase_id)]),
+                    "phase-frozen")
+
+
+def phase_owners(rel):
+    """Phase ids that own `rel` (v1 gatecore.classify): the MOST SPECIFIC matching
+    glob wins (longest literal prefix), so `release/assets/**` belongs to 11b even
+    though phase 11 owns `release/**`. A glob listed under several phases is owned
+    by all of them (v1 defect, check-seam duplicate globs: v1 gave it to the first
+    phase only, so `tests/**` was frozen during phase 8 Testing)."""
+    best, owners = -1, []
+    for pid, _l, _n, pats in PHASES:
+        for g in pats:
+            if glob_match(g, rel):
+                spec = len(re.split(r"[*?\[]", g, maxsplit=1)[0])
+                if spec > best:
+                    best, owners = spec, [pid]
+                elif spec == best and pid not in owners:
+                    owners.append(pid)
+    return sorted(owners)
+
+
+def v1_paths_doc():
+    """This path map in v1's phase-paths.yaml shape, for the ported validators.
+    governed_root is "" because the product repo IS the governed root in v2."""
+    return {
+        "version": 1,
+        "governed_root": "",
+        "protected_always": [p for p, _k, _w in PROTECTED_ALWAYS],
+        "protected_exceptions": list(PROTECTED_EXCEPTIONS),
+        "protected_external": [p for p, _k, _w in PROTECTED_EXTERNAL],
+        "always_allow": list(ALWAYS_ALLOW),
+        "phases": [{"id": pid, "label": label, "name": name, "allow": list(pats)}
+                   for pid, label, name, pats in PHASES],
+    }
+
+
+def protected_anchors(session_root=None):
+    """Absolute paths a link must not point at or above (pretool link check)."""
+    out = [_expand(p).rstrip("/*") for p, _k, _w in PROTECTED_EXTERNAL]
+    if session_root:
+        r = os.path.realpath(session_root)
+        out += [os.path.join(r, ".sdlc"), os.path.join(r, ".claude")]
+    return [os.path.normpath(p) for p in out]
