@@ -21,6 +21,8 @@ A cache entry is fresh only when every part of its key still holds:
   gate        sha256 of the gate's own code and config (an update invalidates)
   config      sha256 of .sdlc/product.yaml and .sdlc/config/*
   ledger      the ledger's length and head hash (a waiver changes results)
+  verifiers   sha256 of .sdlc/cache/verify/<phase>/ (increment 4): a verifier's
+              new evidence or a new launch makes the result stale
 
 Exit-code contract (v1, kept): 0 pass, 2 unknown (the instrument could not
 run), anything else fail. `n/a-by-profile` is recorded, never counted as a pass
@@ -111,12 +113,14 @@ def config_digest(root):
     return _digest_files(files)
 
 
-def key(root, st):
+def key(root, st, label=None):
+    from . import verify
     head, dirty = tree_state(root)
     lines = state.read_ledger(root)
     lhead = lines[-1].get("hash") if lines else "GENESIS"
     return {"commit": head, "clean": not dirty, "dirty": dirty[:20], "gate": gate_version(),
-            "config": config_digest(root), "ledger": "%d:%s" % (st["ledger_seq"], lhead)}
+            "config": config_digest(root), "ledger": "%d:%s" % (st["ledger_seq"], lhead),
+            "verifiers": verify.evidence_digest(root, label or st.get("current_phase"))}
 
 
 def _pid_alive(pid):
@@ -145,7 +149,7 @@ def running(root, label):
 
 def read(root, label, st):
     """(status, data, detail). status: fresh | missing | running | stale | dirty | unreadable."""
-    now_key = key(root, st)
+    now_key = key(root, st, label)
     try:
         with open(cache_file(root, label), "rb") as f:
             raw = f.read()
@@ -172,7 +176,8 @@ def read(root, label, st):
                         ("clean", "a working tree with uncommitted changes"),
                         ("gate", "a different version of the gate"),
                         ("config", "a different .sdlc/product.yaml or .sdlc/config/"),
-                        ("ledger", "a different ledger (an operator action was recorded since)")):
+                        ("ledger", "a different ledger (an operator action was recorded since)"),
+                        ("verifiers", "different verifier evidence (a verifier ran or was launched since)")):
         if k.get(field) != now_key[field]:
             if run_for is not None:
                 return "running", data, "validators started %ds ago for commit %s" % (run_for, now_key["commit"][:12])

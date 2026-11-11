@@ -205,3 +205,28 @@ components:
     verifies:
       - sdlc/03-*.md
       - sdlc/04-*.md
+# increment 4: fresh-context verifier evidence (gate/verify.py, gate/config/verifiers.yaml)
+  - id: check-verifiers-6
+    kind: validator
+    phase: 6
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 6
+  - id: check-verifiers-7
+    kind: validator
+    phase: 7
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 7
+  - id: check-verifiers-8
+    kind: validator
+    phase: 8
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 8

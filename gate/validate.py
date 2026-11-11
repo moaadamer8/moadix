@@ -131,7 +131,7 @@ def main():
         if problems:
             sys.stderr.write("gate state failed its integrity check; not validating: %s\n" % "; ".join(problems))
             return 1
-        k = validation.key(root, st)
+        k = validation.key(root, st, label)
         started = now()
         with tempfile.TemporaryDirectory(prefix="moadix-validate-") as tmp:
             doc_path = os.path.join(tmp, "phase-doc.json")

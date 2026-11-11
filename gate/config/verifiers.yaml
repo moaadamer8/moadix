@@ -1,0 +1,50 @@
+# MOADIX verifier roles (increment 4; DESIGN.md §5 fresh-context verification).
+# Installed root-owned with the gate. Read by gate/verify.py.
+#
+#   phase     the phase label whose APPROVE needs this verifier's evidence
+#   agent     the plugin agent (agents/<name>.md), launched as moadix:<agent>
+#   method    the vendored skill the verifier loads (moadix:<method>); its only Skill
+#   scope     globs (repo-relative) of the files this role reviews. The changed files in
+#             the diff range that match are the brief's "required evidence paths": the
+#             evidence must list each one under "reviewed".
+#   when      always  - scheduled in its phase
+#             changed - scheduled only when the diff range changes a file in scope
+#   coverage  true: the evidence must map every acceptance criterion in scope to tests
+#   failing_severities  findings at these severities make the evidence fail. The verifier
+#             reports findings only; the gate, not the verifier, decides what fails.
+version: 1
+failing_severities: [critical, high]
+roles:
+  - agent: design-reviewer
+    phase: "6"
+    method: impeccable
+    when: always
+    scope: ["sdlc/06-*.md", "design/**"]
+  - agent: code-reviewer
+    phase: "7"
+    method: code-review
+    when: always
+    scope:
+      - "src/**"
+      - "public/**"
+      - "mobile/**"
+      - "scripts/**"
+      - "tests/**"
+      - "index.html"
+      - "package.json"
+      - "tsconfig.json"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "compose/**"
+      - ".github/workflows/**"
+  - agent: typescript-reviewer
+    phase: "7"
+    method: typescript-reviewer
+    when: changed
+    scope: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+  - agent: ac-coverage-critic
+    phase: "8"
+    method: pr-test-analyzer
+    when: always
+    coverage: true
+    scope: ["tests/**", "ui-tests/**", "e2e/**", "src/**/*.test.*", "src/**/*.spec.*"]

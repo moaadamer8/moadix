@@ -108,3 +108,18 @@ exemptions:
     token: 11b
     reason: "Phase manifest (increment 3): per-phase skill/MCP policy is keyed by phase label. A decision about phases, not a copy of their state; tests/skills/run.py fails if its labels differ from gate/pathmap.py LABELS"
     owner: operator
+  - file: gate/config/verifiers.yaml
+    axis: phase
+    token: 6
+    reason: "Verifier policy (DESIGN.md §5 verifier roles table): which phase's APPROVE needs which verifier. A decision about phases, not a copy of gate state"
+    owner: operator
+  - file: gate/config/verifiers.yaml
+    axis: phase
+    token: 7
+    reason: "Verifier policy (DESIGN.md §5 verifier roles table): which phase's APPROVE needs which verifier. A decision about phases, not a copy of gate state"
+    owner: operator
+  - file: gate/config/verifiers.yaml
+    axis: phase
+    token: 8
+    reason: "Verifier policy (DESIGN.md §5 verifier roles table): which phase's APPROVE needs which verifier. A decision about phases, not a copy of gate state"
+    owner: operator
