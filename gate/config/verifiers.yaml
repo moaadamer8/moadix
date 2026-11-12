@@ -69,3 +69,15 @@ roles:
       - "src/**/*.vue"
       - "src/**/*.svelte"
       - "src/**/*.astro"
+# increment 6 (ruling 1): triage of Claude Security findings the plugin could not confirm.
+# Scheduled in phase 9 only while the gate's scan result for HEAD holds unconfirmed findings
+# (when: unconfirmed). The brief lists each one; the evidence's `triage` entries assess each
+# as confirmed or rejected, citing path:line at HEAD. check_claude_security applies them: a
+# rejected finding stops blocking, a confirmed one is judged by its severity (critical and
+# high stay unwaivable). The required paths are the files the findings point at.
+  - agent: sf-triager
+    phase: "9"
+    method: null
+    triage: true
+    when: unconfirmed
+    scope: []

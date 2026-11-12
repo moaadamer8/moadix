@@ -8,15 +8,20 @@ reads the gate's result file (.sdlc/cache/verify/9/claude-security/result.json):
 
   * the scan exists, finished without error, and is for HEAD (its revision
     stamp names HEAD's commit and is not -dirty);
-  * every finding has a gate-assigned SF-n id; any at critical, high or
-    unknown fails (unknown = severity unreadable, or an UNCONFIRMED finding the
-    plugin rated LOW: an unconfirmed finding never lands as low);
+  * every finding has a gate-assigned SF-n id; a CONFIRMED one at critical, high
+    or unknown fails (unknown = severity unreadable);
+  * increment 6 (ruling 1): a finding the plugin could NOT confirm fails until
+    the fresh-context verifier moadix:sf-triager (scheduled by the gate in phase
+    9 while such findings exist) assesses it, with path:line evidence at HEAD, as
+    rejected (it stops blocking) or confirmed (it is then judged by severity), or
+    until the operator waives it with a reason (WAIVE SF-n ... reason=...);
   * every SF-n appears in sdlc/09-security-report.md's findings table
     (`| SF-n | severity | ... | status |`) at a severity no lower than the
     gate's: the register is the gate's, the report accounts for it.
 
-A finding at medium or low may be waived through the ledger (WAIVE SF-n ...);
-critical, high and unknown cannot be (gate/config/waivers.yaml).
+A confirmed finding at medium or low, and any unconfirmed finding, may be waived
+through the ledger (WAIVE SF-n ...); a confirmed critical, high or unknown one
+cannot be (gate/config/waivers.yaml).
 
 Exit 0 pass, 1 fail, 2 UNKNOWN (a scan for HEAD is still running).
 """
@@ -28,8 +33,10 @@ import time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 import hlib  # noqa: E402
 import toolrun  # noqa: E402
+from gate import secscan  # noqa: E402
 
 RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4, "unknown": 5}
 
@@ -66,6 +73,16 @@ def waived(root):
         return set()
 
 
+def triage_results(root):
+    """{SF-n: entry} from moadix:sf-triager's evidence, when it holds at HEAD (gate/verify.py)."""
+    try:
+        from gate import state, verify
+        st, problems = state.current_state(root)
+        return {} if problems else verify.triage_of(root, st)
+    except Exception:  # no triage evidence counts: the findings keep blocking (fail closed)
+        return {}
+
+
 def main():
     root = hlib.project_root()
     notes, errs, unknown, findings = [], [], [], []
@@ -94,13 +111,26 @@ def main():
     if rows is None:
         errs.append("sdlc/09-security-report.md is missing: it must account for every SF-n in the register")
         rows = {}
+    triage = triage_results(root)
     for f in res.get("findings") or []:
-        sev = f.get("severity") if f.get("severity") in RANK else "unknown"
-        tag = "" if f.get("confirmed") else " [UNCONFIRMED by its verifier panel]"
+        sid = str(f.get("id"))
+        stt, sev = secscan.judge(f, triage.get(sid.upper()))
+        sev = sev if sev in RANK else "unknown"
+        tag = {"confirmed": "" if f.get("confirmed") else " [confirmed by moadix:sf-triager]",
+               "unconfirmed": " [UNCONFIRMED by its verifier panel]",
+               "rejected": " [REJECTED by moadix:sf-triager]"}[stt]
         text = "%s %s%s (plugin %s, %s)" % (f.get("location"), f.get("summary", "")[:140], tag,
                                            f.get("plugin_severity") or "?", f.get("rule"))
-        sid = str(f.get("id"))
-        if sid.upper() in wv and sev in ("medium", "low", "info"):
+        if stt == "rejected":
+            t = triage[sid.upper()]
+            notes.append("%s rejected by moadix:sf-triager (%s): %s" % (sid, ", ".join(t["citations"][:3]), text))
+        elif stt == "unconfirmed":
+            if sid.upper() in wv:
+                notes.append("%s (unconfirmed) waived through the ledger: %s" % (sid, text))
+            else:
+                errs.append("%s %s: unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with "
+                            "path:line evidence, or the operator waives it (WAIVE %s ... reason=<why>)" % (sid, text, sid))
+        elif sid.upper() in wv and sev in ("medium", "low", "info"):
             notes.append("%s (%s) waived through the ledger: %s" % (sid, sev, text))
         else:
             findings.append((sev, sid, text))

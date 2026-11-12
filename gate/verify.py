@@ -53,7 +53,9 @@ SEVERITIES = ("critical", "high", "medium", "low", "info")
 EVIDENCE_NAME = "findings.json"
 VERDICT_WORDS = re.compile(r"^(verdict|approved?|approval|pass(ed)?|ready|decision|status|result|outcome|lgtm|"
                            r"accept(ed)?|ship|merge)$", re.I)
-TOP_KEYS = {"role", "source_commit", "brief_sha256", "receipt", "reviewed", "findings", "coverage", "buttons", "notes"}
+TOP_KEYS = {"role", "source_commit", "brief_sha256", "receipt", "reviewed", "findings", "coverage", "buttons", "notes",
+            "triage"}
+ASSESSMENTS = ("confirmed", "rejected")
 AC_RE = re.compile(r"^\s*[-*]\s*\*\*(AC-\d+)\s*(?:\(([^)]*)\))?\s*:?\*\*", re.I)  # v1 check_traceability
 CITATION = re.compile(r"^(?P<path>[^:\s][^:]*):(?P<a>\d+)(?:-(?P<b>\d+))?$")
 _CACHE: dict = {}
@@ -79,6 +81,7 @@ READONLY_GIT = {"log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "blam
 # nonce; the gate logs the nonce and the agent_type of the probe's own tool call.
 # The probe produces no evidence and is never scheduled as a verifier.
 PROBE = "replacement-probe"
+TRIAGER = "sf-triager"
 
 
 class VerifyError(Exception):
@@ -216,11 +219,59 @@ def scheduled(root, st, label=None):
     for name, r in roles().items():
         if str(r.get("phase")) != str(label):
             continue
+        if str(r.get("when") or "always") == "unconfirmed":
+            unc = unconfirmed(root, hd)
+            if not unc:
+                continue
+            out[name] = (r, base, hd, sorted({f["path"] for f in unc if f.get("path")}))
+            continue
         req = in_scope(r, changed)
         if str(r.get("when") or "always") == "changed" and not req:
             continue
         out[name] = (r, base, hd, req)
     return out
+
+
+def unconfirmed(root, hd):
+    """Increment 6 (ruling 1): the Claude Security findings in the gate's scan result for
+    commit hd that the plugin could not confirm, as [{id, severity, rule, location, path,
+    line, summary}]. Only files that exist at hd count as paths."""
+    from . import secscan
+    try:
+        with open(secscan.result_file(root)) as f:
+            res = json.load(f)
+    except (OSError, ValueError):
+        return []
+    if res.get("head") != hd or res.get("error"):
+        return []
+    out = []
+    for fd in res.get("findings") or []:
+        if fd.get("confirmed"):
+            continue
+        loc = str(fd.get("location") or "")
+        path, _, line = loc.rpartition(":")
+        try:
+            _git(root, "cat-file", "-e", "%s:%s" % (hd, path))
+        except VerifyError:
+            path = ""
+        out.append({"id": str(fd.get("id")), "severity": fd.get("severity"), "rule": fd.get("rule"),
+                    "location": loc, "path": path or None, "line": line, "summary": fd.get("summary") or "",
+                    "plugin_severity": fd.get("plugin_severity")})
+    return out
+
+
+def triage_of(root, st):
+    """{SF-n: triage entry} from moadix:sf-triager's evidence when it holds at HEAD (status
+    ok), else {}. Read by check_claude_security and by WAIVE."""
+    try:
+        sch = scheduled(root, st, "9")
+    except VerifyError:
+        return {}
+    if TRIAGER not in sch:
+        return {}
+    role, base, hd, req = sch[TRIAGER]
+    status, _probs, info = check_role(root, st, TRIAGER, role, base, hd, req)
+    return (info.get("triage") or {}) if status == "ok" else {}
 
 
 def phase_has_verifiers(label):
@@ -344,11 +395,19 @@ def build_brief(root, st, name, role, base, hd, required):
     terms = list(required) + [s[0] for s in sts] + [name]
     kn = knowledge(root, terms)
     live = bool(role.get("live"))
-    method = ("method: load the skill %s:%s with the Skill tool and follow it as adapted below" % (PLUGIN, role["method"])
-              if role.get("method") else
-              "method: drive the running app yourself with the Playwright MCP tools (mcp__%s__*); you have no "
-              "skill to load. Network-reading tools (network requests, evaluate, run_code) are withheld: judge "
-              "what a user sees, never headers or cookies" % LIVE_SERVER)
+    if role.get("method"):
+        method = "method: load the skill %s:%s with the Skill tool and follow it as adapted below" % (
+            PLUGIN, role["method"])
+    elif role.get("triage"):
+        method = ("method: you have no skill to load. Read the code at source_commit (Read, Grep, Glob, read-only "
+                  "git) and decide, for each finding listed below, whether the code really has that weakness")
+    elif role.get("baseline"):
+        method = ("method: you have no skill to load. Read the baseline documents listed below and check every "
+                  "claim they make against the code at source_commit (Read, Grep, Glob, read-only git)")
+    else:
+        method = ("method: drive the running app yourself with the Playwright MCP tools (mcp__%s__*); you have no "
+                  "skill to load. Network-reading tools (network requests, evaluate, run_code) are withheld: judge "
+                  "what a user sees, never headers or cookies" % LIVE_SERVER)
     L = ["# MOADIX verifier brief",
          "",
          "Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder "
@@ -387,6 +446,23 @@ def build_brief(root, st, name, role, base, hd, required):
         unt = untested(root)
         L += ["", "## .sdlc/untested.yaml (acceptance criteria phase 8 could not test: verify these live first)",
               unt or "(empty)"]
+    if role.get("triage"):
+        L += ["", "## Claude Security findings its own verifier panel could not confirm",
+              "For EACH one: read the code it points at and whatever it depends on, then assess it as confirmed "
+              "(the weakness is real and reachable) or rejected (it is not), and cite the path:line lines that show "
+              "it. Do not fix anything."]
+        for f in unconfirmed(root, hd):
+            L.append("- %s: plugin severity %s, rule %s, at %s: %s" % (
+                f["id"], f.get("plugin_severity") or f.get("severity") or "?", f.get("rule") or "?", f["location"],
+                str(f.get("summary"))[:300]))
+    if role.get("baseline"):
+        L += ["", "## What to check",
+              "Each required path above is a baseline document describing the product AS IT IS. For every claim "
+              "(a story or acceptance criterion it says is implemented, a component, a SEC-ID's current status, a "
+              "test it lists, a service it says is used), open the code it cites and check that the code at "
+              "source_commit does what the claim says. A claim the code does not support is a finding: high when "
+              "it says something is implemented, mitigated or tested and it is not; medium when it is only "
+              "imprecise. Cite the code lines that show the mismatch."]
     L += ["", "## knowledge.md entries"]
     L += kn or ["(none relevant)"]
     L += ["", "## Evidence",
@@ -412,6 +488,10 @@ def build_brief(root, st, name, role, base, hd, required):
     elif role.get("coverage"):
         L.append("- coverage: [{\"ac\": \"US-001/AC-1\", \"tests\": [\"path:line\", ...]}] with one entry per "
                  "acceptance criterion listed above; an empty tests list means you found no test for it")
+    if role.get("triage"):
+        L.append("- triage: [{\"id\": \"SF-2\", \"assessment\": \"confirmed\" or \"rejected\", \"severity\": one of "
+                 "%s (required when confirmed), \"citations\": [\"path:line\", ...] (at least one), \"reasoning\": "
+                 "\"...\"}] with one entry per finding listed above; findings may be []" % "/".join(SEVERITIES))
     L += ["- notes: optional free text",
           "Every citation must point at a line that exists in source_commit. Do not include a verdict, a pass/fail "
           "field or a recommendation to proceed. Do not write anywhere else; you cannot start other agents.",
@@ -706,6 +786,8 @@ def check_role(root, st, name, role, base, hd, required):
                 probs.append("finding %s: %s" % (fid, why))
         if f.get("severity") in fail_sev:
             blocking.append("%s (%s): %s" % (fid, f.get("severity"), str(f.get("summary"))[:120]))
+    if role.get("triage"):
+        _check_triage(root, hd, ev, probs, info, memo)
     if role.get("live"):
         _check_live(root, label, name, role, hd, ev, probs, blocking, info)
     elif role.get("coverage"):
@@ -736,6 +818,44 @@ def check_role(root, st, name, role, base, hd, required):
     if blocking:
         return "failing", ["finding at a failing severity: %s" % b for b in blocking], info
     return "ok", [], info
+
+
+def _check_triage(root, hd, ev, probs, info, memo):
+    """sf-triager: one entry per unconfirmed finding, confirmed or rejected, each citing
+    path:line lines that exist at HEAD; a confirmed one names its severity."""
+    want = [f["id"] for f in unconfirmed(root, hd)]
+    lst = ev.get("triage")
+    if not isinstance(lst, list):
+        probs.append("triage is not a list")
+        lst = []
+    got = {}
+    for e in lst:
+        if isinstance(e, dict) and isinstance(e.get("id"), str):
+            got[e["id"].upper()] = e
+    out = {}
+    for fid in want:
+        e = got.get(fid.upper())
+        if e is None:
+            probs.append("triage: %s is not assessed" % fid)
+            continue
+        a = e.get("assessment")
+        if a not in ASSESSMENTS:
+            probs.append("triage %s: assessment %r is not one of %s" % (fid, a, "/".join(ASSESSMENTS)))
+            continue
+        if a == "confirmed" and e.get("severity") not in SEVERITIES:
+            probs.append("triage %s: a confirmed finding needs a severity (%s)" % (fid, "/".join(SEVERITIES)))
+            continue
+        cits = e.get("citations")
+        if not isinstance(cits, list) or not cits:
+            probs.append("triage %s: no path:line citation (an assessment without evidence is not one)" % fid)
+            continue
+        bad = [w for w in (_citation_problem(root, hd, c, memo) for c in cits) if w]
+        if bad:
+            probs += ["triage %s: %s" % (fid, w) for w in bad]
+            continue
+        out[fid] = {"id": fid, "assessment": a, "severity": e.get("severity"), "citations": list(cits),
+                    "reasoning": str(e.get("reasoning") or "")[:400]}
+    info["triage"] = out
 
 
 def _artifact_problem(edir, a):

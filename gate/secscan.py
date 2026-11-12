@@ -29,10 +29,15 @@ subagent. So the GATE schedules it as a headless session of its own:
            claudeSecurityPluginFindingId to SF-n, append-only). Findings only,
            never a verdict: check_claude_security (phase 9) decides.
 
-Severity: the plugin's own (CRITICAL/HIGH/MEDIUM/LOW). A finding it could not
-confirm (no complete verifier panel, or LOW confidence) never lands as low:
-unconfirmed and rated LOW, or with no readable severity, it becomes `unknown`,
-which blocks and cannot be waived until a rescan confirms or clears it.
+Severity: the plugin's own (CRITICAL/HIGH/MEDIUM/LOW); none readable is
+`unknown`. Confirmation (increment 6, ruling 1): a finding the plugin could not
+confirm (no complete verifier panel, or LOW confidence) is recorded with
+`confirmed: false`, whatever its severity. It blocks phase 9 until EITHER the
+gate-scheduled fresh-context verifier moadix:sf-triager triages it as confirmed
+or rejected, with evidence citing path:line at HEAD, OR the operator waives it
+with a reason. It is never unwaivable merely for being unconfirmed. A CONFIRMED
+critical or high finding (by the plugin's panel or by the triager) stays
+unwaivable.
 """
 import contextlib
 import hashlib
@@ -200,7 +205,8 @@ def find_report(repo):
 
 
 def severity_of(result):
-    """(severity, confirmed, raw). Never lets an unconfirmed finding land as low."""
+    """(severity, confirmed, raw). Unconfirmed findings keep the plugin's severity and
+    carry confirmed=False; check_claude_security blocks them until triaged or waived."""
     rec = ((result.get("properties") or {}).get("claudeSecurityPlugin") or {})
     raw = str(rec.get("severity") or "").upper()
     sev = SEV.get(raw) or LEVEL.get(str(result.get("level") or ""))
@@ -209,9 +215,27 @@ def severity_of(result):
     complete = isinstance(panel, dict) and isinstance(panel.get("voters"), int) and panel.get("voters", 0) > 0 \
         and panel.get("true", 0) * 2 > panel.get("voters", 0)
     confirmed = complete and conf in ("HIGH", "MEDIUM")
-    if not sev or (not confirmed and sev == "low"):
+    if not sev:
         sev = "unknown"
     return sev, confirmed, raw or str(result.get("level") or "")
+
+
+RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+def judge(fd, tri):
+    """(state, severity) of one gate finding given its sf-triager entry (or None).
+    state: confirmed | unconfirmed | rejected. A finding the triager confirms takes the
+    higher of the plugin's and the triager's severity; unknown only if neither is known."""
+    sev = str(fd.get("severity") or "unknown")
+    if fd.get("confirmed"):
+        return "confirmed", sev
+    if not tri:
+        return "unconfirmed", sev
+    if tri.get("assessment") == "rejected":
+        return "rejected", sev
+    known = [x for x in (sev, str(tri.get("severity") or "")) if x in RANK]
+    return "confirmed", (max(known, key=RANK.get) if known else "unknown")
 
 
 def register(root, results):
@@ -321,7 +345,7 @@ def plugin_version():
     """The installed claude-security plugin's version, from the plugin cache (read-only)."""
     if FIXTURE:
         return "fixture"
-    base =os.path.join(os.path.expanduser("~"), ".claude", "plugins", "cache", "claude-plugins-official",
+    base = os.path.join(os.path.expanduser("~"), ".claude", "plugins", "cache", "claude-plugins-official",
                         "claude-security")
     try:
         return sorted(os.listdir(base))[-1]

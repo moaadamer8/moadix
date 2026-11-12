@@ -285,7 +285,18 @@ def _verifier_finding(root, wid):
             return None  # no Claude Security result: the phase-9 report's table decides (v1)
         for fd in res.get("findings") or []:
             if str(fd.get("id")).upper() == wid.upper():
-                return str(fd.get("severity") or "unknown"), "Claude Security, commit %s" % str(res.get("head"))[:12]
+                where = "Claude Security, commit %s" % str(res.get("head"))[:12]
+                tri = {}
+                if not fd.get("confirmed"):
+                    with contextlib.suppress(Exception):
+                        st, problems = state.current_state(root)
+                        tri = {} if problems else verify.triage_of(root, st)
+                stt, sev = secscan.judge(fd, tri.get(wid.upper()))
+                if stt != "confirmed":
+                    # Increment 6 (ruling 1): an unconfirmed (or triager-rejected) finding is waivable
+                    # with a reason; only a CONFIRMED critical/high/unknown one is not.
+                    return stt, where
+                return sev, where + ("" if fd.get("confirmed") else ", confirmed by moadix:sf-triager")
         return None
     return None
 
@@ -321,8 +332,10 @@ def _waive_gate(root, g):
         sev, where = vf
         if sev is None:
             return "%s names a verifier finding, but %s; refusing rather than granting blind" % (g["id"], where)
+        if sev in ("unconfirmed", "rejected"):
+            return None  # ruling 1: waivable with the reason the command carries
         if sev in pol["unwaivable_severities"] or sev == "unknown":
-            return ("%s is a %s-severity verifier finding (%s) and CANNOT be waived. Fix it and verify again" % (
+            return ("%s is a confirmed %s-severity finding (%s) and CANNOT be waived. Fix it and verify again" % (
                 g["id"], sev, where))
         return None
     key = g["id"].split(":", 1)[0].strip().upper()
@@ -335,7 +348,7 @@ def _waive_gate(root, g):
             return ("%s is a finding in the phase-9 report and its severity cannot be read (add a row "
                     "'| %s | <severity> | ... |'); refusing rather than granting blind" % (g["id"], key))
     sev = (sevs or {}).get(key)
-    if sev and (sev in pol["unwaivable_severities"] or sev in ("unknown", "unconfirmed")):
+    if sev and (sev in pol["unwaivable_severities"] or sev == "unknown"):
         return ("%s is a %s-severity finding and CANNOT be waived. Fix it, or downgrade it with evidence in the "
                 "phase-9 report" % (g["id"], sev))
     return None
