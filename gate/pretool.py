@@ -58,9 +58,10 @@ def allow(reason, updated_input=None):
 
 
 def _phase_for(root, cache):
+    """(current phase id, problems, phase table in force, active feature) for a product."""
     if root not in cache:
         st, problems = state.current_state(root)
-        cache[root] = (st["current_phase_id"], problems)
+        cache[root] = (st["current_phase_id"], problems, state.scope_table(st), st.get("feature"))
     return cache[root]
 
 
@@ -91,13 +92,13 @@ def check_path(path, cwd, cache):
         root = state.find_root(probe)
     session = cache.get("_session")
     foreign = bool(root and session and os.path.realpath(root) != os.path.realpath(session))
-    phase_id = None
+    phase_id, table, feature = None, None, None
     if root and not foreign:
-        phase_id, problems = _phase_for(root, cache)
+        phase_id, problems, table, feature = _phase_for(root, cache)
         if problems:
             return "gate state failed its integrity check, so writes in %s are refused until STATUS is clean (%s)" % (
                 root, "; ".join(problems))
-    d = pathmap.classify(ab, root, phase_id, foreign=foreign)
+    d = pathmap.classify(ab, root, phase_id, foreign=foreign, phases=table, feature=feature)
     return None if d.allow else d.reason
 
 

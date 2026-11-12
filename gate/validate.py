@@ -53,10 +53,16 @@ def trusted(name):
     return None
 
 
-def validators_for(label):
+def validators_for(label, scope="product"):
+    """Validators registered for the phase label in this scope (increment 6). A component's
+    `scope` is product (the default: it reads the product's own sdlc/ documents), feature
+    (it checks a feature's additions) or both (it judges code, tools or verifier evidence,
+    which a feature cycle needs exactly as the product did)."""
     reg = hlib.load_yaml(os.path.join(GATE_DIR, "config", "registry.yaml")) or {}
+    want = ("feature", "both") if scope == "feature" else ("product", "both")
     return [c for c in (reg.get("components") or [])
-            if str(c.get("kind")) == "validator" and str(c.get("phase")) == str(label)]
+            if str(c.get("kind")) == "validator" and str(c.get("phase")) == str(label)
+            and str(c.get("scope") or "product") in want]
 
 
 def profile_na(root):
@@ -122,7 +128,7 @@ def main():
         sys.stderr.write("usage: validate.py <product-root> <phase-label>\n")
         return 2
     root, label = os.path.realpath(sys.argv[1]), sys.argv[2]
-    if not re.match(r"^\d{1,2}[a-z]?$", label):
+    if not re.match(r"^(?:\d{1,2}[a-z]?|B)$", label):
         return 2
     os.makedirs(validation.cache_dir(root), exist_ok=True)
     lf = validation.lock_file(root, label)
@@ -143,12 +149,12 @@ def main():
                 json.dump(hlib.v1_phase_doc(st), f)
             env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ.get("HOME", "/var/empty"),
                    "LANG": "en_US.UTF-8", "TMPDIR": tmp, "MOADIX_PRODUCT_ROOT": root,
-                   "MOADIX_PHASE_DOC": doc_path, "MOADIX_GATE_RUN": "yes"}
+                   "MOADIX_PHASE_DOC": doc_path, "MOADIX_GATE_RUN": "yes", "MOADIX_FEATURE": st.get("feature") or ""}
             if os.path.exists(os.path.join(GATE_DIR, "_testguard.py")):  # test fixtures only
                 env.update({k: os.environ[k] for k in GUARD_KEYS if k in os.environ})
             ruling, na = profile_na(root)
             results = []
-            for c in validators_for(label):
+            for c in validators_for(label, "feature" if st.get("feature") else "product"):
                 vid = str(c.get("id"))
                 cmd = " ".join([str(c.get("module"))] + [str(a) for a in (c.get("args") or [])])
                 if vid in na and na[vid][1] == str(label):
@@ -162,7 +168,8 @@ def main():
         verdict = "pass" if all(r["result"] in ("pass", "n/a-by-profile") for r in results) else (
             "unknown" if any(r["result"] == "unknown" for r in results) and
             not any(r["result"] == "fail" for r in results) else "fail")
-        data = {"version": 1, "phase": label, "key": k, "started_at": started, "finished_at": now(),
+        data = {"version": 1, "phase": label, "scope": validation.scope_of(st), "key": k, "started_at": started,
+                "finished_at": now(),
                 "verdict": verdict, "results": results}
         tmpf = validation.cache_file(root, label) + ".tmp"
         with open(tmpf, "w") as f:

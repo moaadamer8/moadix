@@ -176,12 +176,13 @@ def dirty(root):
 def base_commit(st, label):
     """The commit the phase before `label` was approved (or proceeded past) on;
     the empty tree when there is none, so the range covers everything."""
-    labels = pathmap.LABELS
-    i = labels.index(label)
+    labels = [p["label"] for p in st["phases"]]
+    i = labels.index(label) if label in labels else 0
     for ph in reversed(st["phases"][:i]):
         if ph.get("commit"):
             return ph["commit"]
-    return EMPTY_TREE
+    # Increment 6: a feature cycle's range starts at the commit FEATURE was recorded on.
+    return st.get("scope_base") or EMPTY_TREE
 
 
 def changed_files(root, base, hd):
@@ -279,14 +280,19 @@ def phase_has_verifiers(label):
 
 
 # ---------------------------------------------------------------- brief
-def stories(root):
-    """[(story id, title, [(ac id, line)], path, line)] from sdlc/02-*.md (v1's PRD shape)."""
-    sd = os.path.join(root, "sdlc")
+def stories(root, st=None):
+    """[(story id, title, [(ac id, line)], path, line)] from sdlc/02-*.md (v1's PRD shape).
+    Increment 6: during a feature cycle, the FEATURE's PRD additions only
+    (sdlc/features/<id>/02-*.md): its verifiers are scoped to the feature."""
+    rel_dir = "sdlc"
+    if st and st.get("feature"):
+        rel_dir = "%s/%s" % (pathmap.FEATURES_DIR, st["feature"])
+    sd = os.path.join(root, rel_dir)
     out = []
     if not os.path.isdir(sd):
         return out
     for fn in sorted(f for f in os.listdir(sd) if re.match(r"^02-.*\.md$", f)):
-        rel = "sdlc/" + fn
+        rel = rel_dir + "/" + fn
         cur = None
         with open(os.path.join(sd, fn), encoding="utf-8", errors="replace") as f:
             for n, line in enumerate(f, 1):
@@ -390,7 +396,7 @@ def build_brief(root, st, name, role, base, hd, required):
     """The brief text (deterministic for the same artifacts). No receipt in it."""
     label = str(role["phase"])
     ph = next(p for p in st["phases"] if p["label"] == label)
-    sts = stories(root)
+    sts = stories(root, st)
     ev = os.path.relpath(evidence_file(root, label, name), root)
     terms = list(required) + [s[0] for s in sts] + [name]
     kn = knowledge(root, terms)
@@ -431,7 +437,8 @@ def build_brief(root, st, name, role, base, hd, required):
             L.append("- %s %s (%s:%d)" % (sid, title, path, n))
             L += ["  - %s/%s (%s:%d)" % (sid, ac, path, ln) for ac, ln in acs]
     else:
-        L.append("- (none found in sdlc/02-*.md)")
+        L.append("- (none found in %s)" % ("sdlc/features/%s/02-*.md" % st["feature"] if st.get("feature")
+                                           else "sdlc/02-*.md"))
     if live:
         url = live_base_url(root)
         btns = buttons(root, hd, role)
@@ -789,9 +796,9 @@ def check_role(root, st, name, role, base, hd, required):
     if role.get("triage"):
         _check_triage(root, hd, ev, probs, info, memo)
     if role.get("live"):
-        _check_live(root, label, name, role, hd, ev, probs, blocking, info)
+        _check_live(root, label, name, role, hd, ev, probs, blocking, info, st)
     elif role.get("coverage"):
-        want = ac_ids(stories(root))
+        want = ac_ids(stories(root, st))
         cov = ev.get("coverage")
         got = {}
         if not isinstance(cov, list):
@@ -868,7 +875,7 @@ def _artifact_problem(edir, a):
     return None
 
 
-def _check_live(root, label, name, role, hd, ev, probs, blocking, info):
+def _check_live(root, label, name, role, hd, ev, probs, blocking, info, st=None):
     """The live verifier: every AC and every button exercised, each backed by artifacts
     the browser saved into the evidence directory, with a trace and a video present."""
     edir = evidence_dir(root, label, name)
@@ -879,7 +886,7 @@ def _check_live(root, label, name, role, hd, ev, probs, blocking, info):
         probs.append("no video (.webm) in the evidence directory: start browser_start_video before navigating")
     if not any(os.path.basename(f).startswith("trace") or "/trace" in f or f.endswith(".trace") for f in files):
         probs.append("no trace in the evidence directory: start browser_start_tracing before navigating")
-    for key, want, what in (("coverage", ac_ids(stories(root)), "ac"),
+    for key, want, what in (("coverage", ac_ids(stories(root, st)), "ac"),
                             ("buttons", [b[0] for b in buttons(root, hd, role)], "id")):
         got = {}
         lst = ev.get(key)

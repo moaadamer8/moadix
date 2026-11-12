@@ -120,7 +120,14 @@ def key(root, st, label=None):
     lhead = lines[-1].get("hash") if lines else "GENESIS"
     return {"commit": head, "clean": not dirty, "dirty": dirty[:20], "gate": gate_version(),
             "config": config_digest(root), "ledger": "%d:%s" % (st["ledger_seq"], lhead),
-            "verifiers": verify.evidence_digest(root, label or st.get("current_phase"))}
+            "verifiers": verify.evidence_digest(root, label or st.get("current_phase")),
+            "scope": scope_of(st)}
+
+
+def scope_of(st):
+    """Increment 6: which phase table the result belongs to. A feature's phase 3 and the
+    product's phase 3 share a label, never a result."""
+    return "feature:%s" % st["feature"] if st.get("feature") else "product"
 
 
 def _pid_alive(pid):
@@ -177,7 +184,8 @@ def read(root, label, st):
                         ("gate", "a different version of the gate"),
                         ("config", "a different .sdlc/product.yaml or .sdlc/config/"),
                         ("ledger", "a different ledger (an operator action was recorded since)"),
-                        ("verifiers", "different verifier evidence (a verifier ran or was launched since)")):
+                        ("verifiers", "different verifier evidence (a verifier ran or was launched since)"),
+                        ("scope", "another scope (the product's phases, or a different feature)")):
         if k.get(field) != now_key[field]:
             if run_for is not None:
                 return "running", data, "validators started %ds ago for commit %s" % (run_for, now_key["commit"][:12])

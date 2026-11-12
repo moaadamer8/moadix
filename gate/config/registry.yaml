@@ -207,6 +207,7 @@ components:
       - sdlc/04-*.md
 # increment 4: fresh-context verifier evidence (gate/verify.py, gate/config/verifiers.yaml)
   - id: check-verifiers-6
+    scope: both
     kind: validator
     phase: 6
     status: active
@@ -215,6 +216,7 @@ components:
       - --phase
       - 6
   - id: check-verifiers-7
+    scope: both
     kind: validator
     phase: 7
     status: active
@@ -223,6 +225,7 @@ components:
       - --phase
       - 7
   - id: check-verifiers-8
+    scope: both
     kind: validator
     phase: 8
     status: active
@@ -234,6 +237,7 @@ components:
 # Claude Security as the phase-9 finding source, the live verifier and v1's live probe.
 # timeout: seconds the worker allows this validator (default 180).
   - id: check-contracts
+    scope: both
     kind: validator
     phase: 5
     status: active
@@ -242,6 +246,7 @@ components:
     verifies:
       - sdlc/05-lld/**
   - id: check-env
+    scope: both
     kind: validator
     phase: 6b
     status: active
@@ -250,6 +255,7 @@ components:
       - .env.example
       - .env.*
   - id: check-gitleaks
+    scope: both
     kind: validator
     phase: 9
     status: active
@@ -259,6 +265,7 @@ components:
       - gitleaks
     timeout: 900
   - id: check-osv
+    scope: both
     kind: validator
     phase: 9
     status: active
@@ -268,6 +275,7 @@ components:
       - osv-scanner
     timeout: 900
   - id: check-trivy
+    scope: both
     kind: validator
     phase: 9
     status: active
@@ -277,6 +285,7 @@ components:
       - trivy
     timeout: 1800
   - id: check-semgrep
+    scope: both
     kind: validator
     phase: 9
     status: active
@@ -286,11 +295,13 @@ components:
       - semgrep
     timeout: 900
   - id: check-claude-security
+    scope: both
     kind: validator
     phase: 9
     status: active
     module: check_claude_security
   - id: check-verifiers-10a
+    scope: both
     kind: validator
     phase: 10a
     status: active
@@ -299,6 +310,7 @@ components:
       - --phase
       - 10a
   - id: check-surface-live
+    scope: both
     kind: validator
     phase: 10a
     status: active
@@ -306,20 +318,199 @@ components:
     args:
       - --live
   - id: check-live-contracts
+    scope: both
     kind: validator
     phase: 10a
     status: active
     module: check_live_contracts
     timeout: 900
   - id: check-load
+    scope: both
     kind: validator
     phase: 10c
     status: active
     module: check_load
     timeout: 2400
   - id: check-release
+    scope: both
     kind: validator
     phase: 11
     status: active
     module: check_release
     timeout: 300
+# increment 6 (Amendment 2): feature cycles. `scope` says which phase table a validator
+# serves: product (default; it reads the product's own sdlc/ documents), feature (it checks a
+# feature's additions in sdlc/features/<id>/) or both (code, tools and verifier evidence,
+# judged the same way in a feature cycle). check-feature runs in every feature phase.
+  - id: check-feature-0
+    kind: validator
+    phase: 0
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 0
+  - id: check-feature-1
+    kind: validator
+    phase: 1
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 1
+  - id: check-feature-2
+    kind: validator
+    phase: 2
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 2
+  - id: check-feature-3
+    kind: validator
+    phase: 3
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 3
+  - id: check-feature-4
+    kind: validator
+    phase: 4
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 4
+  - id: check-feature-5
+    kind: validator
+    phase: 5
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 5
+  - id: check-feature-6
+    kind: validator
+    phase: 6
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 6
+  - id: check-feature-6b
+    kind: validator
+    phase: 6b
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 6b
+  - id: check-feature-7
+    kind: validator
+    phase: 7
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 7
+  - id: check-feature-8
+    kind: validator
+    phase: 8
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 8
+  - id: check-feature-9
+    kind: validator
+    phase: 9
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 9
+  - id: check-feature-10a
+    kind: validator
+    phase: 10a
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 10a
+  - id: check-feature-10b
+    kind: validator
+    phase: 10b
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 10b
+  - id: check-feature-10c
+    kind: validator
+    phase: 10c
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 10c
+  - id: check-feature-11
+    kind: validator
+    phase: 11
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 11
+  - id: check-feature-11b
+    kind: validator
+    phase: 11b
+    status: active
+    scope: feature
+    module: check_feature
+    args:
+      - --phase
+      - 11b
+# increment 6 (Amendment 2): onboarding. Phase B (Baseline) of a product INITialised on a
+# repo that already has code: completeness and citations (every claim cites code that exists,
+# path:line), the fresh-context baseline verifier's evidence, and the BMAD seam.
+  - id: check-baseline
+    kind: validator
+    phase: B
+    status: active
+    module: check_baseline
+  - id: check-verifiers-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - B
+# increment 6 (item C): check-seam, the BMAD half (gate/config/bmad-adapter.yaml) and the
+# path-map half, in the first phase of a product (0, or B when onboarded).
+  - id: check-seam-0
+    kind: validator
+    phase: 0
+    status: active
+    module: check_seam
+  - id: check-seam-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_seam

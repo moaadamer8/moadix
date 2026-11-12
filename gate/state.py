@@ -24,7 +24,7 @@ SDLC = ".sdlc"
 PHASE_HEADER = "# MOADIX gate state, derived from ledger.jsonl. Written only by the gate.\n"
 # Bumped when the rendering changes. A phase.yaml with an OLDER version line is
 # regenerated from the verified ledger (a gate update), not reported as drift.
-RENDER_VERSION = 3
+RENDER_VERSION = 4
 GIT = "/usr/bin/git"
 GATE_FILES = ("product", "phase", "ledger")
 
@@ -149,59 +149,166 @@ def decode_payload(entry):
         return {}
 
 
+DONE = ("APPROVED", "PROCEED-PAST", "COLLAPSED")
+PHASE_VERBS = ("APPROVE", "PROCEED-PAST", "REOPEN", "COLLAPSE")
+
+
+def _fresh_phases(table):
+    return [{"id": pid, "label": label, "name": name, "status": "draft", "seq": None, "at": None, "note": None,
+             "commit": None, "evidence": None}
+            for pid, label, name, _ in table]
+
+
+def _apply(phases, verb, e, pl):
+    """One phase-state line (APPROVE, PROCEED-PAST, REOPEN, COLLAPSE) onto a phase list."""
+    ph = next((p for p in phases if p["label"] == pl.get("phase")), None)
+    if ph is None:
+        return
+    if verb == "APPROVE":
+        val = pl.get("validation") or {}
+        ph.update(status="APPROVED", seq=e["seq"], at=e["ts"], note=None, commit=pl.get("source_commit"),
+                  evidence=[{"validator": r.get("validator"), "result": r.get("result"),
+                             "exit_code": r.get("exit_code")} for r in (val.get("results") or [])] or None)
+    elif verb == "PROCEED-PAST":
+        ph.update(status="PROCEED-PAST", seq=e["seq"], at=e["ts"], note=pl.get("reason"),
+                  commit=pl.get("source_commit"),
+                  evidence=[{"validator": v, "result": "fail"} for v in (pl.get("failing") or [])] or None)
+    elif verb == "COLLAPSE":
+        # Increment 6 (item C): a size-profile collapse is a RECORDED ruling, not a silent skip.
+        ph.update(status="COLLAPSED", seq=e["seq"], at=e["ts"], note=pl.get("reason"), commit=pl.get("source_commit"),
+                  evidence=[{"validator": v, "result": "not-run (collapsed)"} for v in (pl.get("checks_not_run") or [])]
+                  or None)
+    elif verb == "REOPEN":
+        for p in phases:
+            if p["id"] >= ph["id"]:
+                p.update(status="draft", seq=None, at=None, note=None, commit=None, evidence=None)
+        ph.update(status="REOPENED", seq=e["seq"], at=e["ts"], note=pl.get("reason"))
+
+
+def _current(phases):
+    return next((p for p in phases if p["status"] not in DONE), None)
+
+
+def _clean(phases):
+    return [{k: v for k, v in p.items() if v is not None} for p in phases]
+
+
 def replay(product_id, entries):
-    """Phase state from verified ledger entries."""
-    phases = [{"id": pid, "label": label, "name": name, "status": "draft", "seq": None, "at": None, "note": None,
-               "commit": None, "evidence": None}
-              for pid, label, name, _ in pathmap.PHASES]
+    """Phase state from verified ledger entries.
+
+    Increment 6 (Amendment 2): INIT's payload says whether the product was onboarded
+    (mode onboarding: one product phase, B). FEATURE <id> starts a feature cycle with
+    its own 16 phases; every later phase line whose payload names that feature applies
+    to the feature, not the product. One feature is active at a time; it closes when all
+    its phases are done. `phases`/`current_phase` describe the scope in force (the active
+    feature's, else the product's); `product_phases` and `features` hold the rest."""
+    mode = "greenfield"
+    product = _fresh_phases(pathmap.PHASES)
+    features, order, active = {}, [], None
     waivers, parked = {}, None
     for e in entries:
         verb = e["action"].split(" ", 1)[0]
         pl = decode_payload(e)
-        ph = next((p for p in phases if p["label"] == pl.get("phase")), None)
-        if verb == "APPROVE" and ph:
-            val = pl.get("validation") or {}
-            ph.update(status="APPROVED", seq=e["seq"], at=e["ts"], note=None, commit=pl.get("source_commit"),
-                      evidence=[{"validator": r.get("validator"), "result": r.get("result"),
-                                 "exit_code": r.get("exit_code")} for r in (val.get("results") or [])] or None)
-        elif verb == "PROCEED-PAST" and ph:
-            ph.update(status="PROCEED-PAST", seq=e["seq"], at=e["ts"], note=pl.get("reason"),
-                      commit=pl.get("source_commit"),
-                      evidence=[{"validator": v, "result": "fail"} for v in (pl.get("failing") or [])] or None)
-        elif verb == "REOPEN" and ph:
-            for p in phases:
-                if p["id"] >= ph["id"]:
-                    p.update(status="draft", seq=None, at=None, note=None, commit=None, evidence=None)
-            ph.update(status="REOPENED", seq=e["seq"], at=e["ts"], note=pl.get("reason"))
+        if verb == "INIT":
+            if pl.get("mode") == "onboarding":
+                mode = "onboarding"
+                product = _fresh_phases(pathmap.BASELINE)
+            continue
+        if verb == "FEATURE":
+            fid = str(pl.get("feature") or "")
+            if fid and fid not in features:
+                features[fid] = {"id": fid, "status": "active", "seq": e["seq"], "at": e["ts"],
+                                 "commit": pl.get("source_commit"), "phases": _fresh_phases(pathmap.PHASES),
+                                 "merged": None}
+                order.append(fid)
+                active = fid
+            continue
+        fid = pl.get("feature")
+        if verb in PHASE_VERBS:
+            if fid:
+                if fid not in features or features[fid]["status"] != "active":
+                    continue  # a line for a feature that is not running applies to nothing
+                _apply(features[fid]["phases"], verb, e, pl)
+                if verb == "APPROVE" and pl.get("merge"):
+                    features[fid]["merged"] = {"seq": e["seq"], "at": e["ts"],
+                                               "files": [f.get("target") for f in (pl["merge"].get("files") or [])]}
+                if _current(features[fid]["phases"]) is None:
+                    features[fid]["status"] = "done"
+                    if active == fid:
+                        active = None
+            else:
+                _apply(product, verb, e, pl)
         elif verb == "WAIVE":
             waivers[pl.get("id")] = {"id": pl.get("id"), "owner": pl.get("owner"), "scope": pl.get("scope"),
                                      "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
-                                     "at": e["ts"]}
+                                     "at": e["ts"], "feature": fid}
         elif verb == "UNWAIVE":
             waivers.pop(pl.get("id"), None)
         elif verb == "PARK":
             parked = {"seq": e["seq"], "at": e["ts"], "commit": pl.get("source_commit"),
                       "counts": pl.get("counts") or {}}
-    current = next((p for p in phases if p["status"] not in ("APPROVED", "PROCEED-PAST")), None)
+    scope = features[active]["phases"] if active else product
+    current = _current(scope)
     head = entries[-1] if entries else None
     return {
         "version": RENDER_VERSION,
         "product": product_id,
+        "mode": mode,
         "ledger_seq": len(entries),
+        "feature": active,
         "current_phase": current["label"] if current else "done",
         "current_phase_id": current["id"] if current else None,
-        "phases": [{k: v for k, v in p.items() if v is not None} for p in phases],
+        "phases": _clean(scope),
+        "product_phases": _clean(product),
+        "features": [{k: v for k, v in {
+            "id": f["id"], "status": f["status"], "seq": f["seq"], "at": f["at"], "commit": f["commit"],
+            "current_phase": (_current(f["phases"]) or {}).get("label", "done"),
+            "merged_seq": (f["merged"] or {}).get("seq")}.items() if v is not None}
+            for f in (features[x] for x in order)],
         "waivers": [{k: v for k, v in w.items() if v is not None}
                     for w in sorted(waivers.values(), key=lambda w: w["seq"])],
         "parked": parked,
+        "scope_base": features[active]["commit"] if active else None,
+        "_feature_phases": {fid: _clean(features[fid]["phases"]) for fid in order},
+        "_feature_merged": {fid: features[fid]["merged"] for fid in order},
         "_head_ts": head["ts"] if head else None,
         "_entries": list(entries),  # verified ledger bodies (not rendered): payload digests, scorecard
     }
 
 
+def scope_table(st):
+    """The path-map phase table in force for this state (pathmap.scope_phases)."""
+    return pathmap.scope_phases(st.get("mode"), st.get("feature"))
+
+
 def render_phase(st):
-    doc = {k: v for k, v in st.items() if not k.startswith("_") and k != "current_phase_id"}
+    """.sdlc/phase.yaml: the PRODUCT's state (its phases, and a summary of each feature)."""
+    doc = {"version": st["version"], "product": st["product"], "mode": st.get("mode", "greenfield"),
+           "ledger_seq": st["ledger_seq"], "feature": st.get("feature"), "current_phase": st["current_phase"],
+           "phases": st.get("product_phases", st["phases"]), "features": st.get("features") or [],
+           "waivers": st["waivers"], "parked": st["parked"]}
     return PHASE_HEADER + yamlite.emit(doc) + "\n"
+
+
+def feature_phase_path(root, fid):
+    return os.path.join(paths(root)["dir"], "features", fid, "phase.yaml")
+
+
+def render_feature(st, fid):
+    """.sdlc/features/<fid>/phase.yaml, rebuilt from the ledger like the product's (Amendment 2 §6)."""
+    f = next(x for x in st["features"] if x["id"] == fid)
+    doc = {"version": st["version"], "product": st["product"], "feature": fid, "status": f["status"],
+           "started_seq": f["seq"], "started_commit": f.get("commit"), "current_phase": f["current_phase"],
+           "merged": st["_feature_merged"].get(fid), "phases": st["_feature_phases"][fid]}
+    return PHASE_HEADER + yamlite.emit(doc) + "\n"
+
+
+def rendered_files(root, st):
+    """{absolute path: text} of every derived state file."""
+    out = {paths(root)["phase"]: render_phase(st)}
+    for f in st.get("features") or []:
+        out[feature_phase_path(root, f["id"])] = render_feature(st, f["id"])
+    return out
 
 
 def hardlinked(root):
@@ -236,17 +343,20 @@ def current_state(root):
         problems.append("hard link(s) to gate state: %s (a second path to these bytes bypasses .sdlc/ "
                         "protection)" % ", ".join(links))
     st = replay(prod["product"], entries if ok else [])
-    p = paths(root)["phase"]
     if ok:
-        on_disk = ""
-        if os.path.exists(p):
-            with open(p) as f:
-                on_disk = f.read()
-        if on_disk != render_phase(st):
+        for path, want in rendered_files(root, st).items():
+            on_disk = ""
+            if os.path.exists(path):
+                with open(path) as f:
+                    on_disk = f.read()
+            if on_disk == want:
+                continue
             if on_disk and _render_version(on_disk) < RENDER_VERSION and not links:
                 write_phase(root, st)  # gate update: re-derive from the verified ledger
-            else:
-                problems.append("phase.yaml differs from the state the ledger replays to (drift)")
+                break
+            name = os.path.relpath(path, paths(root)["dir"])
+            problems.append("phase.yaml differs from the state the ledger replays to (drift)%s" % (
+                "" if name == "phase.yaml" else " in %s" % name))
     return st, problems
 
 
@@ -259,11 +369,13 @@ def append_line(root, line_json):
 
 
 def write_phase(root, st):
-    p = paths(root)["phase"]
-    tmp = p + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(render_phase(st))
-    os.replace(tmp, p)
+    """Write every derived state file: .sdlc/phase.yaml and each feature's phase.yaml."""
+    for p, text in rendered_files(root, st).items():
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        tmp = p + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(text)
+        os.replace(tmp, p)
 
 
 PRODUCT_TEMPLATE = """# MOADIX product definition. Gate-owned: created by INIT; agents cannot write

@@ -35,7 +35,7 @@ import subprocess
 
 from . import adopt, pathmap, state, validation
 
-PH = r"(?P<phase>\d{1,2}[a-z]?)"
+PH = r"(?P<phase>\d{1,2}[a-z]?|B)"
 TEXT = r"[ !#-\[\]-~]{1,300}?"  # printable ASCII without " and \ (the checker's alphabet)
 CODE = r" (?P<code>\d{6})"
 PID = r"(?P<id>[A-Za-z0-9_.-]{1,64})"
@@ -49,6 +49,8 @@ COMMANDS = [
     ("PROCEED-PAST", re.compile(r"^PROCEED-PAST " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("PARK", re.compile(r"^PARK" + CODE + r"$")),
     ("INIT", re.compile(r"^INIT " + PID + CODE + r"$")),
+    ("FEATURE", re.compile(r"^FEATURE " + PID + CODE + r"$")),
+    ("COLLAPSE", re.compile(r"^COLLAPSE " + PH + CODE + r"$")),
     ("ADOPT", re.compile(r"^ADOPT" + CODE + r"$")),
     ("REVIEW", re.compile(r"^REVIEW " + PH + r"$")),
     ("STATUS", re.compile(r"^STATUS$")),
@@ -62,6 +64,8 @@ USAGE = {
     "PROCEED-PAST": "PROCEED-PAST <phase> <reason> <code>",
     "PARK": "PARK <code>",
     "INIT": "INIT <product-id> <code>",
+    "FEATURE": "FEATURE <feature-id> <code>",
+    "COLLAPSE": "COLLAPSE <phase> <code>",
     "ADOPT": "ADOPT <code>",
     "REVIEW": "REVIEW <phase>",
     "STATUS": "STATUS",
@@ -113,13 +117,22 @@ def parse(message):
 
 def _summary(st):
     rows = ["%s %s: %s" % (p["label"], p["name"], p["status"]) for p in st["phases"]]
+    scope = "product (%s)" % st.get("mode", "greenfield")
+    if st.get("feature"):
+        f = next((x for x in st.get("features") or [] if x["id"] == st["feature"]), {})
+        scope = "feature %s (started at ledger seq %s; the product's documents are frozen)" % (
+            st["feature"], f.get("seq"))
+    done = [x for x in st.get("features") or [] if x["status"] == "done"]
+    if done:
+        scope += "; finished features: %s" % ", ".join("%s (merged at seq %s)" % (x["id"], x.get("merged_seq"))
+                                                       for x in done)
     w = ", ".join("%s (owner %s, scope %s, expires %s)" % (x["id"], x.get("owner"), x.get("scope") or "-",
                                                            x.get("expiry")) for x in st["waivers"]) or "none"
     parked = ""
     if st.get("parked"):
         parked = "; PARKED at ledger seq %s (counts: %s)" % (st["parked"]["seq"], json.dumps(st["parked"].get("counts")))
-    return "current phase %s; ledger seq %d; waivers: %s%s; phases: %s" % (
-        st["current_phase"], st["ledger_seq"], w, parked, "; ".join(rows))
+    return "scope %s; current phase %s; ledger seq %d; waivers: %s%s; phases: %s" % (
+        scope, st["current_phase"], st["ledger_seq"], w, parked, "; ".join(rows))
 
 
 def _approval_digest(st, label):
@@ -140,9 +153,13 @@ def _precheck(name, g, st):
     """Reason string if the action cannot apply to this state, else None."""
     ph = _phase(st, g.get("phase")) if "phase" in g else None
     if "phase" in g and ph is None:
-        return "there is no phase %s (phases: %s)" % (g["phase"], ", ".join(pathmap.LABELS))
-    if name in ("APPROVE", "PROCEED-PAST") and g["phase"] != st["current_phase"]:
-        return "phase %s is not the current phase (current: %s)" % (g["phase"], st["current_phase"])
+        return "there is no phase %s in this scope (phases: %s)" % (
+            g["phase"], ", ".join(p["label"] for p in st["phases"]))
+    if name in ("APPROVE", "PROCEED-PAST", "COLLAPSE") and g["phase"] != st["current_phase"]:
+        return "phase %s is not the current phase (current: %s%s)" % (
+            g["phase"], st["current_phase"], ", in feature %s" % st["feature"] if st.get("feature") else "")
+    if name == "FEATURE":
+        return _feature_precheck(g["id"], st)
     if name == "REOPEN" and ph["status"] not in ("APPROVED", "PROCEED-PAST"):
         return "phase %s is not approved, so there is nothing to reopen" % g["phase"]
     if name == "WAIVE" and any(w["id"] == g["id"] for w in st["waivers"]):
@@ -233,6 +250,60 @@ def _proceed_gate(root, st, label):
     if not failing:
         return False, "every validator passed, so there is nothing to proceed past; APPROVE %s instead" % label, data
     return True, failing, data
+
+
+# ---------------------------------------------------------------- FEATURE, COLLAPSE (increment 6)
+
+def baseline_approved(st):
+    """Amendment 2: a product has an approved baseline when it was released (phase 11
+    approved or proceeded past) or, onboarded, when its phase B was approved."""
+    want = pathmap.BASELINE[0][1] if st.get("mode") == "onboarding" else pathmap.RELEASE
+    ph = next((p for p in st.get("product_phases") or [] if p["label"] == want), None)
+    return bool(ph and ph["status"] in ("APPROVED", "PROCEED-PAST")), want
+
+
+def _feature_precheck(fid, st):
+    if not pathmap.FEATURE_ID.match(fid) or ".." in fid:
+        return "%r is not a usable feature id (letters, digits, '.', '_' and '-', starting with a letter or digit)" % fid
+    ok, want = baseline_approved(st)
+    if not ok:
+        return ("the product has no approved baseline yet: a feature cycle starts once the product's phase %s is "
+                "approved (%s)" % (want, "onboarding: APPROVE B" if want == "B" else "released at phase 11"))
+    if st.get("feature"):
+        return ("feature %s is active (its current phase is %s). One feature at a time: finish it (approving its "
+                "phase 11 merges it) before starting %s" % (st["feature"], st["current_phase"], fid))
+    if any(f["id"] == fid for f in st.get("features") or []):
+        return "feature id %s was already used (ledger seq %s); every feature needs its own id" % (
+            fid, next(f["seq"] for f in st["features"] if f["id"] == fid))
+    return None
+
+
+def _collapse_gate(root, st, label):
+    """(payload extras, reason). Increment 6 (item C): a phase the declared size profile
+    collapses is skipped only through a RECORDED ruling: the size (S) is read from the
+    approved BRD (the feature's own BRD in a feature cycle) and must agree with
+    .sdlc/product.yaml's size when that is set; profiles.yaml names the reason and the
+    checks that will not run, and the ledger line carries both."""
+    from .v1 import hlib
+    brd = None
+    if st.get("feature"):
+        from . import feature
+        brd = feature.feature_doc(root, st["feature"], "0")
+        if not brd:
+            return None, "the feature has no BRD additions (%s/00-*.md) declaring its size" % feature.folder(st["feature"])
+        brd = os.path.join(root, brd)
+    stt, val = hlib.collapsed_phases(root, brd)
+    if stt != "ok":
+        return None, "whether phase %s may collapse is unknown: %s" % (label, val)
+    if label not in val:
+        return None, ("the size profile does not collapse phase %s (it collapses %s); do the phase, or PROCEED-PAST it "
+                      "with a reason" % (label, ", ".join(sorted(val)) or "nothing at this size"))
+    size = str(state.load_product(root).get("size") or "")
+    if size and size not in ("null", "None") and size.upper() != val[label]["size"]:
+        return None, ("the BRD declares size %s but .sdlc/product.yaml says %s; they must agree before anything is "
+                      "collapsed" % (val[label]["size"], size))
+    return {"size": val[label]["size"], "reason": val[label]["reason"],
+            "checks_not_run": val[label]["checks_not_run"]}, None
 
 
 # ---------------------------------------------------------------- WAIVE
@@ -450,6 +521,7 @@ def _init(message, g, cwd):
         return _ctx("INIT NOT recorded: %s is not inside a git repository; run `git init` there first. Nothing "
                     "changed; the code is spent." % cwd)
     root = os.path.realpath(top)
+    mode, code_files = onboarding_mode(root)
     try:
         rc, out = state.run_checker(["anchor", "--product", pid])
     except (state.GateError, OSError, subprocess.SubprocessError) as e:
@@ -466,6 +538,8 @@ def _init(message, g, cwd):
         _burn_all(message)
         return _ctx("INIT NOT recorded: %s. Nothing changed; the code is spent." % e)
     payload = {"product": pid, "source_commit": _git_head(root)}
+    if mode == "onboarding":
+        payload.update(mode="onboarding", code_files=code_files)
     rc, out = state.run_checker(["record", "--product", pid, "--action", "INIT %s" % pid, "--code", code,
                                  "--payload-b64", base64.b64encode(json.dumps(payload, sort_keys=True).encode()).decode()])
     if rc != 0:
@@ -477,8 +551,30 @@ def _init(message, g, cwd):
     state.append_line(root, out)
     st, _ = state.current_state(root)
     state.write_phase(root, st)
-    return _ctx("INIT %s recorded (ledger seq 1): %s/.sdlc created; the current phase is %s. Tell the operator it was "
-                "recorded." % (pid, root, st["current_phase"]))
+    from . import bmadcore
+    bm = bmadcore.ensure(root) or ""
+    if mode == "onboarding":
+        return _ctx("INIT %s recorded (ledger seq 1): %s/.sdlc created. The repository already has code (%d tracked "
+                    "file(s)), so the product starts in ONBOARDING mode at phase B (Baseline): document what exists, "
+                    "citing the code (path:line), from the templates of /moadix:baseline. APPROVE B <code> approves the "
+                    "baseline; from then on every change is a feature cycle (FEATURE <id> <code>). %s Tell the "
+                    "operator it was recorded." % (pid, root, code_files, bm))
+    return _ctx("INIT %s recorded (ledger seq 1): %s/.sdlc created; the current phase is %s. %s Tell the operator it "
+                "was recorded." % (pid, root, st["current_phase"], bm))
+
+
+NOT_CODE = re.compile(r"^(?:README[^/]*|LICENSE[^/]*|CHANGELOG[^/]*|CLAUDE\.md|\.gitignore|\.gitattributes|"
+                      r"docs/.*|sdlc/.*|\.sdlc-proposals/.*|\.github/[^/]*\.md)$", re.I)
+
+
+def onboarding_mode(root):
+    """('onboarding', n) when the repository already has code at HEAD (Amendment 2: INIT on
+    a repo with code starts at phase B), else ('greenfield', n). Code = any tracked file
+    other than documentation (README, LICENSE, docs/, sdlc/, ...)."""
+    rc, out, _ = _git(root, "ls-files", "-z")
+    files = [f for f in out.split("\0") if f] if rc == 0 else []
+    code = [f for f in files if not NOT_CODE.match(f)]
+    return ("onboarding" if code else "greenfield"), len(code)
 
 
 # ---------------------------------------------------------------- handle
@@ -556,6 +652,14 @@ def handle(hook_input):
                     "Tell the operator to run STATUS." % (name, "; ".join(problems)))
     why = _precheck(name, g, st)
     payload = dict(g, source_commit=_git_head(root))
+    if name == "FEATURE":
+        payload["feature"] = g["id"]
+    elif st.get("feature") and name in ("APPROVE", "REOPEN", "PROCEED-PAST", "COLLAPSE", "WAIVE", "UNWAIVE"):
+        payload["feature"] = st["feature"]  # Amendment 2 §6: ledger lines carry the feature id
+    if not why and name == "COLLAPSE":
+        extra, why = _collapse_gate(root, st, g["phase"])
+        if extra:
+            payload.update(extra)
     if not why and name == "APPROVE":
         ok, why, data = _approve_gate(root, st, g["phase"])
         if ok:
@@ -563,6 +667,15 @@ def handle(hook_input):
                                      "finished_at": data.get("finished_at"), "digest": data["_digest"],
                                      "results": [{"validator": r["validator"], "result": r["result"],
                                                   "exit_code": r["exit_code"]} for r in data["results"]]}
+    merge = None
+    if not why and name == "APPROVE" and st.get("feature") and g["phase"] == pathmap.RELEASE:
+        from . import feature
+        try:
+            merge = feature.merge_plan(root, st["feature"], st["ledger_seq"] + 1)
+            payload["merge"] = {"feature": st["feature"], "commit_before": payload["source_commit"],
+                                "files": merge["files"]}
+        except (feature.FeatureError, OSError) as e:
+            why = "the feature's additions cannot be merged into the product documents: %s" % e
     if not why and name == "PROCEED-PAST":
         ok, res, data = _proceed_gate(root, st, g["phase"])
         if ok:
@@ -571,6 +684,9 @@ def handle(hook_input):
             why = res
     if not why and name == "WAIVE":
         why = _waive_gate(root, g)
+    if not why and name == "PROCEED-PAST" and st.get("feature") and g["phase"] == pathmap.RELEASE:
+        why = ("a feature's phase 11 merges its additions into the product documents, so it can only be APPROVED "
+               "(on passing validators), never proceeded past")
     adoption = None
     if not why and name == "ADOPT":
         try:
@@ -609,6 +725,16 @@ def handle(hook_input):
     state.append_line(root, out)
     if adoption:
         adopt.apply(root, adoption)
+    merged = ""
+    if merge:
+        from . import feature
+        seq0 = json.loads(json.loads(out)["body"])["seq"]
+        try:
+            commit, files = feature.apply_merge(root, st["feature"], payload["merge"], seq0)
+            merged = " Feature %s merged into the product documents (%s), committed by the gate as %s." % (
+                st["feature"], ", ".join(f["target"] for f in files), commit[:12])
+        except Exception as e:  # recorded: the ledger holds the plan; say plainly that the write failed
+            merged = " The merge was RECORDED (ledger) but writing it failed: %s. Tell the operator." % e
     st2, problems2 = state.current_state(root)
     if not problems2 or all("phase.yaml differs" in p for p in problems2):
         state.write_phase(root, st2)
@@ -616,9 +742,25 @@ def handle(hook_input):
     nxt = ""
     if name == "APPROVE":
         nxt = " It rests on validator result %s." % payload["validation"]["digest"][:19]
-    if name in ("APPROVE", "PROCEED-PAST"):
-        nxt += " Proceed to phase %s." % st2["current_phase"] if st2["current_phase"] != "done" else \
-            " All phases are done."
+    if name in ("APPROVE", "PROCEED-PAST", "COLLAPSE"):
+        nxt += merged
+        if st.get("feature") and st2.get("feature") != st["feature"]:
+            nxt += " Feature %s is complete; the product's documents now include it. FEATURE <id> <code> starts " \
+                   "the next one." % st["feature"]
+        elif st2["current_phase"] != "done":
+            nxt += " Proceed to %sphase %s." % ("feature %s " % st2["feature"] if st2.get("feature") else "",
+                                                 st2["current_phase"])
+        elif st.get("mode") == "onboarding" or (st2.get("product_phases") and not st2.get("feature")):
+            nxt += " All phases are done. From here every change is a feature cycle (FEATURE <id> <code>)."
+        else:
+            nxt += " All phases are done."
+    if name == "COLLAPSE":
+        nxt = " Phase %s collapsed by the size-%s profile (recorded ruling; checks not run: %s).%s" % (
+            g["phase"], payload["size"], ", ".join(payload["checks_not_run"]) or "none", nxt)
+    if name == "FEATURE":
+        nxt = (" Feature %s started at phase %s; its documents go in sdlc/features/%s/ (see /moadix:feature); the "
+               "product's approved documents are frozen until the feature's phase 11 merges the additions." % (
+                   g["id"], st2["current_phase"], g["id"]))
     if name == "REOPEN":
         nxt = " Phase %s is open again; continue from there." % g["phase"]
     if name == "ADOPT":

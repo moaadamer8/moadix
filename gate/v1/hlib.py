@@ -594,7 +594,7 @@ def phases_of(doc):
 SIZE_RE = re.compile(r"^\s*[-*]\s*\*\*Size:?\*\*:?\s*([SML])\b", re.M | re.I)
 
 
-def collapsed_phases(root_dir):
+def collapsed_phases(root_dir, brd_path=None):
     """(state, value) -- which phases the declared size profile collapses.
 
     state 'ok'      -> value is {label: {"size", "reason", "checks_not_run"}}
@@ -616,7 +616,8 @@ def collapsed_phases(root_dir):
     except Exception as exc:                                    # noqa: BLE001
         return "unknown", "the control files could not be read (%r)" % (exc,)
     groot = (paths.get("governed_root") or "").strip("/")
-    brd = os.path.join(root_dir, groot, "sdlc", "00-brd.md")
+    # MOADIX v2 (increment 6): a feature cycle reads its OWN BRD additions' size.
+    brd = brd_path or os.path.join(root_dir, groot, "sdlc", "00-brd.md")
     if not os.path.exists(brd):
         return "unknown", "the BRD does not exist at %s" % brd
     try:

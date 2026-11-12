@@ -59,10 +59,10 @@ PROTECTED_EXTERNAL = [
 
 # v1 phases (id, label, name, allow globs relative to the repo root).
 PHASES = [
-    (0, "0", "BRD", ["sdlc/00-*.md"]),
-    (1, "1", "Research", ["sdlc/01-*.md", "sdlc/decisions/**"]),
-    (2, "2", "PRD", ["sdlc/02-*.md"]),
-    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/adr/**"]),
+    (0, "0", "BRD", ["sdlc/00-*.md", "sdlc/00-forge/**"]),
+    (1, "1", "Research", ["sdlc/01-*.md", "sdlc/01-research/**", "sdlc/decisions/**"]),
+    (2, "2", "PRD", ["sdlc/02-*.md", "sdlc/02-prd/**"]),
+    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/03-architecture/**", "sdlc/adr/**"]),
     (4, "4", "Threat Model", ["sdlc/04-*.md"]),
     (5, "5", "LLD", ["sdlc/05-*.md", "sdlc/05-lld/**", "api/**", "openapi/**"]),
     (6, "6", "UX", ["sdlc/06-*.md", "design/**"]),
@@ -78,10 +78,42 @@ PHASES = [
     (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**"]),
     (12, "10b", "Regression Suites", ["sdlc/10b-*.md", "e2e/**", "e2e-mobile/**", ".maestro/**", ".github/workflows/**"]),
     (13, "10c", "Concurrency and Load", ["sdlc/10c-*.md", "evidence/concurrency/**", "load/**"]),
-    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/12-*.md"]),
+    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/12-*.md", "sdlc/12-retro/**"]),
     (15, "11b", "Store Release", ["sdlc/11b-*.md", "release/store/**", "release/assets/**"]),
 ]
 LABELS = [p[1] for p in PHASES]
+# Increment 6 (item C): the BMAD skills' run folders (gate/config/bmad-adapter.yaml) are
+# sdlc/00-forge/, 01-research/, 02-prd/, 03-architecture/ and, for the retro, 12-retro/.
+
+# Increment 6 (Amendment 2, onboarding): a product INITialised on a repo that already has
+# code has ONE product phase, B (Baseline). It documents what exists, in the product's own
+# document names, so feature cycles validate against the same files a greenfield product
+# has: as-is BRD (00), as-is PRD (02), architecture (03), threat model with each SEC-ID's
+# current status (04), and the B- documents: test inventory, known-gaps register, accounts
+# and services. After APPROVE B every change is a feature cycle.
+BASELINE = [
+    (0, "B", "Baseline", ["sdlc/00-*.md", "sdlc/02-*.md", "sdlc/03-*.md", "sdlc/04-*.md", "sdlc/B-*.md",
+                          "sdlc/02-prd/**", "sdlc/03-architecture/**"]),
+]
+RELEASE = next(lab for _i, lab, name, _p in PHASES if name == "Release")  # the phase a feature's merge happens in
+FEATURES_DIR = "sdlc/features"
+FEATURE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
+def feature_phases(fid):
+    """Amendment 2: a feature cycle runs the same 16 phases, scoped to the feature. Its
+    documents live in sdlc/features/<fid>/ (each product document glob sdlc/X becomes
+    sdlc/features/<fid>/X); code paths (src/**, tests/**, ...) are the product's."""
+    pre = "%s/%s/" % (FEATURES_DIR, fid)
+    return [(pid, label, name, [pre + g[len("sdlc/"):] if g.startswith("sdlc/") else g for g in pats])
+            for pid, label, name, pats in PHASES]
+
+
+def scope_phases(mode, feature=None):
+    """The phase table in force: the active feature's, the onboarding baseline, or the product's."""
+    if feature:
+        return feature_phases(feature)
+    return BASELINE if mode == "onboarding" else PHASES
 
 _CACHE: dict = {}
 
@@ -146,10 +178,14 @@ class Decision(object):
         return "Decision(%s, %s)" % ("ALLOW" if self.allow else "DENY", self.klass)
 
 
-def classify(abspath, root, current_phase_id, foreign=False):
+def classify(abspath, root, current_phase_id, foreign=False, phases=None, feature=None):
     """Decision for writing `abspath`. root is the product repo (or None).
     current_phase_id is None when every phase is approved. foreign: root is not
-    the session's product, so only tiers 1-2 (protected) apply."""
+    the session's product, so only tiers 1-2 (protected) apply. phases: the phase
+    table in force (scope_phases; default the product's 16); feature: the active
+    feature id, when a feature cycle is running."""
+    phases = phases or PHASES
+    labels = [p[1] for p in phases]
     for pat, klass, why in PROTECTED_EXTERNAL:
         full = _expand(pat)
         if glob_match(full, abspath) or abspath == full.rstrip("/*"):
@@ -182,34 +218,48 @@ def classify(abspath, root, current_phase_id, foreign=False):
     if foreign:
         return Decision(True, "%s is in another product (%s); its phase map is enforced in its own session" % (
             rel, root), "foreign-product")
-    owners = phase_owners(rel)
+    owners = phase_owners(rel, phases)
+    if not owners and rel.startswith(FEATURES_DIR + "/"):
+        other = rel[len(FEATURES_DIR) + 1:].split("/", 1)[0]
+        if feature and other != feature:
+            return Decision(False, "%s belongs to feature %s, not the active feature %s; a finished feature's "
+                                   "documents are frozen" % (rel, other, feature), "feature-other")
+        if not feature:
+            return Decision(False, "%s is a feature document, and no feature cycle is active (the operator starts "
+                                   "one with FEATURE <id> <code>)" % rel, "feature-none")
+    if not owners and feature and phase_owners(rel, PHASES) and rel.startswith("sdlc/"):
+        return Decision(False, "%s is an approved product document and stays frozen during feature %s; write the "
+                               "feature's additions under %s/%s/ (the gate merges them into the product documents "
+                               "when the feature's phase 11 is approved)" % (rel, feature, FEATURES_DIR, feature),
+                        "product-frozen")
     if not owners:
         return Decision(False, "%s is in no phase's path map (deny by default); a real deliverable must be "
                                "added to a phase's allow list" % rel, "unmapped")
-    names = ", ".join("%s (%s)" % (LABELS[o], PHASES[o][2]) for o in owners)
+    names = ", ".join("%s (%s)" % (labels[o], phases[o][2]) for o in owners)
     if current_phase_id is None:
         return Decision(False, "%s belongs to phase %s; every phase is approved, so it is frozen. Ask the operator "
-                               "to REOPEN %s first" % (rel, names, LABELS[owners[0]]), "all-approved")
+                               "to REOPEN %s first, or start a feature cycle (FEATURE <id> <code>)" % (
+                                   rel, names, labels[owners[0]]), "all-approved")
     if current_phase_id in owners:
-        return Decision(True, "%s belongs to the current phase %s" % (rel, LABELS[current_phase_id]), "phase-current")
-    cur = "%s (%s)" % (LABELS[current_phase_id], PHASES[current_phase_id][2])
+        return Decision(True, "%s belongs to the current phase %s" % (rel, labels[current_phase_id]), "phase-current")
+    cur = "%s (%s)" % (labels[current_phase_id], phases[current_phase_id][2])
     if all(o > current_phase_id for o in owners):
         return Decision(False, "%s belongs to phase %s, which has not started; the current phase is %s and must "
                                "be approved first" % (rel, names, cur), "phase-later")
     return Decision(False, "%s belongs to phase %s, which is approved and therefore frozen (editing it would "
                            "silently invalidate the approval); the current phase is %s. Ask the operator to REOPEN %s "
-                           "first" % (rel, names, cur, LABELS[max(o for o in owners if o < current_phase_id)]),
+                           "first" % (rel, names, cur, labels[max(o for o in owners if o < current_phase_id)]),
                     "phase-frozen")
 
 
-def phase_owners(rel):
+def phase_owners(rel, phases=None):
     """Phase ids that own `rel` (v1 gatecore.classify): the MOST SPECIFIC matching
     glob wins (longest literal prefix), so `release/assets/**` belongs to 11b even
     though phase 11 owns `release/**`. A glob listed under several phases is owned
     by all of them (v1 defect, check-seam duplicate globs: v1 gave it to the first
     phase only, so `tests/**` was frozen during phase 8 Testing)."""
     best, owners = -1, []
-    for pid, _l, _n, pats in PHASES:
+    for pid, _l, _n, pats in (phases or PHASES):
         for g in pats:
             if glob_match(g, rel):
                 spec = len(re.split(r"[*?\[]", g, maxsplit=1)[0])

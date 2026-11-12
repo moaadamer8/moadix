@@ -172,3 +172,28 @@ exemptions:
     token: 10a
     reason: "Verifier policy (DESIGN.md §5 verifier roles table): the live verifier belongs to phase 10a"
     owner: operator
+  - file: gate/config/bmad-adapter.yaml
+    axis: phase
+    token: 0
+    reason: "Increment 6: bmad-forge-idea runs in phase 0 (BRD); its run folder sdlc/00-forge/ is phase 0's"
+    owner: operator
+  - file: gate/config/bmad-adapter.yaml
+    axis: phase
+    token: 1
+    reason: "Increment 6: bmad-deep-recon runs in phase 1 (Research); its run folder sdlc/01-research/ is phase 1's"
+    owner: operator
+  - file: gate/config/bmad-adapter.yaml
+    axis: phase
+    token: 2
+    reason: "Increment 6: bmad-prd runs in phase 2 (PRD); its run folder sdlc/02-prd/ is phase 2's"
+    owner: operator
+  - file: gate/config/bmad-adapter.yaml
+    axis: phase
+    token: 3
+    reason: "Increment 6: bmad-architecture runs in phase 3 (HLD); its run folder sdlc/03-architecture/ is phase 3's"
+    owner: operator
+  - file: gate/config/verifiers.yaml
+    axis: phase
+    token: 9
+    reason: "Increment 6 ruling 1: the SF triager belongs to phase 9 (Security Verification), where Claude Security's findings are judged"
+    owner: operator
