@@ -29,3 +29,8 @@ Left as is: the Reviewer Gate has the agent apply clear fixes to its own spine a
 - BMad core shared scripts, referenced as `{project-root}/_bmad/scripts/...` and not bundled here (left unchanged on purpose): `memlog.py` (init, append), `resolve_customization.py`, `resolve_config.py`. Without a BMad core install these calls fail and the skill falls back to the defaults it describes.
 - `scripts/lint_spine.py` (bundled) needs `uv`. It does not check section names, so the added Data Model / Contracts sections do not affect it.
 - `{workflow.doc_standards}` defaults to `skill:bmad-review`; `{workflow.finalize_reviewers}` lists review lenses. If such a skill is not allowed in the phase, the rubric walker still runs.
+
+## Increment 6: output paths (MOADIX)
+
+- `customize.toml`: `spine_output_path = "{planning_artifacts}/architecture"` -> `"{project-root}/sdlc/03-architecture"`. Upstream writes under `_bmad-output/`, which no phase's path map owns, so every write was denied. The new folder is owned by phase 3 (gate/pathmap.py); in a feature cycle pass an explicit `doc_workspace` under `sdlc/features/<feature-id>/` instead.
+- BMad core's shared scripts (`memlog.py`, `resolve_config.py`, `resolve_customization.py`, `config_utils.py`) are now vendored verbatim in MOADIX's gate (`gate/bmad/scripts/`) and installed by the gate into the product's `_bmad/scripts/` (with a MOADIX-written `_bmad/config.toml`), so the `uv run {project-root}/_bmad/scripts/...` calls above resolve.

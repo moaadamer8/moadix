@@ -123,6 +123,12 @@ for f in "$HERE"/gate/v1/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/v1/$(basename
 for f in "$HERE"/gate/config/*.yaml "$HERE"/gate/config/*.toml "$HERE"/gate/config/*.ini; do
   put 0644 "$f" "$MOADIX_HOME/gate/config/$(basename "$f")"
 done
+# increment 6: BMad core's shared scripts (vendored verbatim), which the gate installs into products' _bmad/
+as_root /bin/mkdir -p "$MOADIX_HOME/gate/bmad/scripts"
+for f in "$HERE"/gate/bmad/LICENSE "$HERE"/gate/bmad/TRADEMARK.md "$HERE"/gate/bmad/MOADIX-UPSTREAM.sha256; do
+  put 0644 "$f" "$MOADIX_HOME/gate/bmad/$(basename "$f")"
+done
+for f in "$HERE"/gate/bmad/scripts/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/bmad/scripts/$(basename "$f")"; done
 # increment 5: the gate-run tools' own configs (semgrep rules, redocly config, the k6 wrapper)
 for sub in semgrep redocly k6; do
   as_root /bin/mkdir -p "$MOADIX_HOME/gate/config/$sub"
@@ -151,11 +157,12 @@ put 0644 "$work/install-record" "$MOADIX_HOME/install-record"
 if [[ $MODE == real ]]; then
   as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
     "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
-    "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6"
+    "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6" "$MOADIX_HOME/gate/bmad" \
+    "$MOADIX_HOME/gate/bmad/scripts"
 fi
 as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
   "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
-  "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6"
+  "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6" "$MOADIX_HOME/gate/bmad" "$MOADIX_HOME/gate/bmad/scripts"
 
 # ---- 4. secrets ------------------------------------------------------------------
 if [[ $UPDATE == 0 ]]; then

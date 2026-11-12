@@ -1,6 +1,6 @@
 # upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
 4a256afa9c725e0bf5b55961d21774f1eb00011dbe31509e280a955bdb1a5c09  modified  SKILL.md  bmad/src/bmm-skills/plan/bmad-architecture/SKILL.md
-e9c5f75bd6605199f3908d6a1f013d6b42fb12b6f35c9a5e13a44f7f872b7b79  verbatim  customize.toml  bmad/src/bmm-skills/plan/bmad-architecture/customize.toml
+e9c5f75bd6605199f3908d6a1f013d6b42fb12b6f35c9a5e13a44f7f872b7b79  modified  customize.toml  bmad/src/bmm-skills/plan/bmad-architecture/customize.toml
 4db2708f335c94cb024b5eba022b1e3d88b1ec61c94c4716626d9b89684f5833  modified  references/headless.md  bmad/src/bmm-skills/plan/bmad-architecture/references/headless.md
 d32e32a3c1d59b5612b947004f3f6fef1117a13ce9f1ffa428d616e0b5d4db69  verbatim  references/reviewer-gate.md  bmad/src/bmm-skills/plan/bmad-architecture/references/reviewer-gate.md
 dd48be20384adfa281d295e34a39c1ae55727af7e98efe42525be31d1c5c001e  verbatim  scripts/lint_spine.py  bmad/src/bmm-skills/plan/bmad-architecture/scripts/lint_spine.py

@@ -1,0 +1,29 @@
+# MOADIX BMAD seam (increment 6; read by gate/v1/check_seam.py). Installed root-owned.
+# BMad core's shared scripts are vendored verbatim in gate/bmad/ and installed by the gate
+# into each product's _bmad/ (gate/bmadcore.py). The vendored BMAD skills write their run
+# folders under the output paths below, which must be writable in the phase they run in.
+version: 1
+bmad_version: "6.12.4"
+commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
+scripts: [memlog.py, resolve_config.py, resolve_customization.py, config_utils.py]
+skills:
+  - skill: bmad-forge-idea
+    phase: "0"
+    key: forge_output_path
+    output: "{project-root}/sdlc/00-forge"
+  - skill: bmad-deep-recon
+    phase: "1"
+    key: research_output_path
+    output: "{project-root}/sdlc/01-research"
+  - skill: bmad-prd
+    phase: "2"
+    key: prd_output_path
+    output: "{project-root}/sdlc/02-prd"
+  - skill: bmad-architecture
+    phase: "3"
+    key: spine_output_path
+    output: "{project-root}/sdlc/03-architecture"
+protected:
+  - _bmad/scripts/memlog.py
+  - _bmad/config.toml
+  - _bmad/MOADIX-BMAD.json

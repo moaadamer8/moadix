@@ -21,3 +21,8 @@ Side effect, left as is: On Activation step 5 offers to resume any session whose
 - BMad core shared scripts, referenced as `{project-root}/_bmad/scripts/...` and not bundled here (left unchanged on purpose): `memlog.py` (init, append), `resolve_customization.py`, `resolve_config.py`. Without a BMad core install these calls fail and the skill falls back to the defaults it describes.
 - `scripts/resolve_personas.py` (bundled) reads the installed BMad agent roster and `bmad-party-mode` customization when present; with neither it returns an empty pool and the skill generates personas itself.
 - `{workflow.on_complete}` (customize.toml, empty by default) runs operator-configured instructions at the end. Left in: it is operator configuration, and the MOADIX phase manifest still limits which skills it can call.
+
+## Increment 6: output paths (MOADIX)
+
+- `customize.toml`: `forge_output_path = "{output_folder}/forge"` -> `"{project-root}/sdlc/00-forge"`. Upstream writes under `_bmad-output/`, which no phase's path map owns, so every write was denied. The new folder is owned by phase 0 (gate/pathmap.py); in a feature cycle pass an explicit `doc_workspace` under `sdlc/features/<feature-id>/` instead.
+- BMad core's shared scripts (`memlog.py`, `resolve_config.py`, `resolve_customization.py`, `config_utils.py`) are now vendored verbatim in MOADIX's gate (`gate/bmad/scripts/`) and installed by the gate into the product's `_bmad/scripts/` (with a MOADIX-written `_bmad/config.toml`), so the `uv run {project-root}/_bmad/scripts/...` calls above resolve.

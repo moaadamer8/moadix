@@ -1,0 +1,5 @@
+# upstream sha256, status, vendored path, upstream path in bmad-code-org/BMAD-METHOD@bab9082c3e884e0d72c759bcd1a6d90bcc01be84 (v6.12.4)
+4916a9c63ec164568cf428ce27b44d6657933f098ee3ae3970b25f0f9d8f9240  verbatim  scripts/memlog.py  src/scripts/memlog.py
+70d7577396ed40ab9462ab75dce51f852bc2e094b2d1a054214f1b30c8789768  verbatim  scripts/resolve_config.py  src/scripts/resolve_config.py
+c95aab9f2dc500d6ab7db77d6a7860028701ce414e03690613a282cc3659d284  verbatim  scripts/resolve_customization.py  src/scripts/resolve_customization.py
+48afe2bc18a29201e343cce3703be1e70df9c83ee74eeb68e57ef8ef42e8c651  verbatim  scripts/config_utils.py  src/scripts/config_utils.py

@@ -30,7 +30,7 @@ persistent_facts = []
 # and Run all use the same folder shape: brief.md (drafted prompts),
 # imports/ (originals, full fidelity), digests/ (extracted claims),
 # research.md (the canonical summary/report), .memlog.md.
-research_output_path = "{planning_artifacts}/research"
+research_output_path = "{project-root}/sdlc/01-research"  # MOADIX: an sdlc/ path phase 1 owns (was: "{planning_artifacts}/research")
 run_folder_pattern = "{research_type}-{topic_slug}-{date}"
 
 # Seed document for a new run.

@@ -30,3 +30,8 @@ Left as is: the misroute suggestions in the greeting (step 4) and the `bmad-part
 - BMad core shared scripts, referenced as `{project-root}/_bmad/scripts/...` and not bundled here (left unchanged on purpose): `memlog.py` (init, append), `resolve_customization.py`, `resolve_config.py`. Without a BMad core install these calls fail and the skill falls back to the defaults it describes.
 - Validate intent opens the HTML report with `open`/`xdg-open`; in a sandbox this fails harmlessly (the reference already says to report the path instead).
 - `{workflow.finalize_reviewers}` and `{workflow.doc_standards}` may name other skills (e.g. `bmad-review`); if one is not allowed in the phase, the rubric walker still runs.
+
+## Increment 6: output paths (MOADIX)
+
+- `customize.toml`: `prd_output_path = "{planning_artifacts}/prds"` -> `"{project-root}/sdlc/02-prd"`. Upstream writes under `_bmad-output/`, which no phase's path map owns, so every write was denied. The new folder is owned by phase 2 (gate/pathmap.py); in a feature cycle pass an explicit `doc_workspace` under `sdlc/features/<feature-id>/` instead.
+- BMad core's shared scripts (`memlog.py`, `resolve_config.py`, `resolve_customization.py`, `config_utils.py`) are now vendored verbatim in MOADIX's gate (`gate/bmad/scripts/`) and installed by the gate into the product's `_bmad/scripts/` (with a MOADIX-written `_bmad/config.toml`), so the `uv run {project-root}/_bmad/scripts/...` calls above resolve.

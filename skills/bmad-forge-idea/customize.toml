@@ -32,7 +32,7 @@ on_complete = []
 # Parent folder for all forge sessions. Each session gets its own run
 # folder underneath (see run_folder_pattern). Lands directly under
 # {output_folder} so the forge works in core-only installs.
-forge_output_path = "{output_folder}/forge"
+forge_output_path = "{project-root}/sdlc/00-forge"  # MOADIX: an sdlc/ path phase 0 owns (was: "{output_folder}/forge")
 
 # Run-folder pattern inside forge_output_path. Resolved against the
 # idea-derived slug at activation. Same slug = same folder, so resuming

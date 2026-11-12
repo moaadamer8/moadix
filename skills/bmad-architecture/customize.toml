@@ -50,7 +50,7 @@ spine_template = "assets/spine-template.md"
 # collide on the same day — e.g. set it (team/user TOML) to "architecture-epic-{epic_id}", binding
 # {epic_id} from the driving spec / the activating payload. Headless callers may instead pass an
 # explicit doc_workspace and bypass the pattern entirely.
-spine_output_path = "{planning_artifacts}/architecture"
+spine_output_path = "{project-root}/sdlc/03-architecture"  # MOADIX: an sdlc/ path phase 3 owns (was: "{planning_artifacts}/architecture")
 run_folder_pattern = "architecture-{project_name}-{date}"
 
 # Prose-editorial standards applied at finalize ONLY to a fuller prose document the run produces

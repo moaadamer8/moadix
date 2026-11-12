@@ -11,6 +11,9 @@
 
 line-length = 100
 target-version = "py39"
+# increment 6: BMad core's scripts are vendored VERBATIM (upstream code, Python 3.11+, tomllib);
+# MOADIX does not restyle them. Their integrity is check-seam's job (sha256 against the pin).
+extend-exclude = ["gate/bmad"]
 
 [lint]
 # Chosen on EVIDENCE, not taste: every group below was measured against the

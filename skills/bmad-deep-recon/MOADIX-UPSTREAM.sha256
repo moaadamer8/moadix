@@ -1,6 +1,6 @@
 # upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
 e6de27d7c037e2951c5684d976186f6772cc724279af4b3cac05e21c42156db5  verbatim  SKILL.md  bmad/src/core-skills/bmad-deep-recon/SKILL.md
-24d1383066034fd4fcf282279aaf0d29d21910fd1247dfe3dbad74a70e78814d  verbatim  customize.toml  bmad/src/core-skills/bmad-deep-recon/customize.toml
+24d1383066034fd4fcf282279aaf0d29d21910fd1247dfe3dbad74a70e78814d  modified  customize.toml  bmad/src/core-skills/bmad-deep-recon/customize.toml
 514b0b7b1184cb95363dedeb0c2298a9bf5c430c74146fe2114f31780fadb325  verbatim  types/academic-lit.md  bmad/src/core-skills/bmad-deep-recon/types/academic-lit.md
 39b53df87d295fdc4388719fcdf31ad2221e64afc136e669207f46d2727a3aec  verbatim  types/competitive.md  bmad/src/core-skills/bmad-deep-recon/types/competitive.md
 3a34b2e62c3589f8c8d01158357ee9fba32648c9fdfe70035bb3ca971862896b  verbatim  types/domain.md  bmad/src/core-skills/bmad-deep-recon/types/domain.md

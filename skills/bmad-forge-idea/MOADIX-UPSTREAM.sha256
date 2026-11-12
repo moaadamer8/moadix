@@ -1,4 +1,4 @@
 # upstream sha256, status (verbatim|modified|new), vendored path, upstream path in the pinned commit
 e44d0008db0c0b30f3fa533e987efe66b2c852530b70fed03f0d4d9cbabe2b4b  modified  SKILL.md  bmad/src/core-skills/bmad-forge-idea/SKILL.md
-839f57b89c8b04038fa795525f55799ee5c23431b17d429fe668880e78399ef2  verbatim  customize.toml  bmad/src/core-skills/bmad-forge-idea/customize.toml
+839f57b89c8b04038fa795525f55799ee5c23431b17d429fe668880e78399ef2  modified  customize.toml  bmad/src/core-skills/bmad-forge-idea/customize.toml
 9273c71595d6317e0a1035b1a632a47a8943379797d0a4db0d2842e5787c31cc  verbatim  scripts/resolve_personas.py  bmad/src/core-skills/bmad-forge-idea/scripts/resolve_personas.py
