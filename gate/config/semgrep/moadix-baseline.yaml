@@ -1,0 +1,92 @@
+# MOADIX baseline Semgrep rules (increment 5). Gate-owned, local only: the gate runs
+# Semgrep with --metrics=off and these rules plus the product's own rules under
+# security/semgrep/*.yml (tracked at HEAD). No registry, no account, no network.
+# A product rule can only ADD findings; nosem comments and .semgrepignore are ignored.
+#
+# Severity: metadata.moadix_severity is what the gate reads (critical/high/medium/low).
+# ERROR without it counts as high, WARNING as medium, INFO as low.
+rules:
+  - id: moadix.js.eval-of-input
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval/new Function on a value that is not a literal runs attacker-controlled code.
+    metadata: {moadix_severity: high, cwe: "CWE-95"}
+    pattern-either:
+      - patterns:
+          - pattern: eval($X)
+          - pattern-not: eval("...")
+      - patterns:
+          - pattern: new Function(..., $X)
+          - pattern-not: new Function(..., "...")
+  - id: moadix.js.child-process-shell-interpolation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: A shell command built by string concatenation or template runs injected input.
+    metadata: {moadix_severity: high, cwe: "CWE-78"}
+    pattern-either:
+      - pattern: $CP.exec(`...${$X}...`, ...)
+      - pattern: $CP.exec($A + $B, ...)
+      - pattern: $CP.execSync(`...${$X}...`, ...)
+      - pattern: $CP.execSync($A + $B, ...)
+  - id: moadix.js.sql-string-building
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: SQL built by string concatenation or template is injectable; use parameters.
+    metadata: {moadix_severity: high, cwe: "CWE-89"}
+    pattern-either:
+      - pattern: $DB.query(`...${$X}...`, ...)
+      - pattern: $DB.query("..." + $X, ...)
+      - pattern: $DB.execute(`...${$X}...`, ...)
+      - pattern: $DB.execute("..." + $X, ...)
+  - id: moadix.js.tls-verification-off
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Turning off TLS verification accepts any certificate.
+    metadata: {moadix_severity: high, cwe: "CWE-295"}
+    pattern-either:
+      - pattern: "{..., rejectUnauthorized: false, ...}"
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+  - id: moadix.js.inner-html-assignment
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Assigning to innerHTML/outerHTML from a non-literal is an XSS sink.
+    metadata: {moadix_severity: medium, cwe: "CWE-79"}
+    patterns:
+      - pattern-either:
+          - pattern: $E.innerHTML = $X
+          - pattern: $E.outerHTML = $X
+      - pattern-not: $E.innerHTML = "..."
+      - pattern-not: $E.outerHTML = "..."
+  - id: moadix.js.jwt-hardcoded-secret
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: A JWT signed or verified with a literal secret.
+    metadata: {moadix_severity: high, cwe: "CWE-798"}
+    pattern-either:
+      - pattern: $JWT.sign($P, "...", ...)
+      - pattern: $JWT.verify($T, "...", ...)
+  - id: moadix.py.subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: subprocess with shell=True on a non-literal command runs injected input.
+    metadata: {moadix_severity: high, cwe: "CWE-78"}
+    patterns:
+      - pattern: subprocess.$F($CMD, ..., shell=True, ...)
+      - pattern-not: subprocess.$F("...", ..., shell=True, ...)
+  - id: moadix.py.yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: yaml.load without a safe loader constructs arbitrary objects.
+    metadata: {moadix_severity: high, cwe: "CWE-502"}
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+  - id: moadix.py.pickle-load
+    languages: [python]
+    severity: WARNING
+    message: pickle.load(s) on untrusted data runs code.
+    metadata: {moadix_severity: medium, cwe: "CWE-502"}
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)

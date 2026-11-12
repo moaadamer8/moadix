@@ -1,0 +1,4 @@
+# MOADIX gate Redocly config (increment 5). Passed with --config, so the product's own
+# redocly.yaml and .redocly.lint-ignore.yaml are never read. Any error fails phase 5.
+extends:
+  - recommended

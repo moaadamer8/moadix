@@ -1,0 +1,18 @@
+# MOADIX gate gitleaks config (increment 5). Passed with --config, so a product's own
+# .gitleaks.toml is never read; --ignore-gitleaks-allow and an empty
+# --gitleaks-ignore-path mean inline `gitleaks:allow` comments and .gitleaksignore are
+# ignored too. An exception to a detected secret is a ledger waiver, never a file the
+# agent can edit -- and a secret is high severity, which cannot be waived: remove it
+# and rotate it.
+title = "moadix gate"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "dependency trees and gate state are not the product's source"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.sdlc/''',
+  '''(^|/)package-lock\.json$''',
+]
