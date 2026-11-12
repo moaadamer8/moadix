@@ -1,0 +1,198 @@
+PASS  [pins] dotenvx 2.38.2 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/dotenvx-2.38.2/node_modules/@dotenvx/dotenvx/src/cli/dotenvx.js (175b586dc95bb94fb2ad712a5c646c784967b78610e52e2f95cf0553ff77e668)
+PASS  [pins] gitleaks 8.30.1 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/gitleaks-8.30.1/gitleaks (b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5)
+PASS  [pins] k6 2.3.0 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/k6-2.3.0/k6 (b2417a3038edc5fe81dc178a889237724b595c5c9cfed875822008e46e862c7d)
+PASS  [pins] osv-scanner 2.7.0 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/osv-scanner-2.7.0/osv-scanner (d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b)
+PASS  [pins] playwright-mcp 0.0.83 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/playwright-mcp-0.0.83/node_modules/@playwright/mcp/cli.js (952394d4fb0a05cafb185799047c674c80db9075804566e997d1fb148642f668)
+PASS  [pins] redocly 2.71.2 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/redocly-2.71.2/node_modules/@redocly/cli/bin/cli.js (7ae80d22038ef972e7513c63ac11ac69fffef87b5cb284f3eac759a7c27637f9)
+PASS  [pins] release-please 17.11.2 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/release-please-17.11.2/node_modules/release-please/build/src/bin/release-please.js (c9dfa1eff155f3f4927d916fe10e7bbbedf93f14294e87002ca8af8d7068aa33)
+PASS  [pins] semgrep 1.182.0 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/semgrep-1.182.0/semgrep (89c8c7e982ba193831d64a6aafb816d0ea8b12d931e8873db4a979ab34db5737)
+PASS  [pins] trivy 0.76.1 is installed and its stamp matches the pin
+      /private/tmp/claude-503/moadix-v5-aqeqtk1v/home/tools/trivy-0.76.1/trivy (11a9b6cd2752011b54f01ea4bd0dbfa9f0c41dc6538d5a3f9d23955f471bf4e5)
+PASS  [pins] a download whose sha256 differs from the pin is refused
+      https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz: sha256 b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5 does not match the pin 00000
+PASS  [redocly] clean: a valid OpenAPI 3.1 contract and an Arazzo workflow pass
+      rc=0; note arazzo 1.0.1 sdlc/05-lld/notes.arazzo.yaml: 0 error(s), 0 warning(s) note openapi 3.1.0 sdlc/05-lld/notes.openapi.yaml: 0 error(s), 0 warning(s)
+PASS  [redocly] the lint report is in the evidence index with the source commit
+      {"at": "2026-11-12T11:01:31Z", "path": ".sdlc/evidence/5/redocly-lint-f5a312d3430f.json", "phase": "5", "produced_for": "check-contracts", "sha256": "c01fe74ea5048484c1e180c24f773457c8cbecdefd3d108c4b
+PASS  [redocly] planted lint error (a path parameter the path does not have) fails
+      FAIL lint error sdlc/05-lld/notes.openapi.yaml #/paths/~1notes/get/parameters/0/name: Path parameter `id` is not used in the path `/notes`. (path-parameters-defined)
+PASS  [redocly] the product's redocly.yaml and lint-ignore file cannot hide the error (gate config only)
+      FAIL lint error sdlc/05-lld/notes.openapi.yaml #/paths/~1notes/get/parameters/0/name: Path parameter `id` is not used in the path `/notes`. (path-parameters-defined)
+PASS  [redocly] no OpenAPI/Arazzo description at all fails
+      FAIL no OpenAPI or Arazzo description is committed under sdlc/05-lld/ (a top-level `openapi:` or `arazzo:` key). Phase 5 ships the contract the code is built against
+PASS  [dotenvx] clean: real `dotenvx encrypt` output with every required key passes
+      note .env.production: 2 key(s), 2 encrypted, 0 required missing
+PASS  [dotenvx] values are never read into the output or the evidence (key names only)
+      evidence .sdlc/evidence/6b/env-check-41cb8ada9d4b.json: { "files": { ".env.production": { "keys": [ "API_TOKEN", "DATABASE_URL" ], "missing": [], "public_key_declared": true, "unencrypted":
+PASS  [dotenvx] planted unencrypted value fails, naming the key and not the value
+      FAIL .env.production: SMTP_PASSWORD is not encrypted (run `dotenvx encrypt -f .env.production`)
+PASS  [dotenvx] a required key (.env.example) missing from the encrypted file fails
+      FAIL .env.production: required key STRIPE_KEY is missing
+PASS  [dotenvx] a committed .env.keys (the private keys) fails
+      FAIL .env.keys is committed: it holds the dotenvx PRIVATE keys. Remove it from history and rotate | FAIL .env.production: required key STRIPE_KEY is missing
+PASS  [gitleaks] clean: history and tree with no secret pass
+      rc=0
+PASS  [gitleaks] planted fake secret, removed from the tree but still in HISTORY, fails
+      FAIL [high] gitleaks:aws-access-token history src/app.js:1 (HEAD)
+PASS  [gitleaks] the SARIF evidence (history and tree) is indexed with the commit and the secret is redacted
+      .sdlc/evidence/9/gitleaks-history-403faf46ed26.sarif 03826f56941f; .sdlc/evidence/9/gitleaks-tree-403faf46ed26.sarif 584cd83dfa44
+PASS  [gitleaks] gitleaks:allow, .gitleaksignore and the product's .gitleaks.toml cannot hide it
+      FAIL [high] gitleaks:aws-access-token tree src/app.js:1 (HEAD)
+PASS  [osv] clean: a lockfile with no known vulnerability passes
+      rc=0
+PASS  [osv] planted vulnerable lockfile entry (lodash 4.17.15) fails on a high finding
+      FAIL [high] GHSA-35jh-r3h4-6jhm lodash@4.17.15 in package-lock.json (cvss 7.2) | FAIL [high] GHSA-p6mc-m468-83gw lodash@4.17.15 in package-lock.json (cvss 7.4) | FAIL [high] GHSA-r5fr-rjxr-66jc lodash@4.17.15 in package-lock.json (cvss 8.1)
+PASS  [osv] the product's osv-scanner.toml cannot ignore the advisories
+      FAIL [high] GHSA-35jh-r3h4-6jhm lodash@4.17.15 in package-lock.json (cvss 7.2) | FAIL [high] GHSA-p6mc-m468-83gw lodash@4.17.15 in package-lock.json (cvss 7.4) | FAIL [high] GHSA-r5fr-rjxr-66jc lodash@4.17.15 in package-lock.json (cvss 8.1)
+PASS  [trivy] clean: a non-root Dockerfile and a clean lockfile pass (DB downloaded, scan offline)
+      rc=0
+PASS  [trivy] planted misconfiguration (image runs as root, DS-0002 HIGH) fails
+      FAIL [high] DS-0002 fs misconfiguration in Dockerfile: Image user should not be 'root'
+PASS  [trivy] the product's .trivyignore and trivy.yaml cannot hide it
+      FAIL [high] DS-0002 fs misconfiguration in Dockerfile: Image user should not be 'root'
+PASS  [semgrep] clean: code with no rule match passes (local rules, metrics off, no account)
+      rc=0
+PASS  [semgrep] planted shell injection (exec of a template string) fails
+      FAIL [high] moadix.js.child-process-shell-interpolation src/a.js:2 A shell command built by string concatenation or template runs injected input.
+PASS  [semgrep] nosemgrep comments and .semgrepignore cannot hide it
+      FAIL [high] moadix.js.child-process-shell-interpolation src/a.js:2 A shell command built by string concatenation or template runs injected input.
+PASS  [semgrep] the product's own rules (security/semgrep/*.yml) add findings
+      FAIL [high] security.semgrep.no-console-secret src/a.js:1 secrets must not be logged
+PASS  [k6] clean: thresholds hold and the product's invariant check passes
+      note load/checkout.js: k6 exit 0, 2 threshold case(s), 0 failed note invariant check exit 0; evidence .sdlc/evidence/10c/invariant-check-60856bc9949e.txt (sha256 a72d80c0bd59)
+PASS  [k6] handleSummary wrote JSON and JUnit (one test case per threshold), indexed with the commit
+      .sdlc/evidence/10c/k6-load-checkout-js-summary-60856bc9949e.json exit=0; .sdlc/evidence/10c/k6-load-checkout-js-junit-60856bc9949e.xml exit=0
+PASS  [k6] planted broken threshold: k6 really exits 99 and the check fails
+      k6 exit=99; FAIL load/checkout.js: threshold crossed: checkout_ms p(95)<100
+PASS  [k6] the broken threshold is a failed JUnit test case
+      <?xml version="1.0" encoding="UTF-8"?> <testsuites tests="2" failures="1"> <testsuite name="k6 thresholds" tests="2" failures="1"> <testcase classname="checkout_ms" name="checkout_ms p(95)&lt;100"><failure message=
+PASS  [k6] a load script with no thresholds fails (it cannot fail, so it is not a test)
+      FAIL load/checkout.js declares no thresholds: a load test that cannot fail is not a test (k6 options.thresholds)
+PASS  [k6] planted SQL-invariant violation: the product's own check is required and fails the phase
+      FAIL the product's invariant check failed (exit 1): stock < 0 for 3 rows
+PASS  [k6] no invariant check declared fails (it is a required second check)
+      FAIL no load.invariant_check: the product's own SQL invariant check (argv list) is a required second check after the load
+PASS  [k6] a non-loopback base_url is refused before k6 runs (never a production URL)
+      FAIL load.base_url 'https://shop.example.com' is not a loopback http(s) URL. The gate never load-tests anything but the local test instance, never a production URL
+PASS  [k6] a script that calls a public IP is refused by k6's --blacklist-ip (the counter of refusals crossed)
+      FAIL load/checkout.js: threshold crossed: refused_by_blacklist count<1
+PASS  [claude-security] the Stop hook never starts a scan (a scan costs tokens; only request-review does)
+      claude calls: 0
+PASS  [claude-security] request-review in phase 9 schedules ONE headless scan: --agent claude-security:claude-security, auto mode, token cost accepted in the prompt
+      argv=-p Scan the codebase: the whole repository, at medium effort. I understand it will use a lot of tokens. Do not suggest patches. Write the report and stop. --agent claude-security:claude-security --permission-mode auto --output-format json
+PASS  [claude-security] the scan runs in a clone at HEAD outside the product, with no .sdlc/ in it
+      cwd=/private/tmp/claude-503/moadix-v5-aqeqtk1v/scans/fb60f20b78567955/7e2333491728/repo
+PASS  [claude-security] clean: a scan of HEAD with no findings passes
+      rc=0
+PASS  [claude-security] one scan per commit: request-review again at the same HEAD starts nothing
+      claude calls: 1
+PASS  [claude-security] SARIF ingested as findings with stable SF-n ids from the gate's register
+      {"v3:aaa": ["SF-1", "high"], "v3:bbb": ["SF-2", "low"], "v3:ccc": ["SF-3", "medium"]}
+PASS  [claude-security] a finding it could not confirm (rated LOW, no panel) is recorded unconfirmed with the plugin's severity (increment 6, ruling 1: it blocks as unconfirmed, not as a rewritten severity)
+      {"confirmed": false, "id": "SF-2", "location": "src/b.js:1", "plugin_id": "v3:bbb", "plugin_severity": "LOW", "rule": "CWE-78", "severity": "low", "summary": "maybe an issue"}
+PASS  [claude-security] the SARIF is in the evidence index, stamped with the commit
+      {"at": "2026-11-12T11:01:58Z", "effort": "medium", "path": ".sdlc/evidence/9/claude-security-6d0c0b1aa6cf.sarif", "phase": "9", "produced_for": "check-claude-security", "sha256": "e560b06c8c458d06feed9fa54c1fc9c47b9dd294
+PASS  [claude-security] planted high finding fails (findings only: the gate decides), unconfirmed one too (until triaged or waived)
+      FAIL [high] SF-1 src/a.js:2 OS command injection in ls() (plugin HIGH, CWE-78) | FAIL SF-1 (high) is in the gate's register but not in sdlc/09-security-report.md's findings table | FAIL SF-2 src/b.js:1 maybe an issue [UNCONFIRMED by its verifier panel] (plugin LOW, CWE-78): unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with path:line evidence, or the operator waives i
+PASS  [claude-security] every SF-n must appear in sdlc/09-security-report.md
+      FAIL [high] SF-1 src/a.js:2 OS command injection in ls() (plugin HIGH, CWE-78) | FAIL SF-1 (high) is in the gate's register but not in sdlc/09-security-report.md's findings table | FAIL SF-2 src/b.js:1 maybe an issue [UNCONFIRMED by its verifier panel] (plugin LOW, CWE-78): unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with path:line evidence, or the operator waives i
+PASS  [claude-security] a revision stamp for another commit is refused (not evidence for this one)
+      FAIL the Claude Security scan for 8ec315dcc519 failed: the revision stamp is ['CLAUDE-SECURITY-REVISION-000000000000.json'], expected exactly CLAUDE-SECURITY-REVISION-8ec315dcc519.json (a scan of another commit, or of a dirty tree, is not evidence for this one)
+PASS  [claude-security] a -dirty revision stamp is refused
+      FAIL the Claude Security scan for 696b81c5cd34 failed: the revision stamp is ['CLAUDE-SECURITY-REVISION-696b81c5cd34-dirty.json'], expected exactly CLAUDE-SECURITY-REVISION-696b81c5cd34.json (a scan of another commit, or of a dirty tree, is not evidence for this one)
+PASS  [claude-security] the builder cannot write into a scan clone (it could forge the SARIF)
+      MOADIX: that is a gate-scheduled Claude Security scan directory; only the scan itself writes there
+PASS  [claude-security] outside phase 9, request-review starts no scan
+      claude calls unchanged at 4
+PASS  [claude-security] manifest: the agent may run claude-security for feedback in phase 9 only; other plugins' skills stay denied
+      9:none / other:deny / 7:deny
+PASS  [live] the live verifier gets the gate's brief: every AC, every button (BTN-n), base_url, untested.yaml
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [live] it may drive the browser through MOADIX's pinned Playwright MCP
+      ['allow', 'allow', 'allow', 'allow', 'allow']
+PASS  [live] network-reading tool browser_network_requests is withheld
+      MOADIX: browser_network_requests is withheld from the live verifier: network-reading tools put headers, cookies and tokens into the transcript (v1's 10a defect)
+PASS  [live] network-reading tool browser_network_request is withheld
+      MOADIX: browser_network_request is withheld from the live verifier: network-reading tools put headers, cookies and tokens into the transcript (v1's 10a defect)
+PASS  [live] network-reading tool browser_evaluate is withheld
+      MOADIX: browser_evaluate is withheld from the live verifier: network-reading tools put headers, cookies and tokens into the transcript (v1's 10a defect) (verifi
+PASS  [live] network-reading tool browser_run_code_unsafe is withheld
+      MOADIX: browser_run_code_unsafe is withheld from the live verifier: network-reading tools put headers, cookies and tokens into the transcript (v1's 10a defect)
+PASS  [live] a user's own (unpinned) playwright server is refused
+      MOADIX: the live verifier may use only MOADIX's pinned Playwright MCP (mcp__plugin_moadix_playwright__*) (verifier live-verifier)
+PASS  [live] the live verifier loads no skill
+      MOADIX: verifier live-verifier has no method skill (verifier live-verifier)
+PASS  [live] manifest: in 10a the main agent may use mcp__plugin_moadix_playwright__*, not a same-named user server
+      plugin:none user:deny
+PASS  [live] clean: every AC and every button backed by trace/video artifacts passes
+      OK moadix:live-verifier evidence 5fdb7b3a77b6 (brief ed722faa5e69): 0 findings, 2 acceptance criteria mapped, citations resolve, stamped HEAD
+PASS  [live] planted: a button not exercised fails
+      FAIL moadix:live-verifier: finding at a failing severity: BTN-2 was not exercised
+PASS  [live] planted: an AC with no artifact (not verified live) fails
+      FAIL moadix:live-verifier: finding at a failing severity: US-001/AC-2 has no artifact (not verified live)
+PASS  [live] planted: no video recorded fails (and a cited artifact that does not exist fails)
+      FAIL moadix:live-verifier: no video (.webm) in the evidence directory: start browser_start_video before navigating FAIL moadix:live-verifier: coverage US-001/AC-1: artifact playwright/video-1.webm does not exist (or is empty) in the evidence directory
+PASS  [live] v1's live probe (re-enabled for 10a) refuses a non-loopback base_url: never a production URL
+      FAIL the `api` enumerator is not declared (no declaration). Never declared, declared-as-none and ran-and-found-nothing are three different states; this is the first and it is UNKNOWN, not an empty surface. | FAIL the `screens` enumerator is not declared (no declaration). | FAIL live.base_url 'https://shop.example.com' is not a loopback http(s) URL. The live probe runs only against the local tes
+PASS  [live] Arazzo contract tests refuse a non-loopback base_url
+      FAIL live.base_url 'https://shop.example.com' is not a loopback http(s) URL; contract tests run only against the local test instance, never a production URL
+PASS  [live] Arazzo with the local app not running is UNKNOWN (2), never a pass
+      UNKNOWN the app does not answer at http://127.0.0.1:9; start the local instance and the gate runs the workflows again
+SKIP  [live] Arazzo workflow passes against a running local app; a failing step fails
+      this sandbox does not allow binding a loopback port (EPERM); run the suite from Terminal
+SKIP  [live] the live probe confirms enumerated routes on a running local app
+      this sandbox does not allow binding a loopback port (EPERM)
+PASS  [playwright-mcp] the pinned Playwright MCP 0.0.83 lists 38 tools; exactly the network/script tools match the withheld pattern
+      withheld: ['browser_evaluate', 'browser_network_request', 'browser_network_requests', 'browser_run_code_unsafe']
+PASS  [playwright-mcp] the live-verifier agent lists only real, non-withheld tools of the pinned server
+      24 tools listed
+PASS  [playwright-mcp] plugin.json pins the server (tools/playwright-mcp-0.0.83), storage-state, loopback origins, and saves to the live verifier's evidence folder
+      --isolated --headless --caps devtools --storage-state .auth/storage-state.json --allowed-origins http://127.0.0.1:*;http://localhost:*;https://127.0.0.1:*;https://localhost:*;http://[::1]:* --output-dir .sdlc/cache/verify/10a/live-verifier/
+PASS  [release] clean: release-please PR merged by a human, CI green for HEAD, no high alert -> pass
+      note release PR #7 (release-please--branches--main) merged by moad
+PASS  [release] the gate started the GitHub MCP server with --read-only (it is the MCP client)
+      {"argv": ["stdio", "--read-only", "--toolsets", "repos,pull_requests,actions,code_security"], "token": true}
+PASS  [release] planted: the release PR merged by a bot fails (a human merges it)
+      FAIL PR #7 was merged by 'release-bot[bot]', not by a human: the release PR is merged by a person
+PASS  [release] planted: a failed CI run for HEAD fails
+      FAIL CI run 'ci' for HEAD concluded failure
+PASS  [release] planted: an open high code-scanning alert fails
+      FAIL open code-scanning alert #9 js/sql-injection (high)
+PASS  [release] planted: HEAD not the merge of a release PR fails
+      FAIL HEAD 211878fc1790 is not the merge commit of a pull request: a release lands by merging the release-please PR
+PASS  [release] a GitHub MCP server offering write tools is refused: the gate reads nothing from it
+      FAIL the GitHub MCP server offers write tools (merge_pull_request, push_files): it is not in --read-only mode, so the gate reads nothing from it
+PASS  [release] no read-only token is UNKNOWN (2), never a pass
+      UNKNOWN no read-only GitHub token in the login Keychain (service moadix-github-readonly); the gate cannot read CI or code scanning, and that is UNKNOWN, not a pass
+PASS  [release] planted: release-please-action pinned by tag (movable) fails
+      FAIL .github/workflows/release.yml uses googleapis/release-please-action@v4: pin it to a full commit SHA
+PASS  [release] the REAL pinned github-mcp-server 2.0.3 with --read-only lists no write tool (21 tools)
+      []
+PASS  [release] negative control: without --read-only it lists write tools, and the gate's check catches them
+      14 write tools: ['actions_run_trigger', 'add_comment_to_pending_review', 'add_reply_to_pull_request_comment', 'create_branch', 'create_or_update_file']
+PASS  [waivers] WAIVE accepts a verifier finding id (code-reviewer.S1, medium) with owner, scope and expiry
+      MOADIX gate: WAIVE code-reviewer.S1 owner=moad scope=src/a.js expiry=2026-12-12 reason=accepted for now recorded (ledger seq 10). Tell the operator it was recorded.
+PASS  [waivers] WAIVE of a high verifier finding is refused
+      MOADIX gate: WAIVE NOT recorded: code-reviewer.P1 is a confirmed high-severity finding (phase 7 evidence of code-reviewer) and CANNOT be waived. Fix it and verify again. Nothing changed; the code is s
+PASS  [waivers] WAIVE of a verifier finding that is not in the evidence is refused
+      MOADIX gate: WAIVE NOT recorded: code-reviewer.Z9 names a verifier finding, but code-reviewer's evidence has no finding Z9; refusing rather than granting blind. Nothing changed; the code is spent.
+PASS  [waivers] WAIVE of a finding the phase-9 report rates `unknown` is refused when no current scan result can say more (increment 6: unconfirmed findings with a result are waivable; tests/inc6 triage)
+      MOADIX gate: WAIVE NOT recorded: SF-2 is a unknown-severity finding and CANNOT be waived. Fix it, or downgrade it with evidence in the phase-9 report. Nothing changed; the code is spent.
+PASS  [waivers] WAIVE of a medium Claude Security finding (SF-3) is recorded
+      MOADIX gate: WAIVE SF-3 owner=moad scope=src/a.js expiry=2026-12-12 reason=accepted for now recorded (ledger seq 12). Tell the operator it was recorded.
+PASS  [worker] end to end: the Stop hook runs check-contracts in the gate's worker; REVIEW shows it failing
+      MOADIX gate: REVIEW 5 (LLD): status draft; source commit b8496ba81fa4b3dcdbaf935ac1ffc77c62707081; open waivers 0; validators for phase 5: FAIL (validators ran 2026-11-12T11:02:24Z on commit b8496ba81fa4; result sha256:3d963c178ce1). check-profile-5: PASS; check-lld: UNKNOWN (error: Request failed a
+PASS  [guard] no test touched a real product, a real container engine or the user's files
+      []
+
+95 checks, 95 passed, 0 failed, 2 skipped (55 s)
+  skipped [live] Arazzo workflow passes against a running local app; a failing step fails: this sandbox does not allow binding a loopback port (EPERM); run the suite from Terminal
+  skipped [live] the live probe confirms enumerated routes on a running local app: this sandbox does not allow binding a loopback port (EPERM)

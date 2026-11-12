@@ -69,7 +69,7 @@ Open a **new** Claude Code session in any folder and run `/status`. The `Setting
   - `STATUS`: the agent relays the gate's state, which should start with `INTEGRITY OK`.
   - `APPROVE 0 123456`: the phase, then the current code from the app. You do not need REVIEW first. The gate runs the phase's validators itself, on the current commit, whenever the agent's turn ends (and when the agent calls `/moadix:request-review`). APPROVE is refused, with the validators' findings, unless that result for the **current commit** passed. If it says the result is missing, still running or stale, send APPROVE again a minute later. Uncommitted changes mean the agent has to commit first. The agent relays `APPROVE 0 recorded (ledger seq 2). It rests on validator result sha256:…. Proceed to phase 1.`
   - `REVIEW 0` (optional, read-only): prints the gate's latest validator result for phase 0 and its digest. It never starts a run. For an approved phase it shows the digest of the result that APPROVE relied on.
-  - `WAIVE <id> owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>`: expiry at most 180 days out. A high- or critical-severity finding in `sdlc/09-security-report.md` cannot be waived.
+  - `WAIVE <id> owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>`: expiry at most 180 days out. A high- or critical-severity finding in `sdlc/09-security-report.md` cannot be waived. A Claude Security finding (`SF-n`) that its own panel could not confirm blocks phase 9 until the fresh-context `moadix:sf-triager` confirms or rejects it with `path:line` evidence, or until you waive it with a reason; a confirmed critical or high one cannot be waived.
   - `PROCEED-PAST <phase> <reason> <code>`: only when REVIEW shows a definite failure on the current commit (not UNKNOWN, not passing).
   - `ADOPT <code>`: adopts the product settings the agent proposed. The agent cannot write `.sdlc/`, so it writes proposals to `.sdlc-proposals/`: `product.yaml` (only the keys `platform`, `size`, `app_run`, `test_targets`, `park`) and `config/<name>.yaml` for the product config files (`product-tests.yaml`, `product-surface.yaml`, `product-app.yaml`, `concurrency.yaml`, `mobile.yaml`, `traceability-exemptions.yaml`, `hardcoded-state-exemptions.yaml`). `STATUS` lists pending proposals and says whether they are valid. ADOPT validates them, records one ledger line naming each file with its sha256 (and its content when small), copies them into `.sdlc/` and deletes the proposals. Afterwards, an adopted file edited by hand shows as `INTEGRITY FAILURE … differs from what ADOPT recorded`. This replaces editing `.sdlc/` in Terminal.
   - `PARK <code>`: stops the stack, measures the declared counts, records them and tags the repo. It runs only what `.sdlc/product.yaml` declares under `park:` (only `docker` or `podman` commands; see the example in that file). Have the agent propose the `park:` section and `ADOPT` it first.
@@ -175,6 +175,24 @@ load:                                      # phase 10c
 release: {repo: owner/name}                # phase 11 (default: the origin remote)
 claude_security: {effort: medium}          # phase 9: low | medium | high
 ```
+
+## Increment 6: feature cycles and onboarding (once, when updating to 0.4.0)
+
+The checker did not change, so this is an ordinary update: no new QR code, no GitHub token.
+
+1. Close every Claude Code session.
+2. `cd ~/moadix && git push`, then `git tag v0.4.0 && git push origin v0.4.0`.
+3. `managed/install.sh`: password once. A successful run prints **no** "Permission denied" lines, and its **last line is `MOADIX is updated.`** Anything else is a failure; send me the output.
+   - The policy gains a `SessionStart` hook. The gate copy gains `gate/bmad/` (BMad core's scripts, which the gate installs into each product's `_bmad/`).
+4. Open Claude Code and run `/plugin marketplace update moadix`, then `/reload-plugins`. `/plugin` shows moadix **0.4.0**; the agent count rises by 2 (`sf-triager`, `baseline-verifier`), and `/moadix:feature` and `/moadix:baseline` exist. `plugin:moadix:github` stays failed until a product reaches phase 11 (see "GitHub token, at phase 11").
+5. In any session, the first message should carry **no** `PLUGIN DRIFT` line. If one appears, it names the plugin and the settings file that enabled it; tell me.
+6. Optional, in Terminal: `/usr/bin/python3 tests/inc6/run.py` (last line `68 checks, 68 passed, 0 failed`) and `/usr/bin/python3 tests/install/dryrun.py` (now also checks the update's last line).
+
+New commands, typed alone with a code, like the others:
+
+- `FEATURE <feature-id> <code>`: starts a feature cycle on a product whose baseline is approved (released at phase 11, or onboarded at B). One at a time; a second is refused while one is active. Its 16 phases are approved with the usual `APPROVE <phase> <code>`; approving its phase 11 merges its documents into the product's and commits the merge. STATUS shows the active feature and the finished ones.
+- `COLLAPSE <phase> <code>`: records the size profile's collapse of the current phase (size S only: phases 1, 6b and 10c), with the reason and the checks that will not run. It is refused for any other phase or size.
+- `INIT <product-id> <code>` on a repository that already has code (any tracked file other than documentation) starts **onboarding at phase B**: the agent documents the product as it is, citing the code, and `APPROVE B <code>` approves the baseline. To start a new product the normal way, INIT it before any code is committed.
 
 ## 5. Uninstall
 

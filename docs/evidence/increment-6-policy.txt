@@ -1,0 +1,24 @@
+PASS  --plugin: strictKnownMarketplaces allows exactly this repo and anthropics/claude-plugins-official
+      [{"source": "github", "repo": "someone/moadix"}, {"source": "github", "repo": "anthropics/claude-plugins-official"}]
+PASS  --plugin: both marketplaces registered (moadix, claude-plugins-official)
+      {"moadix": {"source": {"source": "github", "repo": "someone/moadix"}}, "claude-plugins-official": {"source": {"source": "github", "repo": "anthropics/claude-plugins-official"}}}
+PASS  increment 5 policy test: the rendered policy enables EXACTLY moadix and claude-security
+      enabled: ['claude-security@claude-plugins-official', 'moadix@moadix']
+PASS  every other plugin of the official marketplace is force-DISABLED (316 plugins)
+      316 false entries, e.g. ['42crunch-api-security-testing@claude-plugins-official', 'activecampaign@claude-plugins-official', 'adobe-for-creativity@claude-plugins-official']
+PASS  no plugin from any other marketplace appears in enabledPlugins
+      318 entries
+PASS  increment 5 network allowlist entries are present, and nothing else was added
+      20 hosts
+PASS  negative control: a template enabling a third plugin from the official marketplace is refused
+      enabledPlugins must force-enable exactly claude-security@claude-plugins-official, moadix@moadix
+PASS  no --plugin: no marketplace allowed, no plugin keys
+      strictKnownMarketplaces=[]
+PASS  marketplace.json is named 'moadix' and lists exactly the plugin 'moadix' from this repo
+      marketplace=moadix plugins=['moadix']
+PASS  negative control: a template allowing a second marketplace is refused
+      strictKnownMarketplaces must allow exactly someone/moadix and anthropics/claude-plugins-official
+PASS  a malformed owner/repo is refused
+      bad repo
+
+11 checks, 11 passed, 0 failed

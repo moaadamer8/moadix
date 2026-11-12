@@ -1,0 +1,89 @@
+PASS  [enforce] phase 0: its skill moadix:bmad-forge-idea -> allowed
+      (no objection)
+PASS  [enforce] phase 0: moadix:request-review (every phase) -> allowed
+      (no objection)
+PASS  [enforce] phase 0: phase 1's skill moadix:bmad-deep-recon -> denied, reason names phase 0
+      MOADIX: skill 'moadix:bmad-deep-recon' is denied in phase 0 (BRD): it is not in the manifest for phase 0 (BRD). Allowed now: moadix:baseline, moadix:bmad-forge-idea, moadix:feature, moadix:request-review (gate/config/pha...
+PASS  [enforce] phase 0: Context7 MCP (a phase-1 server) -> denied, reason names phase 0
+      MOADIX: MCP tool mcp__context7__resolve-library-id (server 'context7') is denied in phase 0 (BRD): that server is not in its manifest. MCP servers allowed now: none (gate/config/phase-manifest.yaml) (invariant 5)
+PASS  [enforce] control: APPROVE 0 recorded (current phase is now 1)
+      MOADIX gate: APPROVE 0 recorded (ledger seq 2). It rests on validator result sha256:fe8a3995492b. Proceed to phase 1. Te...
+PASS  [enforce] phase 1: the SAME skill moadix:bmad-forge-idea -> denied, reason names phase 1 (Research)
+      MOADIX: skill 'moadix:bmad-forge-idea' is denied in phase 1 (Research): it is not in the manifest for phase 1 (Research). Allowed now: moadix:baseline, moadix:bmad-deep-recon, moadix:feature, moadix:request-review (gate/...
+PASS  [enforce] phase 1: its skill moadix:bmad-deep-recon -> allowed
+      (no objection)
+PASS  [enforce] phase 1: mcp__context7__resolve-library-id (Context7, in the manifest) -> allowed
+      (no objection)
+PASS  [enforce] phase 1: mcp__plugin_context7_context7__get-library-docs (Context7, in the manifest) -> allowed
+      (no objection)
+PASS  [enforce] phase 1: MCP tool outside the manifest mcp__claude_ai_Gmail__send_message -> denied, phase named
+      MOADIX: MCP tool mcp__claude_ai_Gmail__send_message (server 'claude_ai_Gmail') is denied in phase 1 (Research): that server is not in its manifest. MCP servers allowed now: context7 (gate/config/phase-manifest.yaml) (inv...
+PASS  [enforce] phase 1: MCP tool outside the manifest mcp__claude-in-chrome__navigate -> denied, phase named
+      MOADIX: MCP tool mcp__claude-in-chrome__navigate (server 'claude-in-chrome') is denied in phase 1 (Research): that server is not in its manifest. MCP servers allowed now: context7 (gate/config/phase-manifest.yaml) (invar...
+PASS  [enforce] phase 1: MCP tool outside the manifest mcp__playwright__browser_click -> denied, phase named
+      MOADIX: MCP tool mcp__playwright__browser_click (server 'playwright') is denied in phase 1 (Research): that server is not in its manifest. MCP servers allowed now: context7 (gate/config/phase-manifest.yaml) (invariant 5)
+PASS  [enforce] phase 1: MCP tool outside the manifest mcp__evil__context7 -> denied, phase named
+      MOADIX: MCP tool mcp__evil__context7 (server 'evil') is denied in phase 1 (Research): that server is not in its manifest. MCP servers allowed now: context7 (gate/config/phase-manifest.yaml) (invariant 5)
+PASS  [enforce] phase 1: skill 'bmad-deep-recon' -> denied (only MOADIX's vendored copy)
+      MOADIX: skill 'bmad-deep-recon' is denied in phase 1 (Research): only MOADIX's vendored copy moadix:bmad-deep-recon is allowed (it has its self-approval steps removed). Allowed now: moadix:baseline, moadix:bmad-deep-reco...
+PASS  [enforce] phase 1: skill 'superpowers:bmad-deep-recon' -> denied (only MOADIX's vendored copy)
+      MOADIX: skill 'superpowers:bmad-deep-recon' is denied in phase 1 (Research): only MOADIX's vendored copy moadix:bmad-deep-recon is allowed (it has its self-approval steps removed). Allowed now: moadix:baseline, moadix:bm...
+PASS  [enforce] phase 1: skill 'moadix:code-review' -> denied (not in the manifest)
+      MOADIX: skill 'moadix:code-review' is denied in phase 1 (Research): it is not in the manifest for phase 1 (Research). Allowed now: moadix:baseline, moadix:bmad-deep-recon, moadix:feature, moadix:request-review (gate/conf...
+PASS  [enforce] phase 1: skill 'moadix:no-such-skill' -> denied (not in the manifest)
+      MOADIX: skill 'moadix:no-such-skill' is denied in phase 1 (Research): it is not in the manifest for phase 1 (Research). Allowed now: moadix:baseline, moadix:bmad-deep-recon, moadix:feature, moadix:request-review (gate/co...
+PASS  [enforce] phase 1: SlashCommand /moadix:bmad-prd (phase 2) -> denied, phase named
+      MOADIX: skill 'moadix:bmad-prd' is denied in phase 1 (Research): it is not in the manifest for phase 1 (Research). Allowed now: moadix:baseline, moadix:bmad-deep-recon, moadix:feature, moadix:request-review (gate/config/...
+PASS  [enforce] phase 1: SlashCommand /moadix:request-review -> allowed
+      (no objection)
+PASS  [enforce] STATUS shows the current phase's skill set and its context cost
+      Phase 1 manifest: skills moadix:bmad-deep-recon (9.1 KB of SKILL.md if all are loaded); MCP context7. Relay this to the operator verbatim.
+PASS  [enforce] outside any product: Skill -> no objection (MOADIX passive)
+      (none)
+PASS  [enforce] outside any product: mcp__claude_ai_Gmail__send_message -> no objection (MOADIX passive)
+      (none)
+PASS  [enforce] gate state fails its integrity check -> even the phase's own skill is refused (fail closed)
+      MOADIX: Skill is refused: gate state failed its integrity check, so the current phase (and its skill and MCP manifest) is unknown; run STATUS (invariant 5)
+PASS  [enforce] control: ledger restored -> allowed again
+      (none)
+PASS  [enforce] retro skills apply during phase 11 and after all phases, not before
+      11: ['baseline', 'feature', 'phase-retrospective', 'reflect-queue', 'request-review']; done: ['baseline', 'feature', 'phase-retrospective', 'reflect-queue', 'request-review']; 10c: ['baseline', 'feature', 'request-review']
+PASS  [enforce] phase 8: a phase-7 skill (moadix:test-driven-development) -> denied, reason names phase 8 (Testing)
+      skill 'moadix:test-driven-development' is denied in phase 8 (Testing): it is not in the manifest for phase 8 (Testing). Allowed now: moadix:baseline, moadix:feature, moadix:javascript-testing-expert, moadix:pr-test-analy...
+PASS  [enforce] phase 7: moadix:test-driven-development -> allowed
+      
+PASS  [manifest] every vendored skill is in exactly one phase of the manifest, and every listed skill exists
+      vendored 18, listed 18
+PASS  [manifest] the manifest covers all 16 gated phases plus 12 (Retro) and B (onboarding Baseline, increment 6)
+      0, 1, 2, 3, 4, 5, 6, 6b, 7, 8, 9, 10a, 10b, 10c, 11, 11b, 12, B
+PASS  [manifest] each skill's size in the manifest matches its files (SKILL.md bytes, directory bytes)
+      bmad-forge-idea 10380B, bmad-deep-recon 9298B, bmad-prd 14047B, bmad-architecture 13869B, threat-model 7750B, threat-mitigation-mapping 3346B, ui-ux-pro-max 17562B, impeccable 5324B, apple-design 23036B, code-review 7209B, diagnosing-bugs 8815B, test-driven-development 9572B, verification-before-completion 3836B, typescript-reviewer 9082B, pr-test-analyzer 5019B, javascript-testing-expert 16728B, 
+PASS  [manifest] SOURCES.yaml has one entry per vendored skill
+      18 entries
+PASS  [manifest] each entry: pinned 40-hex commit, GitHub source, licence, copyright, licence files present, change record, frontmatter name = directory
+      ok
+PASS  [manifest] obligation: BMAD retrospective renamed (no BMad mark in its name or description)
+      name: phase-retrospective description: 'Review a completed epic against the evidence it left behind — spec, stories, diffs, commits, sprint status — and produce...
+PASS  [manifest] obligation: Impeccable ships NOTICE.md
+      
+PASS  [manifest] MOADIX-UPSTREAM.sha256 accounts for every vendored file, and every file it calls verbatim is byte-identical to the pinned upstream
+      92 verbatim, 36 modified
+PASS  [manifest] obligation: every modified file from an Apache-2.0 source carries a change notice (threat-model, impeccable, pr-test-analyzer)
+      threat-model/SKILL.md, impeccable/SKILL.md, impeccable/reference/audit.md, impeccable/reference/audit.native.md, impeccable/reference/critique.md, pr-test-analyzer/SKILL.md
+PASS  [manifest] obligation: pr-review-toolkit taken from anthropics/claude-plugins-official
+      
+PASS  [manifest] obligation: threat-model sourced from anthropics/defending-code-reference-harness
+      
+PASS  [manifest] obligation: the awesome-design-md template says it is not affiliated with the brand
+      
+PASS  [manifest] no vendored skill pre-grants git commit/push (threat-model's Bash(git:*) narrowed to read-only git)
+      
+PASS  [grep] no vendored skill text says to approve, merge, ship, commit, mark done or auto-advance (157 matches, every one allowlisted with a reason)
+      201 files scanned
+PASS  [grep] negative control: planted self-approval instructions are all caught
+      {'a': ['commit', 'mark-done'], 'b': ['approve', 'auto-advance'], 'c': ['mark-done', 'merge', 'ship'], 'd': ['auto-advance']}
+PASS  [guard] no test read, wrote or started a real product or compose project
+      []
+
+enforce 27/27  manifest 13/13  grep 2/2  guard 1/1
+43 checks, 43 passed, 0 failed (7s)

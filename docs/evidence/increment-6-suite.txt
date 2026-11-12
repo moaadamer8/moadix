@@ -1,0 +1,139 @@
+PASS  [feature] FEATURE before the product's baseline is approved (not released at 11) is refused
+      MOADIX gate: FEATURE NOT recorded: the product has no approved baseline yet: a feature cycle starts once the product's phase 11 is approved (released at phase 11). Nothing changed; the code is spent.
+PASS  [feature] FEATURE F1 <code> on a released product is recorded; the ledger line carries the feature id
+      MOADIX gate: FEATURE F1 recorded (ledger seq 17). Feature F1 started at phase 0; its documents go in sdlc/features/F1/ (see /moadix:feature); the product's approved documents are frozen until the feature's phase 11 merges the additions. Tell the operator it was recorded.
+PASS  [feature] .sdlc/features/F1/phase.yaml is rebuilt from the ledger; STATUS is clean and shows the feature at phase 0
+      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). scope feature F1 (started at ledger seq 17; the product's documents are frozen); current phase 0; ledger seq 17; waivers: none; phases: 0 BRD: draft;
+PASS  [feature] a second FEATURE while F1 is active is refused (one feature at a time)
+      MOADIX gate: FEATURE NOT recorded: feature F1 is active (its current phase is 0). One feature at a time: finish it (approving its phase 11 merges it) before starting F2. Nothing changed; the code is spent.
+PASS  [feature] path map in a feature: product documents frozen, the feature's phase-0 document writable, later and other features' documents denied
+      [('sdlc/02-prd.md', 'deny', True, 'MOADIX: sdlc/02-prd.md is an approved product document and stays frozen during f'), ('sdlc/features/F1/00-brd.md', 'none', True, ''), ('sdlc/features/F1/02-prd.md', 'deny', True, 'MOADIX: sdlc/features/F1/02-prd.md belongs to phase 2 (PRD), which has not start'), ('sdlc/features/F2/00-brd.md', 'deny', True, 'MOADIX: sdlc/features/F2/00-brd.md belongs to feature F2, not the active feature')]
+PASS  [feature] an addition that contradicts an approved requirement is refused: APPROVE 2 names the contradiction
+      MOADIX gate: APPROVE NOT recorded: the phase 2 validators did not pass (FAIL). Findings: check-feature-2 FAIL: FAIL CONTRADICTION: US-002/AC-2 contradicts the approved requirement US-001/AC-1 (under the same condition it says the system shall NOT, where the approved requirement says it shall). Approved requirements are frozen; a feature may add to them, never contradict them. Nothing changed; the
+PASS  [feature] an addition that declares it supersedes an approved requirement is refused
+      MOADIX gate: APPROVE NOT recorded: the phase 2 validators did not pass (FAIL). Findings: check-feature-2 FAIL: FAIL CONTRADICTION: (declared) contradicts the approved requirement US-001/AC-1 (the addition declares that it supersedes/replaces/removes it). Approved requirements are frozen; a feature m
+PASS  [feature] a new SEC-ID that conflicts with the product's (SEC-001 redefined) is refused
+      MOADIX gate: APPROVE NOT recorded: the phase 4 validators did not pass (FAIL). Findings: check-feature-4 FAIL: FAIL ID conflict: the feature defines SEC-001, which the product's approved documents already define; new SEC IDs must be new. Nothing changed; the code is spent.
+PASS  [feature] feature phases 0-4 approved through the gate's worker (check-feature on each)
+      [('0', True, 'MOADIX gate: APPROVE 0 recorded (ledger seq 18). It rests on validator result sha256:dcf333d11eba. Proceed to feature F1 phase 1. Tell the operator it was recor'), ('1', True, 'MOADIX gate: APPROVE 1 recorded (ledger seq 19). It rests on validator result sha256:1efb437b0c8d. Proceed to feature F1 phase 2. Tell the operator it was recor'), ('2', True, 'MOADIX gate: APPROVE 2 recorded (ledger seq 20). It rests on validator result sha256:54e7e668b637. Proceed to feature F1 phase 3. Tell the operator it was recor'), ('3', True, 'MOADIX gate: APPROVE 3 recorded (ledger seq 21). It res
+PASS  [feature] each feature APPROVE line carries the feature id and the validator digest it relied on
+      {'feature': 'F1', 'phase': '4', 'source_commit': '318787f52804ce53640edb0a3ae049090cbce74a', 'validation': {'commit': '318787f52804ce53640edb0a3ae049090cbce74a', 'digest': 'sha256:8f9b751b1f4da183e203
+PASS  [feature] after 10c the feature's current phase is 11 and STATUS is clean
+      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). scope feature F1 (started at ledger seq 17; the product's documents are frozen); current phase 11; ledger seq
+PASS  [feature] APPROVE 11 of the feature (check-feature-11 and check-release pass on the worker) is recorded and the ledger line records the merge
+      MOADIX gate: APPROVE 11 recorded (ledger seq 32). It rests on validator result sha256:a99553443b76. Feature F1 merged into the product documents (sdlc/00-brd.md, sdlc/02-prd.md, sdlc/03-hld.md, sdlc/04-threat-model.md, sdlc/05-lld.md, sdlc/05-lld/delete-f1.md, sdlc/06-ux.md, sdlc/06b-provisioning.md | MOADIX gate: REVIEW 11 (Release): status draft; source commit 1b32e740aa1f83d3b59756698068b3518bd352b3; open waivers 0; validators for phase 11: PASS (validators ran 2026-11-12T10:57:58Z on commit 1b3
+PASS  [feature] the product documents now hold the additions (US-002 under 'Feature F1'), every file's sha256 is the one the ledger recorded, and the approved text is unchanged above it
+      shas match: True
+PASS  [feature] the gate committed the merge (author MOADIX gate) on top of the approved commit; the tree is clean
+      MOADIX gate|MOADIX: merge feature F1 into the product documents (ledger seq 32)
+PASS  [feature] after 11b the feature is done: STATUS lists it as finished (merged), its phase.yaml says done
+      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). scope product (greenfield); finished features: F1 (merged at seq 32); current phase 11b; ledger seq 33; waivers: none; phases: 0 BRD: APPROVED; 1 Research: APPROVED; 2 P
+PASS  [feature] a second feature starts once the first is finished
+      MOADIX gate: FEATURE F2 recorded (ledger seq 34). Feature F2 started at phase 0; its documents go in sdlc/features/F2/ (see /moadix:feature); the product's appr
+PASS  [feature] a feature id cannot be reused (and F2 is active anyway)
+      MOADIX gate: FEATURE NOT recorded: feature F2 is active (its current phase is 0). One feature at a time: finish it (approving its phase 11 merges it) before starting F1. Nothing changed; the code is s
+PASS  [feature] after the merge, a later feature that reuses the merged IDs (BG-2, US-002) conflicts with the product
+      FAIL ID conflict: the feature defines BG-2, which the product's approved documents already define; new BG IDs must be new | FAIL ID conflict: the feature defines US-002, which the product's approved documents already define; new US IDs must be new
+PASS  [onboarding] INIT on a repo that already has code starts in onboarding mode at phase B (recorded in the INIT line)
+      MOADIX gate: INIT legacyprod recorded (ledger seq 1): /private/tmp/claude-503/moadix-v6-chcw79_1/legacy/.sdlc created. The repository already has code (6 tracked file(s)), so the product starts in ONB
+PASS  [onboarding] STATUS: product (onboarding), current phase B, integrity OK
+      MOADIX gate: STATUS. INTEGRITY OK (ledger chain, signatures, Keychain anchor, phase.yaml). scope product (onboarding); current phase B; ledger seq 1; waivers: none; phases: B Baseline: draft. validato
+PASS  [onboarding] phase B may write the baseline documents, not the product's code or later documents
+      none / deny (MOADIX: src/app.js is in no phase's path map (deny by defaul) / deny
+PASS  [onboarding] the templates as shipped fail check-baseline (placeholders, no real citations)
+      FAIL sdlc/00-brd.md: unfilled template placeholders remain ({{S | M | L}}, {{WEB | APP-FIRST | ...}}, {{What the product does today, in two or three sentences, citing its entry point, e.g. src/server.js:1-40.}}, {{Who uses it today and how they reach it, citing the code that serves them (routes, screens).}}) | FAIL sdlc/02-prd.md: unfilled template placeholders remain ({{feature as it exists}}, {{path:line, path:start-end}}, {{path:line}}, {{product name}}) | FAIL sdlc/03-architecture.md: unf
+PASS  [onboarding] a baseline with a dead citation (src/app.js:3-60, the file has 9 lines) fails check-baseline
+      FAIL DEAD CITATION src/app.js:3-60 in sdlc/00-brd.md: line 60 is outside src/app.js (9 lines at 40eb9f2c47ae) | FAIL DEAD CITATION src/app.js:3-60 in sdlc/02-prd.md: line 60 is outside src/app.js (9 lines at 40eb9f2c47ae)
+PASS  [onboarding] a citation of a file that does not exist at HEAD fails
+      FAIL DEAD CITATION src/gone.js:3 in sdlc/00-brd.md: src/gone.js does not exist at ddb22088a99f | FAIL DEAD CITATION src/gone.js:3 in sdlc/02-prd.md: src/gone.js does not exist at ddb22088a99f
+PASS  [onboarding] an open SEC-ID missing from the gaps register, a production test URL and a secret value each fail
+      FAIL SEC-001 is open: it must be in the known-gaps register as an open finding | FAIL sdlc/B-test-inventory.md: the test environment names https://notes.example.com; the existing suite runs in a test environment (loopback or a test host), never against production | FAIL sdlc/B-accounts.md holds what looks like a secret value (passwo...); name where it lives, never the value
+PASS  [onboarding] the baseline with real citations passes check-baseline
+      check-baseline (phase B: the existing product, as it is, with every claim citing code) note 15 citation(s) checked against 715bf66f71cf PASS the baseline is complete and every claim cites code that ex
+PASS  [onboarding] APPROVE B without the baseline verifier's evidence is refused
+      MOADIX gate: APPROVE NOT recorded: the phase B validators did not pass (FAIL). Findings: check-verifiers-B FAIL: MISSING moadix:baseline-verifier: moadix:baseline-verifier was not launched at this commit (no brief). Nothing changed; the code is spent.
+PASS  [onboarding] moadix:baseline-verifier is scheduled in phase B and gets the gate's brief (every baseline document required)
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [onboarding] a high baseline-verifier finding (a claim the code does not support) blocks APPROVE B
+      MOADIX gate: APPROVE NOT recorded: the phase B validators did not pass (FAIL). Findings: check-verifiers-B FAIL: FAIL moadix:baseline-verifier: finding at a failing severity: F1 (high): AC-1 says the note is shown; the code only stores it. Nothing changed; the code is spent.
+PASS  [onboarding] with real citations and clean verifier evidence, APPROVE B is recorded; every change is now a feature
+      MOADIX gate: APPROVE B recorded (ledger seq 2). It rests on validator result sha256:c0fd411ea8a8. All phases are done. From here every change is a feature cycle (FEATURE <id> <code>). Tell the operator it was recorded.
+PASS  [onboarding] after APPROVE B the baseline is frozen
+      MOADIX: sdlc/02-prd.md belongs to phase B (Baseline); every phase is approved, so it is frozen. Ask the operator to REOPEN B first, or start a feature cycle (FE
+PASS  [onboarding] FEATURE on the onboarded product is recorded (its baseline is approved)
+      MOADIX gate: FEATURE O1 recorded (ledger seq 3). Feature O1 started at phase 0; its documents go in sdlc/features/O1/ (see /moadix:feature); the product's appro
+PASS  [onboarding] on the onboarded product, an addition contradicting the BASELINE's requirement (US-001/AC-2) is refused
+      MOADIX gate: APPROVE NOT recorded: the phase 2 validators did not pass (FAIL). Findings: check-feature-2 FAIL: FAIL CONTRADICTION: US-002/AC-2 contradicts the approved requirement US-001/AC-2 (under the same condition it says the system shall NOT, where the approved requirement says it shall). Appro
+PASS  [onboarding] a feature cycle on the onboarded product runs through its merge at 11: the baseline PRD now holds US-002 under 'Feature O1'
+      [('0', True, 'MOADIX gate: APPROVE 0 recorded (ledger seq 4). It rests on validator result sha256:7c3a79bd2109. Proceed to feature O1 '), ('1', True, 'MOADIX gate: APPROVE 1 recorded (ledger seq 5). It rests on validator result sha256:da3549bc0e8e. Proceed to feature O1 '), ('2', True, 'MOADIX gate: APPROVE 2 recorded (ledger seq 6). It rests on validator result sha256:8aed184a41c3. Proceed to feature O1 '), ('11', True, 'MOADIX gate: APPROVE 11 recorded (ledger seq 18). It rests on validator result sha256:38c25045ff94. Feature O1 merged into the product documents (sdlc/00-brd.md, sdlc/02-prd.
+PASS  [onboarding] the onboarded product's merge is in the ledger like a released product's (feature O1, files, sha256)
+      {'feature': 'O1', 'merge': {'commit_before': '76d0daabcf0b515cb77aa9fd00f241f385094cff', 'feature': 'O1', 'files': [{'added_bytes': 210, 'after_sha256': '11d5e9a716842c175128727bb37d9855b74b5d4fe2f65d
+PASS  [bmad] INIT installs BMad core's four scripts into _bmad/scripts/, byte-identical to BMAD-METHOD 6.12.4
+      ['scripts/config_utils.py', 'scripts/memlog.py', 'scripts/resolve_config.py', 'scripts/resolve_customization.py']
+PASS  [bmad] _bmad/ is gitignored except custom/: the install never dirties the product's tree
+      
+PASS  [bmad] the agent cannot write BMad core (_bmad/scripts) and _bmad/custom/ is not BMad-protected
+      deny / deny
+PASS  [bmad] BMad core's resolve_config.py runs in the product and resolves the output folders to sdlc/
+      { "core": { "user_name": "operator", "project_name": "bmprod", "communication_language": "English", "document_output_language": "English", "output_folder": "{project-root}/sdlc" }, "modules": { "bmm":
+PASS  [bmad] BMad core's memlog.py writes its log into the phase-0 run folder (sdlc/00-forge/)
+      {"ok": true, "memlog": "/private/tmp/claude-503/moadix-v6-chcw79_1/bm/sdlc/00-forge/an-idea/.memlog.md", "entries": 0}
+PASS  [bmad] each BMAD skill's output folder is an sdlc/ path writable in its own phase (frozen after), and the adapter says the same
+      [('bmad-forge-idea', 'sdlc/00-forge', True, True), ('bmad-deep-recon', 'sdlc/01-research', True, True), ('bmad-prd', 'sdlc/02-prd', True, True), ('bmad-architecture', 'sdlc/03-architecture', True, True)]
+PASS  [bmad] check-seam's BMAD half passes on a product INIT set up
+      PASS phase path '.github/workflows/**' is shared by phases 7 and 10b (writable in each) PASS phase path 'tests/**' is shared by phases 7 and 8 (writable in each) PASS no phase lists a glob twice (67 patterns, 2 shared, 2 overlap(s)) PASS BMad core pinned at 6.12.4 (bab9082c3e88) PASS vendored script
+PASS  [bmad] a tampered _bmad/scripts/memlog.py fails check-seam
+      FAIL _bmad/scripts/memlog.py differs from the pinned copy: the gate installs it at INIT and at session start; the BMAD skills' scripts and config would not resolve
+PASS  [bmad] the next session start re-installs it (and says so), and check-seam passes again
+      {'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'MOADIX: BMad core 6.12.4 (re)installed into _bmad/ by the gate: _bmad/scripts/memlog.py.'}}
+PASS  [collapse] COLLAPSE 1 on a size-S product is a recorded ruling: reason and checks not run in the ledger; phase 1 COLLAPSED, the current phase is 2
+      MOADIX gate: COLLAPSE 1 recorded (ledger seq 3). Phase 1 collapsed by the size-S profile (recorded ruling; checks not run: check-handoff-1). Proceed to phase 2. Tell the operator it was recorded.
+PASS  [collapse] COLLAPSE of a phase the size profile does not collapse is refused
+      MOADIX gate: COLLAPSE NOT recorded: the size profile does not collapse phase 2 (it collapses 1, 10c, 6b); do the phase, or PROCEED-PAST it with a reason. Nothing changed; the code is spent.
+PASS  [collapse] a size-M product cannot collapse anything (M and L may not)
+      MOADIX gate: COLLAPSE NOT recorded: the size profile does not collapse phase 1 (it collapses nothing at this size); do the phase, or PROCEED-PAST it with a reason. Nothing changed; the code is spent.
+PASS  [triage] an unconfirmed finding keeps the plugin's severity and is marked unconfirmed (no longer rewritten)
+      {'v3:u1': {'confirmed': False, 'id': 'SF-1', 'location': 'src/a.js:2', 'plugin_id': 'v3:u1', 'plugin_severity': 'HIGH', 'rule': 'CWE-78', 'severity': 'high', 'summary': 'maybe injection'}, 'v3:u2': {'confirmed': False, 'id': 'SF-2', 'location': 'src/b.js:2', 'plugin_id': 'v3:u2', 'plugin_severity':
+PASS  [triage] unconfirmed findings block until triaged or waived
+      FAIL [high] SF-3 src/b.js:2 real injection (plugin HIGH, CWE-78) | FAIL SF-1 src/a.js:2 maybe injection [UNCONFIRMED by its verifier panel] (plugin HIGH, CWE-78): unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with path:line evidence, or the operator waives it (WAIVE SF-1 ... reason=<why>) | FAIL SF-2 src/b.js:2 maybe [UNCONFIRMED by its verifier panel] (plugin MEDIUM, CWE-78): unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with path:line ev
+PASS  [triage] WAIVE of an unconfirmed finding (plugin HIGH) with a reason is recorded: unconfirmed is not unwaivable
+      MOADIX gate: WAIVE SF-1 owner=moad scope=src/a.js expiry=2026-12-12 reason=not reachable from any route recorded (ledger seq 12). Tell the operator it was recorded.
+PASS  [triage] WAIVE of a CONFIRMED high finding is still refused
+      MOADIX gate: WAIVE NOT recorded: SF-3 is a confirmed high-severity finding (Claude Security, commit 94d56760a21f) and CANNOT be waived. Fix it and verify again. Nothing changed; the code is spent.
+PASS  [triage] moadix:sf-triager is scheduled in phase 9 while unconfirmed findings exist; its brief lists them
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [triage] a triage whose citation does not resolve (src/b.js:99) counts for nothing: SF-2 still blocks
+      FAIL [high] SF-3 src/b.js:2 real injection (plugin HIGH, CWE-78) | FAIL SF-2 src/b.js:2 maybe [UNCONFIRMED by its verifier panel] (plugin MEDIUM, CWE-78): unconfirmed, so it blocks until moadix:sf-triager confirms or rejects it with path:line evidence, or the operator waives it (WAIVE SF-2 ... reason=<why>)
+PASS  [triage] triaged: SF-2 rejected with path:line evidence stops blocking; SF-1 confirmed high blocks as high (the earlier waiver of an unconfirmed finding does not cover a confirmed high)
+      FAIL [high] SF-1 src/a.js:2 maybe injection [confirmed by moadix:sf-triager] (plugin HIGH, CWE-78) | FAIL [high] SF-3 src/b.js:2 real injection (plugin HIGH, CWE-78)
+PASS  [triage] a triager-rejected finding may be waived (it blocks nothing; the waiver is only a record)
+      MOADIX gate: WAIVE SF-2 owner=moad scope=src/b.js expiry=2026-12-12 reason=rejected anyway recorded (ledger seq 13). Tell the operator it was recorded.
+PASS  [session] only moadix and claude-security enabled: the session start says nothing about plugins
+      {}
+PASS  [session] another plugin enabled in user settings: reported to the operator (systemMessage) and the agent (context); one the policy force-disables is not
+      MOADIX: PLUGIN DRIFT: superpowers@superpowers-marketplace (enabled in /private/tmp/claude-503/moadix-v6-chcw79_1/fakehome/.claude/settings.json). Only moadix and claude-security should be enabled; the
+PASS  [session] a plugin enabled in the project's local settings is reported too
+      {'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'MOADIX: PLUGIN DRIFT: local-thing@x (enabled in /private/tmp/claude-503/moadix-v6-chcw79_1/sess/.claude/settings.local.js
+PASS  [session] the managed policy runs the SessionStart hook (no onFailure block: it never stops a session)
+      
+PASS  [github] plugin.json starts the github MCP server through the gate's launcher, with no token in its env
+      {'command': '/usr/bin/python3', 'args': ['-I', '/Library/Application Support/ClaudeCode/moadix/gate/ghmcp.py']}
+PASS  [github] INSTALL.md no longer tells the operator to export the token; it is stored at phase 11 only
+      
+PASS  [github] without a token the launcher starts nothing and says why (needed only at phase 11)
+      MOADIX github MCP: no read-only token in the login Keychain (service moadix-github-readonly). It is needed only once a product reaches phase 11; see docs/INSTALL.md.
+PASS  [github] with the Keychain token, the launcher runs the pinned server --read-only with the token in that process only
+      [{'argv': ['stdio', '--read-only', '--toolsets', 'repos,pull_requests,actions,code_security'], 'token': True}]
+PASS  [installer] the root-run tool fetch writes only into root's own scratch folder (TMPDIR and npm cache), created by root
+      
+PASS  [installer] root removes it (right after the fetch, and in the cleanup trap without prompting); the user's own scratch folder never holds a root file
+      
+PASS  [installer] a successful run cleans up first, silently, and its last line is 'MOADIX is updated.' / 'MOADIX is installed.'
+      MOADIX is $([[ $UPDATE == 1 ]] && echo updated || echo installed).
+PASS  [installer] the Terminal dry run checks the last line and an empty stderr on update
+      
+PASS  [guard] no test touched a real product, a real keychain or the user's files
+      []
+
+feature 18/18  onboarding 17/17  bmad 9/9  collapse 3/3  triage 8/8  session 4/4  github 4/4  installer 4/4  guard 1/1
+68 checks, 68 passed, 0 failed (45 s)
