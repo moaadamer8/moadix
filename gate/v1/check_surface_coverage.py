@@ -57,8 +57,10 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
 import hlib  # noqa: E402
 
-ROOT = os.environ.get("HARNESS_ROOT") or os.path.realpath(
-    os.path.join(HERE, "..", ".."))
+# MOADIX v2 (increment 5 fix): the PRODUCT repo. The port kept v1's "two levels above
+# this file", which in v2 is MOADIX's own home, so the product's .sdlc/config was never read.
+ROOT = os.environ.get("HARNESS_ROOT") or (hlib.project_root() if os.environ.get("MOADIX_PRODUCT_ROOT") else
+                                         os.path.realpath(os.path.join(HERE, "..", "..")))
 
 SURFACE_RE = re.compile(r"^([A-Z]+)\s+(/\S*)\s*$")
 
@@ -222,6 +224,9 @@ def main():
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--no-probe", action="store_true",
                     help="skip the reachability filter (the app need not be running)")
+    ap.add_argument("--live", action="store_true",
+                    help="MOADIX increment 5, phase 10a: the probe is REQUIRED and runs against "
+                         "live.base_url in .sdlc/config/product-tools.yaml, which must be loopback")
     args = ap.parse_args()
 
     try:
@@ -322,14 +327,39 @@ def main():
     # MOADIX v2: the reachability probe asked v1's harness/bin/run-product-app.sh
     # whether the app runs, then sent HTTP requests to it. v2 has not ported
     # that front door (app_run moves into .sdlc/product.yaml), and a gate run
-    # must not touch the live product, so the probe is off here: every
-    # declared surface is judged against the contract alone.
-    if state == "declared" and api and not args.no_probe and not os.environ.get("MOADIX_GATE_RUN"):
+    # must not touch the live product, so the probe is off in phase 9's gate run:
+    # every declared surface is judged against the contract alone.
+    # Increment 5 re-enables it in phase 10a (`--live`, registry check-surface-live):
+    # the front door is live.base_url from .sdlc/config/product-tools.yaml, which
+    # must be a loopback http(s) URL (the local test instance, never a production
+    # URL); a non-loopback URL fails, an app that does not answer is UNKNOWN.
+    live_url = None
+    if args.live:
+        try:
+            ptools = hlib.load_yaml(os.path.join(ROOT, ".sdlc", "config", "product-tools.yaml")) or {}
+        except Exception:                                       # noqa: BLE001
+            ptools = {}
+        live_url = str((ptools.get("live") or {}).get("base_url") or "")
+        lsp = urllib.parse.urlsplit(live_url)
+        if lsp.scheme not in ALLOWED_SCHEMES or (lsp.hostname or "") not in LOOPBACK_HOSTS:
+            errs.append("live.base_url %r is not a loopback http(s) URL. The live probe runs only against the "
+                        "local test instance, never a production URL." % live_url)
+            live_url = None
+        elif state != "declared" or not api:
+            unknown_errs.append("the live probe has no enumerated API surface to probe (enumerator %s)" % state)
+        else:
+            reach, _c = probe(live_url, "GET", "/")
+            if reach is None:
+                unknown_errs.append("the app does not answer at %s; start the local instance (app_run) and "
+                                    "the gate probes it again. UNKNOWN, not a pass." % live_url)
+                live_url = None
+    if state == "declared" and api and not args.no_probe and (live_url or not os.environ.get("MOADIX_GATE_RUN")):
         front = os.path.join(ROOT, "harness", "bin", "run-product-app.sh")  # v1 only; see above
         pcfg = cfg.get("probe") or {}
         # `url` exits 0 whether or not the app runs; `status` says whether it does.
-        running = subprocess.run([front, "status"], capture_output=True, text=True, cwd=ROOT).returncode == 0
-        url = str(pcfg.get("base_url") or "") if running else ""
+        running = bool(live_url) or subprocess.run([front, "status"], capture_output=True, text=True,
+                                                   cwd=ROOT).returncode == 0
+        url = (live_url or str(pcfg.get("base_url") or "")) if running else ""
         if running and not url:
             # No probe block: the front door's origin, never its health path.
             out = (subprocess.run([front, "url"], capture_output=True, text=True, cwd=ROOT).stdout or "").strip().splitlines()

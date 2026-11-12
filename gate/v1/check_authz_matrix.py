@@ -59,8 +59,9 @@ sys.path.insert(0, HERE)
 import hlib  # noqa: E402
 import check_surface_coverage as _surface  # noqa: E402
 
-ROOT = os.environ.get("HARNESS_ROOT") or os.path.realpath(
-    os.path.join(HERE, "..", ".."))
+# MOADIX v2 (increment 5 fix): the PRODUCT repo (see check_surface_coverage.ROOT).
+ROOT = os.environ.get("HARNESS_ROOT") or (hlib.project_root() if os.environ.get("MOADIX_PRODUCT_ROOT") else
+                                         os.path.realpath(os.path.join(HERE, "..", "..")))
 
 # The PRD's role axis. It did not exist before v0.7: the template said
 # "As a {role}, ..." in prose only, and nothing declared a role SET. The matrix

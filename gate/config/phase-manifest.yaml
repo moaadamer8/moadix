@@ -5,8 +5,14 @@
 #             plugins' names are refused: only MOADIX's stripped copies are allowed)
 #   mcp       MCP server names; a tool mcp__<server>__<tool> (or a plugin's
 #             mcp__plugin_<plugin>_<server>__<tool>) is allowed when <server> is listed
-#   gate_run  deterministic tools the GATE runs (increment 5 wires them); listed so the
-#             phase's tool set is in one place. The agent may run them for feedback only.
+#   gate_run  deterministic tools the GATE runs (increment 5): each names its pinned tool
+#             (gate/config/tools.yaml) and the validator that runs it. The agent may run
+#             its own copy for feedback only; only the gate's run counts.
+#   external_skills  another plugin's skill, by full name, that the AGENT may invoke in
+#             this phase for feedback (its output never counts; e.g. claude-security in 9,
+#             whose counted scan the gate schedules itself).
+#   mcp       `moadix:<name>` matches only the server MOADIX's plugin ships
+#             (mcp__plugin_moadix_<name>__*, its command pinned in plugin.json).
 #   during    phase 12 (Retro) is not a gated phase: its skills apply while the current
 #             phase is 11 (sdlc/12-*.md is in phase 11's path map) and after all are done.
 # Sizes: skill_md_bytes is what loading the skill puts in context; total_bytes is the
@@ -53,9 +59,9 @@ phases:
     skills: []
     mcp: []
     gate_run:
-      - tool: redocly-cli
-        purpose: "OpenAPI lint of the LLD contracts"
-        status: planned-increment-5
+      - tool: redocly
+        purpose: "OpenAPI and Arazzo lint of the LLD contracts; any error fails"
+        validator: check-contracts
   - label: "6"
     name: UX
     skills:
@@ -70,7 +76,10 @@ phases:
     name: Provisioning
     skills: []
     mcp: []
-    gate_run: []
+    gate_run:
+      - tool: dotenvx
+        purpose: "every required key present, every value encrypted (values never read)"
+        validator: check-env
   - label: "7"
     name: Tasks and Implementation
     skills:
@@ -91,25 +100,40 @@ phases:
   - label: "9"
     name: Security Verification
     skills: []
+    external_skills:
+      - "claude-security:claude-security"
     mcp: []
     gate_run:
       - tool: gitleaks
-        purpose: "secret scan"
-        status: planned-increment-5
+        purpose: "secret scan, history and tree"
+        validator: check-gitleaks
       - tool: osv-scanner
-        purpose: "dependency vulnerabilities"
-        status: planned-increment-5
+        purpose: "dependency vulnerabilities in lockfiles"
+        validator: check-osv
       - tool: trivy
-        purpose: "image and filesystem scan"
-        status: planned-increment-5
+        purpose: "filesystem scan, plus declared images"
+        validator: check-trivy
       - tool: semgrep
-        purpose: "static analysis"
-        status: planned-increment-5
+        purpose: "static analysis, local rules only, no account"
+        validator: check-semgrep
+      - tool: claude-security
+        purpose: "finding source (SARIF -> SF-n register), scheduled by the gate on request-review"
+        validator: check-claude-security
   - label: "10a"
     name: Live Verification
     skills: []
-    mcp: []
-    gate_run: []
+    mcp:
+      - "moadix:playwright"
+    gate_run:
+      - tool: playwright-mcp
+        purpose: "the live verifier's browser (network-reading tools withheld)"
+        validator: check-verifiers-10a
+      - tool: live-probe
+        purpose: "v1's reachability probe of the enumerated surface, loopback only"
+        validator: check-surface-live
+      - tool: redocly
+        purpose: "Arazzo workflows run against the local instance (contract tests)"
+        validator: check-live-contracts
   - label: "10b"
     name: Regression Suites
     skills: []
@@ -121,13 +145,20 @@ phases:
     mcp: []
     gate_run:
       - tool: k6
-        purpose: "load thresholds"
-        status: planned-increment-5
+        purpose: "load thresholds as JUnit cases, plus the product's SQL invariant check"
+        validator: check-load
   - label: "11"
     name: Release
     skills: []
-    mcp: []
-    gate_run: []
+    mcp:
+      - "moadix:github"
+    gate_run:
+      - tool: release-please
+        purpose: "release PR config; the release commit came from a release PR a human merged"
+        validator: check-release
+      - tool: github-mcp-server
+        purpose: "the gate reads CI results and code-scanning alerts, --read-only"
+        validator: check-release
   - label: "11b"
     name: Store Release
     skills: []

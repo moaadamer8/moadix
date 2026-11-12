@@ -48,3 +48,24 @@ roles:
     when: always
     coverage: true
     scope: ["tests/**", "ui-tests/**", "e2e/**", "src/**/*.test.*", "src/**/*.spec.*"]
+# increment 5: the phase-10a live verifier. No method skill; it drives the running app
+# through MOADIX's pinned Playwright MCP (plugin.json: mcp__plugin_moadix_playwright__*),
+# with its network-reading tools withheld (gate/verify.py WITHHELD). The brief lists every
+# acceptance criterion and every button (found in `buttons` globs at HEAD); the evidence
+# maps each to artifacts (trace, video) the browser saved into the evidence directory.
+  - agent: live-verifier
+    phase: "10a"
+    method: null
+    live: true
+    when: always
+    coverage: true
+    scope: []
+    buttons:
+      - "index.html"
+      - "public/**/*.html"
+      - "src/**/*.html"
+      - "src/**/*.jsx"
+      - "src/**/*.tsx"
+      - "src/**/*.vue"
+      - "src/**/*.svelte"
+      - "src/**/*.astro"

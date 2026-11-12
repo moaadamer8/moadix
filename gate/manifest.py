@@ -33,16 +33,18 @@ def load():
     return _CACHE["doc"]
 
 
-def allowed(current_label):
-    """(skills set, mcp set, phase names) for the current phase label ('done' after the last)."""
+def allowed(current_label, external=False):
+    """(skills set, mcp set, phase names) for the current phase label ('done' after the last).
+    external=True returns the phase's external_skills (other plugins' skills, full names)
+    in place of the vendored skills."""
     doc = load()
-    skills = set((doc.get("always") or {}).get("skills") or [])
+    skills = set((doc.get("always") or {}).get("skills") or []) if not external else set()
     mcp = set((doc.get("always") or {}).get("mcp") or [])
     names = []
     for ph in doc["phases"]:
         lab = str(ph.get("label"))
         if lab == str(current_label) or str(current_label) in [str(x) for x in (ph.get("during") or [])]:
-            skills |= set(ph.get("skills") or [])
+            skills |= set(ph.get("external_skills" if external else "skills") or [])
             mcp |= set(ph.get("mcp") or [])
             names.append("%s (%s)" % (lab, ph.get("name")))
     return skills, mcp, names
@@ -62,6 +64,11 @@ def mcp_server(tool):
 
 
 def _server_matches(server, name):
+    """`moadix:<name>` (increment 5) matches ONLY the server MOADIX's plugin ships
+    (mcp__plugin_moadix_<name>__*): its command is pinned in plugin.json, so a user's
+    same-named, unpinned server does not count. A bare name matches as before."""
+    if name.startswith(PLUGIN + ":"):
+        return server == "plugin_%s_%s" % (PLUGIN, name.split(":", 1)[1])
     return server == name or (server.startswith("plugin_") and server.endswith("_" + name))
 
 
@@ -89,6 +96,8 @@ def check(tool, tool_input, label):
         ok = plugin == PLUGIN and bare in skills
         if ok:
             return None
+        if plugin and plugin != PLUGIN and name in allowed(label, external=True)[0]:
+            return None  # a phase's external_skills entry (full name), e.g. claude-security in 9
         allow = ", ".join("%s:%s" % (PLUGIN, s) for s in sorted(skills)) or "none"
         if plugin != PLUGIN and bare in skills:
             why = "only MOADIX's vendored copy %s:%s is allowed (it has its self-approval steps removed)" % (

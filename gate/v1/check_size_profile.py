@@ -42,8 +42,9 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
 import hlib  # noqa: E402
 
-ROOT = os.environ.get("HARNESS_ROOT") or os.path.realpath(
-    os.path.join(HERE, "..", ".."))
+# MOADIX v2 (increment 5 fix): the PRODUCT repo (see check_surface_coverage.ROOT).
+ROOT = os.environ.get("HARNESS_ROOT") or (hlib.project_root() if os.environ.get("MOADIX_PRODUCT_ROOT") else
+                                         os.path.realpath(os.path.join(HERE, "..", "..")))
 
 SIZES = ("S", "M", "L")
 SIZE_RE = re.compile(r"^\s*[-*]\s*\*\*Size:?\*\*:?\s*([SML])\b", re.M | re.I)

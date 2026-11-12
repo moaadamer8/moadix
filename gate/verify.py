@@ -53,7 +53,7 @@ SEVERITIES = ("critical", "high", "medium", "low", "info")
 EVIDENCE_NAME = "findings.json"
 VERDICT_WORDS = re.compile(r"^(verdict|approved?|approval|pass(ed)?|ready|decision|status|result|outcome|lgtm|"
                            r"accept(ed)?|ship|merge)$", re.I)
-TOP_KEYS = {"role", "source_commit", "brief_sha256", "receipt", "reviewed", "findings", "coverage", "notes"}
+TOP_KEYS = {"role", "source_commit", "brief_sha256", "receipt", "reviewed", "findings", "coverage", "buttons", "notes"}
 AC_RE = re.compile(r"^\s*[-*]\s*\*\*(AC-\d+)\s*(?:\(([^)]*)\))?\s*:?\*\*", re.I)  # v1 check_traceability
 CITATION = re.compile(r"^(?P<path>[^:\s][^:]*):(?P<a>\d+)(?:-(?P<b>\d+))?$")
 _CACHE: dict = {}
@@ -254,6 +254,68 @@ def ac_ids(story_list):
     return ["%s/%s" % (sid, ac) for sid, _t, acs, _p, _n in story_list for ac, _l in acs]
 
 
+# ---------------------------------------------------------------- live verifier (increment 5)
+# The phase-10a live verifier drives the running app through MOADIX's pinned Playwright
+# MCP (plugin.json: mcp__plugin_moadix_playwright__*). Its network-reading tools are
+# withheld: they put request/response headers (cookies, bearer tokens) into the
+# transcript, which is v1's 10a defect. evaluate/run_code are withheld for the same
+# reason (they can read document.cookie or fetch()). Matched by name pattern, so a tool
+# a later Playwright MCP adds under such a name is withheld too.
+LIVE_SERVER = "plugin_%s_playwright" % PLUGIN
+WITHHELD = re.compile(r"network|evaluate|run_code|cookie|storage_state|route|har\b", re.I)
+BUTTON_RE = re.compile(r"<button\b(?P<attrs>[^>]*)>(?P<body>.*?)</button>|<input\b(?P<iattrs>[^>]*\btype=[\"']?"
+                       r"(?:submit|button|reset)\b[^>]*)>|<(?P<tag>[a-z][\w-]*)\b(?P<rattrs>[^>]*\brole=[\"']button"
+                       r"[\"'][^>]*)>", re.I | re.S)
+ATTR = re.compile(r"\b(aria-label|data-testid|id|name|value|title)\s*=\s*[\"']([^\"']{1,80})[\"']", re.I)
+
+
+def _button_label(attrs, body):
+    found = {k.lower(): v for k, v in ATTR.findall(attrs or "")}
+    for k in ("aria-label", "data-testid", "id", "name", "value", "title"):
+        if found.get(k):
+            return "%s=%s" % (k, found[k])
+    text = " ".join(re.sub(r"<[^>]+>|\{[^}]*\}", " ", body or "").split())
+    return ("text=%s" % text[:60]) if text else "(unlabelled)"
+
+
+def buttons(root, hd, role):
+    """[(BTN-n, label, path, line)] for every button in the role's `buttons` globs at
+    commit hd, in path and line order. Deterministic: the brief hashes it."""
+    globs = role.get("buttons") or []
+    if not globs:
+        return []
+    files = [p for p in _git(root, "ls-tree", "-r", "--name-only", hd).splitlines()
+             if pathmap.any_glob(globs, p)]
+    out = []
+    for p in sorted(files):
+        try:
+            text = _git(root, "show", "%s:%s" % (hd, p))
+        except VerifyError:
+            continue
+        for m in BUTTON_RE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            label = _button_label(m.group("attrs") or m.group("iattrs") or m.group("rattrs"), m.group("body"))
+            out.append((p, line, label))
+    return [("BTN-%d" % (i + 1), lab, p, ln) for i, (p, ln, lab) in enumerate(out)]
+
+
+def live_base_url(root):
+    from .v1 import hlib
+    try:
+        doc = hlib.load_yaml(os.path.join(root, state.SDLC, "config", "product-tools.yaml")) or {}
+    except Exception:
+        doc = {}
+    return str((doc.get("live") or {}).get("base_url") or "")
+
+
+def untested(root):
+    try:
+        with open(os.path.join(root, state.SDLC, "untested.yaml"), encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def knowledge(root, terms):
     """knowledge.md sections ('## ' headings) that mention a term (a path in scope, a
     story ID, the role), verbatim, in file order."""
@@ -281,6 +343,12 @@ def build_brief(root, st, name, role, base, hd, required):
     ev = os.path.relpath(evidence_file(root, label, name), root)
     terms = list(required) + [s[0] for s in sts] + [name]
     kn = knowledge(root, terms)
+    live = bool(role.get("live"))
+    method = ("method: load the skill %s:%s with the Skill tool and follow it as adapted below" % (PLUGIN, role["method"])
+              if role.get("method") else
+              "method: drive the running app yourself with the Playwright MCP tools (mcp__%s__*); you have no "
+              "skill to load. Network-reading tools (network requests, evaluate, run_code) are withheld: judge "
+              "what a user sees, never headers or cookies" % LIVE_SERVER)
     L = ["# MOADIX verifier brief",
          "",
          "Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder "
@@ -288,7 +356,7 @@ def build_brief(root, st, name, role, base, hd, required):
          "operator decides.",
          "",
          "role: %s" % name,
-         "method: load the skill %s:%s with the Skill tool and follow it as adapted below" % (PLUGIN, role["method"]),
+         method,
          "product: %s" % st["product"],
          "phase: %s (%s)" % (label, ph["name"]),
          "source_commit: %s" % hd,
@@ -305,6 +373,20 @@ def build_brief(root, st, name, role, base, hd, required):
             L += ["  - %s/%s (%s:%d)" % (sid, ac, path, ln) for ac, ln in acs]
     else:
         L.append("- (none found in sdlc/02-*.md)")
+    if live:
+        url = live_base_url(root)
+        btns = buttons(root, hd, role)
+        L += ["", "## The running app",
+              "base_url: %s" % (url or "(not declared: live.base_url in .sdlc/config/product-tools.yaml)"),
+              "Use only this local test instance (loopback). Never open a production URL; the browser is limited "
+              "to loopback origins.",
+              "", "## Every button to exercise",
+              "Click each one at least once through the UI, on the screen where it appears, and record what "
+              "happened. A button you could not reach is a finding, not a skip."]
+        L += ["- %s %s (%s:%d)" % (b, lab, p, ln) for b, lab, p, ln in btns] or ["- (no buttons found in scope)"]
+        unt = untested(root)
+        L += ["", "## .sdlc/untested.yaml (acceptance criteria phase 8 could not test: verify these live first)",
+              unt or "(empty)"]
     L += ["", "## knowledge.md entries"]
     L += kn or ["(none relevant)"]
     L += ["", "## Evidence",
@@ -317,7 +399,17 @@ def build_brief(root, st, name, role, base, hd, required):
           "- reviewed: [repo-relative paths you reviewed]",
           "- findings: [{\"id\": \"F1\", \"severity\": one of %s, \"summary\": \"...\", "
           "\"citations\": [\"path:line\" or \"path:start-end\", ...]}]" % "/".join(SEVERITIES)]
-    if role.get("coverage"):
+    if role.get("coverage") and live:
+        L += ["- coverage: [{\"ac\": \"US-001/AC-1\", \"observed\": \"what you did and saw\", \"artifacts\": "
+              "[\"playwright/<file>\", ...]}] with one entry per acceptance criterion listed above; artifacts are "
+              "paths relative to %s (the trace and video files the browser saved there); an empty artifacts list "
+              "means you could not verify it" % os.path.relpath(evidence_dir(root, label, name), root),
+              "- buttons: [{\"id\": \"BTN-1\", \"exercised\": true, \"observed\": \"...\", \"artifacts\": [...]}] "
+              "with one entry per button listed above",
+              "Recording: call browser_start_tracing and browser_start_video before the first navigation, and "
+              "browser_stop_video and browser_stop_tracing at the end. The browser saves them into the evidence "
+              "directory; cite them as artifacts."]
+    elif role.get("coverage"):
         L.append("- coverage: [{\"ac\": \"US-001/AC-1\", \"tests\": [\"path:line\", ...]}] with one entry per "
                  "acceptance criterion listed above; an empty tests list means you found no test for it")
     L += ["- notes: optional free text",
@@ -450,11 +542,21 @@ def restrict(tool, tool_input, cwd, role):
         return "allow", "verifier %s handing its result back" % role
     if tool in AGENT_TOOLS:
         return "deny", "a verifier cannot start agents (no nesting)"
+    if tool.startswith("mcp__") and roles()[role].get("live"):
+        srv = tool[len("mcp__"):].split("__", 1)
+        if len(srv) == 2 and srv[0] == LIVE_SERVER:
+            if WITHHELD.search(srv[1]):
+                return "deny", ("%s is withheld from the live verifier: network-reading tools put headers, cookies "
+                                "and tokens into the transcript (v1's 10a defect)" % srv[1])
+            return "allow", "live verifier %s driving the browser" % role
+        return "deny", "the live verifier may use only MOADIX's pinned Playwright MCP (mcp__%s__*)" % LIVE_SERVER
     if tool.startswith("mcp__") or tool in ("WebFetch", "WebSearch"):
         return "deny", "a verifier has no network or MCP tools"
     if tool not in VERIFIER_TOOLS:
         return "deny", "%s is not in a verifier's tool set (%s)" % (tool, ", ".join(sorted(VERIFIER_TOOLS)))
     if tool == "Skill":
+        if not roles()[role].get("method"):
+            return "deny", "verifier %s has no method skill" % role
         want = "%s:%s" % (PLUGIN, roles()[role]["method"])
         if str(ti.get("skill") or "").strip() != want:
             return "deny", "verifier %s may load only its method skill %s" % (role, want)
@@ -604,7 +706,9 @@ def check_role(root, st, name, role, base, hd, required):
                 probs.append("finding %s: %s" % (fid, why))
         if f.get("severity") in fail_sev:
             blocking.append("%s (%s): %s" % (fid, f.get("severity"), str(f.get("summary"))[:120]))
-    if role.get("coverage"):
+    if role.get("live"):
+        _check_live(root, label, name, role, hd, ev, probs, blocking, info)
+    elif role.get("coverage"):
         want = ac_ids(stories(root))
         cov = ev.get("coverage")
         got = {}
@@ -632,6 +736,55 @@ def check_role(root, st, name, role, base, hd, required):
     if blocking:
         return "failing", ["finding at a failing severity: %s" % b for b in blocking], info
     return "ok", [], info
+
+
+def _artifact_problem(edir, a):
+    a = str(a)
+    if a.startswith("/") or ".." in a.split("/"):
+        return "artifact %r is not a path inside the evidence directory" % a
+    p = os.path.join(edir, a)
+    if not os.path.exists(p) or (os.path.isfile(p) and os.path.getsize(p) == 0):
+        return "artifact %s does not exist (or is empty) in the evidence directory" % a
+    return None
+
+
+def _check_live(root, label, name, role, hd, ev, probs, blocking, info):
+    """The live verifier: every AC and every button exercised, each backed by artifacts
+    the browser saved into the evidence directory, with a trace and a video present."""
+    edir = evidence_dir(root, label, name)
+    files = []
+    for a, _d, fs in os.walk(edir):
+        files += [os.path.relpath(os.path.join(a, f), edir) for f in fs]
+    if not any(f.endswith(".webm") for f in files):
+        probs.append("no video (.webm) in the evidence directory: start browser_start_video before navigating")
+    if not any(os.path.basename(f).startswith("trace") or "/trace" in f or f.endswith(".trace") for f in files):
+        probs.append("no trace in the evidence directory: start browser_start_tracing before navigating")
+    for key, want, what in (("coverage", ac_ids(stories(root)), "ac"),
+                            ("buttons", [b[0] for b in buttons(root, hd, role)], "id")):
+        got = {}
+        lst = ev.get(key)
+        if not isinstance(lst, list):
+            probs.append("%s is not a list" % key)
+            lst = []
+        for e in lst:
+            if isinstance(e, dict) and isinstance(e.get(what), str):
+                got[e[what]] = e
+        for k in want:
+            e = got.get(k)
+            if e is None:
+                probs.append("%s: %s is not mapped" % (key, k))
+                continue
+            arts = e.get("artifacts")
+            if key == "buttons" and e.get("exercised") is not True:
+                blocking.append("%s was not exercised" % k)
+            if not isinstance(arts, list) or not arts:
+                blocking.append("%s %s has no artifact (not verified live)" % ("button" if key == "buttons" else "", k))
+                continue
+            for a in arts:
+                why = _artifact_problem(edir, a)
+                if why:
+                    probs.append("%s %s: %s" % (key, k, why))
+        info["acs" if key == "coverage" else "buttons"] = len(want)
 
 
 def check_phase(root, st, label):
