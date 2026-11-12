@@ -125,6 +125,24 @@ def node():
         ", ".join(TRUSTED_BIN)))
 
 
+GITHUB_KEYCHAIN_SERVICE = "moadix-github-readonly"
+
+
+def github_token():
+    """The operator's read-only GitHub token, read by the GATE from the login Keychain
+    (increment 6, ruling 2): never from PATH or the environment, and never exported in
+    the shell the agent runs in. Needed only once a product reaches phase 11; until then
+    its absence is not an error anywhere else. Fixture gates read a test variable."""
+    if FIXTURE:
+        return os.environ.get("MOADIX_TEST_GITHUB_TOKEN") or None
+    try:
+        p = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", GITHUB_KEYCHAIN_SERVICE, "-w"],
+                           capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (p.stdout.strip() or None) if p.returncode == 0 else None
+
+
 def argv_for(name, args):
     p, t = tool(name)
     if t["kind"] == "npm":

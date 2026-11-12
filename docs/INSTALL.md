@@ -145,12 +145,22 @@ Steps, in Terminal:
 1. Close every Claude Code session.
 2. `cd ~/moadix && git push` (the plugin, its agents and its MCP servers install from GitHub).
 3. `managed/install.sh`: password once. Expect `3b/6 Fetching the pinned gate-run tools`, ten `got …` lines and a `tools:` line.
-4. For phase 11 only, store a **read-only** GitHub token for the gate (fine-grained; Contents, Pull requests, Actions and Code scanning alerts, all read-only). It goes in your login keychain:
-   `security add-generic-password -s moadix-github-readonly -a moadix -w`
-   It asks for the token twice. For the plugin's `github` MCP server, also `export MOADIX_GITHUB_TOKEN=<same token>` in the shell you start Claude Code from.
-5. Open Claude Code and run `/plugin marketplace update moadix`, `/reload-plugins`. Check `/plugin` shows `moadix` 0.3.0 and `claude-security` enabled, and `/mcp` lists `plugin:moadix:playwright` and `plugin:moadix:github`.
+4. **No GitHub token now.** It is needed only once a product reaches phase 11 (see "GitHub token, at phase 11" below).
+5. Open Claude Code and run `/plugin marketplace update moadix`, `/reload-plugins`. Check `/plugin` shows `moadix` and `claude-security` enabled, and `/mcp` lists `plugin:moadix:playwright`. `plugin:moadix:github` shows as **failed** until you store the token at phase 11; that is expected.
 6. For phase 10a: the live verifier's browser loads the session from `.auth/storage-state.json` in the product (gitignored). Create it once by logging in to the local instance with Playwright's codegen: `npx playwright codegen --save-storage=.auth/storage-state.json http://127.0.0.1:<port>`.
 7. Optional: `/usr/bin/python3 managed/fetch_tools.py ~/.cache/moadix-tools` and then `/usr/bin/python3 tests/tools/run.py`. Run this from Terminal to include the loopback-server cases that the Claude Code sandbox skips.
+
+### GitHub token, at phase 11 (not before)
+
+Nothing asks for a GitHub token until a product reaches phase 11 (Release). Then, once, in **Terminal** (not in Claude Code):
+
+```
+security add-generic-password -s moadix-github-readonly -a moadix -w
+```
+
+It asks for the token twice. Use a **read-only** fine-grained token (Contents, Pull requests, Actions and Code scanning alerts, all read-only). The gate reads it from the Keychain itself, both for its own phase-11 check and to start the plugin's `github` MCP server (`gate/ghmcp.py` passes it to that one process only). **Never** `export` it in the shell you start Claude Code from: that shell's environment reaches the agent's commands. After storing it, run `/mcp` in the session and reconnect `plugin:moadix:github`.
+
+Without the token, phase 11's check-release reports UNKNOWN ("no read-only GitHub token in the login Keychain"), which APPROVE 11 refuses. No other phase needs it.
 
 Product settings the new checks read go in `.sdlc/config/product-tools.yaml` (the agent proposes it in `.sdlc-proposals/config/`, you `ADOPT` it):
 

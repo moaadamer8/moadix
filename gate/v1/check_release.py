@@ -78,12 +78,9 @@ def local_checks(root, errs, notes):
 
 
 def token():
-    """The operator's read-only GitHub token from the login Keychain (never PATH, never env)."""
-    if toolrun.FIXTURE:
-        return os.environ.get("MOADIX_TEST_GITHUB_TOKEN") or None
-    p = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "moadix-github-readonly", "-w"],
-                       capture_output=True, text=True)
-    return p.stdout.strip() or None if p.returncode == 0 else None
+    """The operator's read-only GitHub token, read by the gate from the login Keychain
+    (toolrun.github_token: never PATH, never env)."""
+    return toolrun.github_token()
 
 
 def repo_of(root):
