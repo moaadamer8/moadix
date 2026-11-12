@@ -1,6 +1,7 @@
 #!/usr/bin/python3
-"""MOADIX hook entry point: `hook.py prompt` (UserPromptSubmit), `hook.py pretool`
-or `hook.py stop` (Stop: starts the current phase's validators, never blocks).
+"""MOADIX hook entry point: `hook.py prompt` (UserPromptSubmit), `hook.py pretool`,
+`hook.py stop` (Stop: starts the current phase's validators, never blocks) or
+`hook.py session` (SessionStart: reports plugin drift, never blocks).
 
 Run by /usr/bin/python3 (SIP-protected), from MOADIX_HOME, the root-owned copy
 the installer makes. Exit codes:
@@ -20,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 with contextlib.suppress(ImportError):  # only in test fixtures' gate copies (tests/lib/_testguard.py)
     importlib.import_module("gate._testguard")
-from gate import autoval, opcmd, pretool  # noqa: E402
+from gate import autoval, opcmd, pretool, session  # noqa: E402
 
 
 def main():
@@ -30,6 +31,14 @@ def main():
         # Fail-open is safe here because a missing validator result makes APPROVE refuse.
         with contextlib.suppress(Exception):
             autoval.on_stop(json.load(sys.stdin))
+        return 0
+    if mode == "session":
+        # Never fails the session start: drift is reported, nothing is blocked (ruling 5).
+        out = None
+        with contextlib.suppress(Exception):
+            out = session.handle(json.load(sys.stdin))
+        if out:
+            sys.stdout.write(json.dumps(out))
         return 0
     data = json.load(sys.stdin)
     if mode == "pretool":
@@ -45,7 +54,7 @@ def main():
             with contextlib.suppress(Exception):  # best effort: the reply above already says nothing was recorded
                 opcmd._burn_all(data.get("prompt") or "")
     else:
-        sys.stderr.write("usage: hook.py prompt|pretool\n")
+        sys.stderr.write("usage: hook.py prompt|pretool|stop|session\n")
         return 1
     if out:
         sys.stdout.write(json.dumps(out))
