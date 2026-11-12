@@ -39,7 +39,7 @@ def main():
         return 1
     env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "/var/empty"),
            "SSL_CERT_FILE": "/etc/ssl/cert.pem", "GITHUB_PERSONAL_ACCESS_TOKEN": tok}
-    os.execve(argv[0], argv, env)
+    os.execve(argv[0], argv, env)  # noqa: S606 -- the pinned server, an argv list, no shell
     return 1
 
 
