@@ -167,6 +167,11 @@ def main():
           r.returncode == 0 and "MOADIX is updated" in r.stdout and "INTEGRITY OK" in o
           and [l for l in cd1.splitlines() if l.startswith("CDHash")] == [l for l in cd2.splitlines() if l.startswith("CDHash")],
           "rc=%d; %s; STATUS: %s" % (r.returncode, "updated" if "MOADIX is updated" in r.stdout else r.stdout[-200:], o[60:140]))
+    last = [l for l in r.stdout.splitlines() if l.strip()][-1:] or [""]
+    check("increment 6 (ruling 4): a successful update's LAST line is exactly 'MOADIX is updated.', and it "
+          "prints nothing on stderr (no 'Permission denied' from the cleanup)",
+          last == ["MOADIX is updated."] and "Permission denied" not in r.stderr and not r.stderr.strip(),
+          "last line %r; stderr %r" % (last[0], r.stderr.strip()[-200:]))
 
     mid = kc_items()
     r = sh(["bash", os.path.join(REPO, "managed", "uninstall.sh"), "--dry-run", CC, KC])

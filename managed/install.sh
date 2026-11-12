@@ -85,9 +85,19 @@ fi
 
 # ---- 2. build ------------------------------------------------------------------
 say "2/6 Building the checker"
+# Two scratch folders, each created and removed by the SAME owner (increment 6, ruling 4):
+#   $work      yours: the checker build, the rendered policy, the canary output
+#   $rootwork  root's (real mode): everything the root-run tool fetch writes (npm and uv
+#              caches, temp files). Root's files inside a folder of yours cannot be deleted
+#              by you, which printed ~900 "Permission denied" lines at the end of an update.
 if [[ $MODE == real ]]; then work="$(mktemp -d "${TMPDIR:-/tmp}/moadix-install.XXXXXX")"; else work="$(mktemp -d "$(dirname "$CC_DIR")/work.XXXXXX")"; fi
-canary=""
-cleanup() { rm -rf "$work"; [[ -n "$canary" ]] && rm -rf "$canary"; return 0; }
+canary=""; rootwork=""
+drop_rootwork() {
+  [[ -n "$rootwork" ]] || return 0
+  if [[ ${#SUDO[@]} -gt 0 ]]; then "${SUDO[@]}" -n /bin/rm -rf "$rootwork" 2>/dev/null || true; else /bin/rm -rf "$rootwork"; fi
+  rootwork=""
+}
+cleanup() { drop_rootwork; rm -rf "$work" 2>/dev/null; [[ -n "$canary" ]] && rm -rf "$canary" 2>/dev/null; return 0; }
 trap cleanup EXIT
 if [[ $MODE == real ]]; then
   "$HERE/checker/build.sh" "$work/moadix-checker"
@@ -123,8 +133,11 @@ done
 # uv installs wheels only, so no package code runs as root. Kept across updates (idempotent).
 if [[ $MODE == real ]]; then
   say "3b/6 Fetching the pinned gate-run tools (gate/config/tools.yaml) into $MOADIX_HOME/tools"
-  as_root /usr/bin/env npm_config_cache="$work/npm-cache" /usr/bin/python3 -I "$HERE/managed/fetch_tools.py" \
-    "$MOADIX_HOME/tools" || fail "a pinned tool could not be fetched or did not match its sha256 (output above)"
+  rootwork="$(as_root /usr/bin/mktemp -d /private/tmp/moadix-root.XXXXXX)" || fail "could not create root's scratch folder"
+  as_root /usr/bin/env TMPDIR="$rootwork" npm_config_cache="$rootwork/npm-cache" /usr/bin/python3 -I \
+    "$HERE/managed/fetch_tools.py" "$MOADIX_HOME/tools" \
+    || fail "a pinned tool could not be fetched or did not match its sha256 (output above)"
+  as_root /bin/rm -rf "$rootwork" && rootwork=""   # removed by root, while the password is still cached
   pwcli="$MOADIX_HOME/tools/playwright-mcp-0.0.83/node_modules/playwright/cli.js"
   /opt/homebrew/bin/node "$pwcli" install chromium >/dev/null || fail "Playwright's Chromium could not be installed"
   echo "tools: $(ls "$MOADIX_HOME/tools" | tr '\n' ' ')"
@@ -220,11 +233,16 @@ else
   echo "(dry run: the live Claude Code canary is skipped; the stand-in path is not a policy location)"
 fi
 
+# Clean up BEFORE the last line, silently, so a successful run ends with exactly one
+# unmistakable line: "MOADIX is updated." (or "MOADIX is installed.").
+trap - EXIT
+cleanup
 cat <<EOF
 
-MOADIX is $([[ $UPDATE == 1 ]] && echo updated || echo installed).
   Policy:  $POLICY
   Gate:    $MOADIX_HOME
 Next: open Claude Code, run /status, and check 'Setting sources' lists
 'Enterprise managed settings (file)'. See docs/INSTALL.md.
+
+MOADIX is $([[ $UPDATE == 1 ]] && echo updated || echo installed).
 EOF
