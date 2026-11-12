@@ -151,7 +151,7 @@ def main():
                    "LANG": "en_US.UTF-8", "TMPDIR": tmp, "MOADIX_PRODUCT_ROOT": root,
                    "MOADIX_PHASE_DOC": doc_path, "MOADIX_GATE_RUN": "yes", "MOADIX_FEATURE": st.get("feature") or ""}
             if os.path.exists(os.path.join(GATE_DIR, "_testguard.py")):  # test fixtures only
-                env.update({k: os.environ[k] for k in GUARD_KEYS if k in os.environ})
+                env.update({k: os.environ[k] for k in GUARD_KEYS + ("MOADIX_TEST_GITHUB_TOKEN",) if k in os.environ})
             ruling, na = profile_na(root)
             results = []
             for c in validators_for(label, "feature" if st.get("feature") else "product"):

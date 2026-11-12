@@ -112,7 +112,9 @@ def product_text(root):
 
 def _ears_parts(ac):
     """(trigger, response, negated) of an EARS sentence, normalised; None if not EARS-shaped."""
-    s = " ".join(ac.strip().rstrip(".").lower().split())
+    # Parenthetical asides (citations such as "(code: src/app.js:4)", notes) are not part of
+    # the requirement: "shall refuse it (code: x:4)" and "shall not refuse it" contradict.
+    s = " ".join(re.sub(r"\([^)]*\)", " ", ac).strip().rstrip(".").lower().split())
     m = re.match(r"^(?:(when|while|where|if)\s+(.+?),\s*(?:then\s+)?)?the\s+(.+?)\s+(shall\s+not|shall\s+never|shall)\s+"
                  r"(.+)$", s)
     if not m:
