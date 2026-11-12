@@ -33,7 +33,7 @@ E = fixtures.Env("g2").build()
 os.environ.update(MOADIX_GUARD_ROOT=E.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD_SHIM=E.shim)
 import _testguard  # noqa: E402,F401  (after the env is set: guards this runner too)
 import corpus_readonly  # noqa: E402
-from gate import pathmap  # noqa: E402
+from gate import pathmap, state  # noqa: E402
 
 RESULTS = []
 PY = fixtures.PY
@@ -267,11 +267,16 @@ def group_port():
     inc5 = {"check-contracts", "check-env", "check-gitleaks", "check-osv", "check-trivy", "check-semgrep",
             "check-claude-security", "check-verifiers-10a", "check-surface-live", "check-live-contracts",
             "check-load", "check-release"}
-    v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5]
-    inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5]
+    # increment 6 adds check-feature per phase (scope feature), phase B's check-baseline and
+    # verifier check, and check-seam (BMAD half) in the first phase of a product
+    inc6 = {c["id"] for c in comps if c["module"] in ("check_feature", "check_baseline", "check_seam")} | {
+        "check-verifiers-B"}
+    v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5 | inc6]
+    inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5 | inc6]
     n5 = len([c for c in comps if c["id"] in inc5])
-    record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks and increment 5's %d)" % (
-        len(v1c), len(inc4), n5), len(v1c) == 21 and len(inc4) == 3 and n5 == 12,
+    record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks, increment 5's %d and "
+              "increment 6's %d)" % (len(v1c), len(inc4), n5, len(inc6)),
+           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")
@@ -285,7 +290,11 @@ def group_port():
             crashed.append(c["id"])
         # check-live-contracts (increment 5) runs Arazzo workflows "where present": with none
         # committed there is nothing to run, as check-approvals has nothing to check.
-        if r.returncode == 0 and c["id"] not in ("check-approvals", "check-live-contracts"):
+        # check-seam (increment 6) judges MOADIX's own seam (path map, BMad core in _bmad/, which INIT
+        # installed), not the product's documents, so an empty product passes it.
+        # check-feature-* is UNKNOWN outside a feature cycle (exit 2), never a pass.
+        if r.returncode == 0 and c["id"] not in ("check-approvals", "check-live-contracts", "check-seam-0",
+                                                 "check-seam-B"):
             passed_empty.append(c["id"])
     record(G, "every ported validator runs on an empty product without a traceback", not crashed, crashed or "none")
     record(G, "no validator passes an empty product (check-approvals and check-live-contracts are vacuously clean)",
@@ -899,12 +908,12 @@ def group_upgrade():
     p = E.repo("upgprod")
     E.init(p, "upgfx")
     ph = os.path.join(p, ".sdlc", "phase.yaml")
-    old = open(ph).read().replace("version: 3", "version: 2")
+    old = open(ph).read().replace("version: %d" % state.RENDER_VERSION, "version: 2")
     with open(ph, "w") as f:
         f.write(old + "# rendered by an older gate\n")
     st = E.prompt(p, "STATUS")
     record(G, "a phase.yaml rendered by an older gate (version 2) is re-derived, not reported as drift",
-           "INTEGRITY OK" in st and "version: 3" in open(ph).read(), short(st, 120))
+           "INTEGRITY OK" in st and "version: %d" % state.RENDER_VERSION in open(ph).read(), short(st, 120))
     with open(ph, "a") as f:
         f.write("# tampered\n")
     st = E.prompt(p, "STATUS")
