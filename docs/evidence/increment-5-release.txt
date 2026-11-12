@@ -1,0 +1,11 @@
+PASS  [release] self-test: control: nothing changed since the tag -> pass
+PASS  [release] self-test: a change outside the shipped folders -> pass
+PASS  [release] self-test: an uncommitted change under agents/ without a bump -> FAIL
+PASS  [release] self-test: a committed change under agents/ without a bump -> FAIL
+PASS  [release] self-test: an untracked new file under skills/ without a bump -> FAIL
+PASS  [release] self-test: the same change with the version bumped -> pass
+PASS  [release] self-test: no tag: the baseline is the last version change; nothing since -> pass
+PASS  [release] self-test: no tag: a shipped change after the last version change -> FAIL
+PASS  [release] this repo: shipped folders unchanged since the last release, or plugin.json's version bumped
+      baseline tag v0.2.1; version 0.2.1 -> 0.3.0; 1 shipped file(s) changed
+9 checks, 9 passed, 0 failed

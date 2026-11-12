@@ -1,0 +1,197 @@
+PASS  [brief] launch moadix:code-reviewer in phase 7 -> allowed with updatedInput
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [brief] the builder's prompt is gone: none of its text reaches the verifier
+      # MOADIX verifier brief Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder wrote reaches you. Report findings
+PASS  [brief] the replacement is the gate's brief (header, role, phase, method skill)
+      # MOADIX verifier brief Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder wrote reaches you. Report findings only: never a verdict, never 'approve',
+PASS  [brief] brief: diff range is base = phase 6b's approval commit, head = HEAD
+      base a50f017765c0 head cf5f32c5fd9d
+PASS  [brief] brief: required evidence paths are the changed files in scope
+      
+PASS  [brief] brief: story and acceptance-criteria IDs with their PRD lines
+      
+PASS  [brief] brief: relevant knowledge.md entries only
+      
+PASS  [brief] the gate computes the brief hash: brief.md's sha256 = schedule = the hash in the prompt
+      9795d299595c571e
+PASS  [brief] the receipt is in the prompt only; the gate keeps its sha256
+      not on disk
+PASS  [brief] a different builder prompt yields the same brief (only the receipt differs)
+      
+PASS  [brief] updatedInput keeps the verifier type and labels the call with the brief hash
+      MOADIX verifier code-reviewer (brief 9795d299595c)
+PASS  [brief] the legacy Task tool name gets the same replacement
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [brief] control: a non-verifier agent launch -> no opinion, prompt untouched
+      (none)
+PASS  [schedule] phase 7: moadix:ac-coverage-critic -> refused, not scheduled (belongs to phase 8)
+      MOADIX: verifier moadix:ac-coverage-critic is not scheduled for the current phase 7: it belongs to phase 8. Scheduled now: moadix:code-reviewer, moadix:typescript-reviewer (gate/config/verifiers.yaml)
+PASS  [schedule] phase 7: moadix:design-reviewer -> refused, not scheduled (belongs to phase 6)
+      MOADIX: verifier moadix:design-reviewer is not scheduled for the current phase 7: it belongs to phase 6. Scheduled now: moadix:code-reviewer, moadix:typescript-reviewer (gate/config/verifiers.yaml)
+PASS  [schedule] phase 7 with .ts changed: moadix:typescript-reviewer -> scheduled
+      MOADIX: verifier launched with the gate's brief in place of the given prompt
+PASS  [schedule] phase 7 with no TS/JS in the range: moadix:typescript-reviewer -> refused (out of scope)
+      MOADIX: verifier moadix:typescript-reviewer is not scheduled for the current phase 7: the diff range changes no file in its scope. Scheduled now: moadix:code-reviewer (gate/config/verifiers.yaml)
+PASS  [schedule] 'code-reviewer' (not the MOADIX verifier) -> refused in a product
+      MOADIX: 'code-reviewer' is not a MOADIX verifier; in a MOADIX product a verifier is launched as moadix:code-reviewer
+PASS  [schedule] 'other-plugin:code-reviewer' (not the MOADIX verifier) -> refused in a product
+      MOADIX: 'other-plugin:code-reviewer' is not a MOADIX verifier; in a MOADIX product a verifier is launched as moadix:code-reviewer
+PASS  [schedule] uncommitted changes -> refused (a verifier reviews a commit)
+      MOADIX: commit first: a verifier reviews a commit, and the working tree has changes (src/extra.ts)
+PASS  [schedule] gate state fails its integrity check -> no verifier is scheduled
+      MOADIX: gate state failed its integrity check, so no verifier is scheduled (run STATUS)
+PASS  [schedule] outside a product: moadix:code-reviewer -> refused
+      MOADIX: moadix:code-reviewer runs only inside a MOADIX product (no .sdlc/ here)
+PASS  [schedule] outside a product: someone else's bare code-reviewer -> no opinion (MOADIX passive)
+      (none)
+PASS  [restrict] verifier: Write on its own evidence file -> allow
+      MOADIX: verifier code-reviewer writing its evidence
+PASS  [restrict] verifier: Write on a source file -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Edit on an always-writable file (README.md) -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Write on the gate's schedule.json next to its evidence -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Write on the gate's brief.md -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Write on another verifier's evidence directory -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Write on a ../ escape from the evidence directory -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: Write on outside the repo -> deny
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] verifier: NotebookEdit on NotebookEdit -> deny
+      MOADIX: NotebookEdit is not in a verifier's tool set (Bash, Edit, Glob, Grep, MultiEdit, Read, Skill, TodoWrite, Write) (verifier code-reviewer)
+PASS  [restrict] verifier: Agent on Agent (nesting) -> deny
+      MOADIX: a verifier cannot start agents (no nesting) (verifier code-reviewer)
+PASS  [restrict] verifier: Task on Task (nesting) -> deny
+      MOADIX: a verifier cannot start agents (no nesting) (verifier code-reviewer)
+PASS  [restrict] verifier: WebFetch on WebFetch -> deny
+      MOADIX: a verifier has no network or MCP tools (verifier code-reviewer)
+PASS  [restrict] verifier: mcp__playwright__browser_navigate on an MCP tool -> deny
+      MOADIX: a verifier has no network or MCP tools (verifier code-reviewer)
+PASS  [restrict] verifier: Skill on its method skill -> none
+      (no objection)
+PASS  [restrict] verifier: Skill on another phase-7 skill -> deny
+      MOADIX: verifier code-reviewer may load only its method skill moadix:code-review (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on read-only git diff -> none
+      (no objection)
+PASS  [restrict] verifier: Bash on grep -i (control) -> none
+      (no objection)
+PASS  [restrict] verifier: Bash on a redirect into a source file -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it writes files (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on a redirect into its own evidence (Bash is read-only) -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it writes files (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on git commit -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: git commit is not read-only (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on git checkout -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it writes files (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on sed -i -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it writes files (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on find -delete -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it writes files (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on an interpreter -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: it runs code the gate cannot see into (python3 runs code given inline or from stdin) (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on running the product's tests -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: 'npm' is not one of a verifier's read-only commands (verifier code-reviewer)
+PASS  [restrict] verifier: Bash on git diff --output -> deny
+      MOADIX: a verifier's Bash is read-only, and this command is refused: --output=src/x writes a file (verifier code-reviewer)
+PASS  [restrict] a verifier can hand back its result, and still cannot write outside its evidence directory or start agents
+      handback=allow (MOADIX: verifier code-reviewer handing its result back) | write src=deny | Agent=deny | Task=deny
+PASS  [restrict] only the exact return tool is allowed: SubagentHandbackX -> deny
+      MOADIX: SubagentHandbackX is not in a verifier's tool set (Bash, Edit, Glob, Grep, MultiEdit, Read, Skill, TodoWrite, Write) (verifier code-reviewer)
+PASS  [restrict] only the exact return tool is allowed: Handback -> deny
+      MOADIX: Handback is not in a verifier's tool set (Bash, Edit, Glob, Grep, MultiEdit, Read, Skill, TodoWrite, Write) (verifier code-reviewer)
+PASS  [restrict] only the exact return tool is allowed: subagenthandback -> deny
+      MOADIX: subagenthandback is not in a verifier's tool set (Bash, Edit, Glob, Grep, MultiEdit, Read, Skill, TodoWrite, Write) (verifier code-reviewer)
+PASS  [restrict] the bare agent type 'code-reviewer' is held to the same restrictions
+      MOADIX: verifier code-reviewer writes only inside its evidence directory .sdlc/cache/verify/7/code-reviewer/evidence (verifier code-reviewer)
+PASS  [restrict] any subagent in a product cannot start agents (spawn depth capped at 1)
+      MOADIX: a subagent cannot start agents in a MOADIX product (spawn depth is capped at 1)
+PASS  [restrict] the builder (main thread) cannot write a verifier's evidence
+      MOADIX: .sdlc/cache/verify/7/code-reviewer/evidence/findings.json is MOADIX gate state; only the gate's hooks write it
+PASS  [restrict] the builder's Bash cannot write a verifier's evidence
+      MOADIX: .sdlc/cache/verify/7/code-reviewer/evidence/findings.json is MOADIX gate state; only the gate's hooks write it
+PASS  [restrict] sandbox: every Bash process is denied .sdlc/ (evidence included); spawn depth env is 1
+      
+PASS  [restrict] plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only; the live verifier (increment 5) has Read/Grep/Glob/Write plus pinned Playwright MCP tools only
+      ['ac-coverage-critic', 'code-reviewer', 'design-reviewer', 'typescript-reviewer', 'live-verifier', 'replacement-probe']
+PASS  [evidence] control: good evidence from both scheduled verifiers -> validator passes
+      OK moadix:code-reviewer evidence 721006640a9d (brief 9795d299595c): 1 findings, citations resolve, stamped HEAD OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a wrong commit -> fails
+      FAIL moadix:code-reviewer: source_commit 000000000000 does not match HEAD cf5f32c5fd9d OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a wrong brief hash -> fails
+      FAIL moadix:code-reviewer: brief_sha256 ffffffffffff does not match the gate's brief 9795d299595c OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a wrong receipt (not the briefed verifier) -> fails
+      FAIL moadix:code-reviewer: the receipt does not match the one the gate put in the verifier's prompt (the evidence was not written by the verifier the gate briefed) OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations ...
+PASS  [evidence] evidence with a dead citation (no such file) -> fails
+      FAIL moadix:code-reviewer: finding S1: citation src/gone.ts:3: src/gone.ts does not exist at cf5f32c5fd9d OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a dead citation (line past the end) -> fails
+      FAIL moadix:code-reviewer: finding S1: citation src/notes.ts:400: line 400 is outside src/notes.ts (5 lines) OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a finding without citations -> fails
+      FAIL moadix:code-reviewer: finding S1 has no citations OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a verdict field -> fails
+      FAIL moadix:code-reviewer: unexpected keys verdict (findings only, no verdict) OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a nested pass/fail field -> fails
+      FAIL moadix:code-reviewer: verdict-like fields evidence.findings[0].status: a verifier reports findings, never a verdict OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a required path not reviewed -> fails
+      FAIL moadix:code-reviewer: required paths not reviewed: tests/notes.test.ts OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence with a high-severity finding -> fails
+      FAIL moadix:code-reviewer: finding at a failing severity: P1 (high): AC-2 not handled OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] evidence that is not JSON -> fails
+      FAIL moadix:code-reviewer: the evidence is not JSON OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] no evidence -> MISSING
+      MISSING moadix:code-reviewer: no evidence at .sdlc/cache/verify/7/code-reviewer/evidence/findings.json OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] a brief.md changed after launch -> fails
+      FAIL moadix:code-reviewer: the gate's brief.md no longer matches its recorded hash OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] a new launch supersedes the old evidence (old receipt) -> missing until the verifier writes again
+      MISSING moadix:code-reviewer: no evidence at .sdlc/cache/verify/7/code-reviewer/evidence/findings.json OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, stamped HEAD
+PASS  [evidence] control: evidence for the new brief -> passes
+      OK moadix:code-reviewer evidence 1cf26cb67243 (brief 9795d299595c): 1 findings, citations resolve, stamped HEAD OK moadix:typescript-reviewer evidence 616a1e316178 (brief cc84661aa122): 1 findings, citations resolve, sta...
+PASS  [evidence] a new commit after verification -> stale (brief for another commit)
+      FAIL stale moadix:code-reviewer: the brief was for commit cf5f32c5fd9d, HEAD is 5f2c605613fc; launch moadix:code-reviewer again FAIL stale moadix:typescript-reviewer: the brief was for commit cf5f32c5fd9d, HEAD is 5f2c60...
+PASS  [evidence] control (phase 8): every AC mapped to a resolving test -> passes
+      OK moadix:ac-coverage-critic evidence 902d3e88ee1a (brief 5180327663fb): 1 findings, 2 acceptance criteria mapped, citations resolve, stamped HEAD
+PASS  [evidence] AC-coverage evidence with an AC with no test -> fails
+      FAIL moadix:ac-coverage-critic: finding at a failing severity: US-001/AC-2 has no test (untested acceptance criterion)
+PASS  [evidence] AC-coverage evidence with an AC left out -> fails
+      FAIL moadix:ac-coverage-critic: coverage: US-001/AC-2 is not mapped
+PASS  [evidence] AC-coverage evidence with a dead test citation -> fails
+      FAIL moadix:ac-coverage-critic: coverage US-001/AC-1: citation tests/notes.test.ts:99: line 99 is outside tests/notes.test.ts (10 lines)
+PASS  [approve] APPROVE 7 with no verifier launched -> refused, findings name the missing verifiers
+      MOADIX gate: APPROVE NOT recorded: the phase 7 validators did not pass (FAIL). Findings: check-verifiers-7 FAIL: MISSING moadix:code-reviewer: moadix:code-reviewer was not launched at this commit (no brief); MISSING moadix:typescript-reviewer: moadix:typescript-reviewer was not launched at this comm...
+PASS  [approve] APPROVE 7 with only one of the two scheduled verifiers' evidence -> refused
+      MOADIX gate: APPROVE NOT recorded: the phase 7 validators did not pass (FAIL). Findings: check-verifiers-7 FAIL: MISSING moadix:typescript-reviewer: moadix:typescript-reviewer was not launched at this commit (no brief). Nothing changed; the code is spent.
+PASS  [approve] APPROVE 7 with failing evidence (a critical finding) -> refused
+      MOADIX gate: APPROVE NOT recorded: the phase 7 validators did not pass (FAIL). Findings: check-verifiers-7 FAIL: FAIL moadix:typescript-reviewer: finding at a failing severity: T1 (critical): unsound cast. Nothing changed; the code is spent.
+PASS  [approve] new evidence makes the cached result stale: APPROVE before the gate re-ran -> refused
+      MOADIX gate: APPROVE NOT recorded: the phase's validators have no fresh result for this commit (the cached results describe different verifier evidence (a verifier ran or was launched since)), and a stale or missing result counts as a failure; the gate runs them when the agent's turn ends, so send A...
+PASS  [approve] APPROVE 7 after a new commit (evidence for the old commit) -> refused as stale
+      MOADIX gate: APPROVE NOT recorded: the phase 7 validators did not pass (FAIL). Findings: check-verifiers-7 FAIL: FAIL stale moadix:code-reviewer: the brief was for commit 2b2d5b05cbc5, HEAD is 742eb2d8e1fb; launch moadix:code-reviewer again; FAIL stale moadix:typescript-reviewer: the brief was for c...
+PASS  [approve] control: good evidence from every scheduled verifier at HEAD -> APPROVE 7 recorded
+      MOADIX gate: APPROVE 7 recorded (ledger seq 10). It rests on validator result sha256:3d84e8a736e1. Proceed to phase 8. Tell the operator it was recorded.
+PASS  [approve] the APPROVE line records check-verifiers-7 as pass
+      {'check-verifiers-7': 'pass'}
+PASS  [probe] outside a product: the probe's prompt is replaced by the gate's nonce line, and the nonce is logged
+      MOADIX replacement probe. First call the Read tool once on /dev/null. Then reply with exactly this line and nothing else: PROBE-REPLACED a7b959a465e3bd94
+PASS  [probe] in a product: the probe's prompt is replaced by the gate's nonce line, and the nonce is logged
+      MOADIX replacement probe. First call the Read tool once on /dev/null. Then reply with exactly this line and nothing else: PROBE-REPLACED 10edaaab087ace35
+PASS  [probe] the probe's Read of /dev/null is allowed and its agent_type is logged
+      MOADIX: replacement probe: its one Read of /dev/null
+PASS  [probe] the probe can hand its reply back, and the decision is logged
+      MOADIX: replacement probe: handing its reply back
+PASS  [probe] the probe's Read of any other file is denied, and the log names the path
+      MOADIX: the replacement probe has no other tools
+PASS  [probe] the probe has no other tools: Bash -> deny
+      MOADIX: the replacement probe has no other tools
+PASS  [probe] the probe has no other tools: Agent -> deny
+      MOADIX: the replacement probe has no other tools
+PASS  [probe] the probe has no other tools: Write -> deny
+      MOADIX: the replacement probe has no other tools
+PASS  [probe] the probe produces no schedule or evidence
+      none
+PASS  [guard] no test read, wrote or started a real product or compose project
+      []
+
+brief 13/13  schedule 10/10  restrict 36/36  evidence 21/21  approve 7/7  probe 9/9  guard 1/1
+97 checks, 97 passed, 0 failed (29s)

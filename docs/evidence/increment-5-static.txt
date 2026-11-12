@@ -1,0 +1,8 @@
+check-static: /Users/moad/moadix
+  note  ruff: clean over gate
+  note  mypy: clean
+  note  shellcheck: clean over 3 script(s)
+  PASS  ruff, mypy and shellcheck are clean over the control layer.
+check-hardcoded-state: root=/Users/moad/moadix products=(none given), phase labels=16, exemptions=32
+check-hardcoded-state: 0 undeclared hardcoded reference(s).
+No gate state is written down twice.
