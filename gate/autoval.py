@@ -37,6 +37,23 @@ def on_stop(hook_input):
     trigger(hook_input.get("cwd"))
 
 
+def on_request_review(cwd):
+    """request-review: the validators (as on Stop) and, in phase 9 only, the Claude Security
+    scan for HEAD (gate/secscan.py). Never on the Stop hook: a scan costs real time and
+    tokens, so it starts only when the agent says the phase is ready. Never raises."""
+    started, detail = trigger(cwd)
+    try:
+        root = state.find_root(cwd)
+        if root:
+            st, problems = state.current_state(root)
+            if not problems and st.get("current_phase") == "9":
+                from . import secscan
+                detail += "; claude-security: " + secscan.schedule(root, st)
+    except Exception as e:
+        detail += "; claude-security: not started (%r)" % (e,)
+    return started, detail
+
+
 def is_request_review(tool, tool_input):
     if tool == "Skill":
         return bool(REQUEST_REVIEW.match(str((tool_input or {}).get("skill") or "")))

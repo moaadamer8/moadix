@@ -74,6 +74,17 @@ def check_path(path, cwd, cache):
     enforced, as v1 enforced nothing outside its one governed root. When the
     session is in no product, every product gets its full path map."""
     ab = pathmap.resolve(path, cwd)
+    from . import secscan
+    sb = os.path.realpath(secscan.scan_base())
+    if ab == sb or ab.startswith(sb + os.sep):
+        # A gate-scheduled Claude Security scan clone: only the scan session itself (its cwd
+        # is inside that clone) writes there; the builder cannot touch an in-progress scan.
+        mine = os.path.realpath(cwd)
+        rest = os.path.relpath(ab, sb).split(os.sep)
+        own = os.path.join(sb, *rest[:2]) if len(rest) >= 2 else None
+        if not own or not (mine == own or mine.startswith(own + os.sep)):
+            return "that is a gate-scheduled Claude Security scan directory; only the scan itself writes there"
+        return None
     probe = ab if os.path.isdir(ab) else os.path.dirname(ab)
     root = state.find_root(probe) or state.find_root(cwd)
     if root and not (ab == os.path.realpath(root) or ab.startswith(os.path.realpath(root) + os.sep)):
@@ -239,5 +250,5 @@ def decide(hook_input):
         why = check_bash(ti.get("command") or "", cwd, cache)
         return deny(why) if why else None
     if autoval.is_request_review(tool, ti):
-        autoval.trigger(cwd)  # ruling 2: the gate runs the phase's validators; the call itself changes no state
+        autoval.on_request_review(cwd)  # ruling 2 (+ phase 9's Claude Security scan); changes no phase state
     return None
