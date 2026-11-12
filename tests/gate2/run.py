@@ -263,9 +263,15 @@ def group_port():
     import hlib
     reg = hlib.load_yaml(os.path.join(REPO, "gate", "config", "registry.yaml"))
     comps = reg["components"]
-    v1c = [c for c in comps if c["module"] != "check_verifiers"]  # increment 4 adds check-verifiers-6/7/8 (v2)
-    record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks)" % (
-        len(v1c), len(comps) - len(v1c)), len(v1c) == 21 and len(comps) - len(v1c) == 3,
+    # increment 5 adds the gate-run tool checks, Claude Security, the live verifier and v1's live probe
+    inc5 = {"check-contracts", "check-env", "check-gitleaks", "check-osv", "check-trivy", "check-semgrep",
+            "check-claude-security", "check-verifiers-10a", "check-surface-live", "check-live-contracts",
+            "check-load", "check-release"}
+    v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5]
+    inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5]
+    n5 = len([c for c in comps if c["id"] in inc5])
+    record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks and increment 5's %d)" % (
+        len(v1c), len(inc4), n5), len(v1c) == 21 and len(inc4) == 3 and n5 == 12,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")
@@ -277,10 +283,12 @@ def group_port():
         r = subprocess.run(argv, cwd=p, env=env, capture_output=True, text=True, timeout=120)
         if "Traceback" in r.stdout + r.stderr:
             crashed.append(c["id"])
-        if r.returncode == 0 and c["id"] != "check-approvals":
+        # check-live-contracts (increment 5) runs Arazzo workflows "where present": with none
+        # committed there is nothing to run, as check-approvals has nothing to check.
+        if r.returncode == 0 and c["id"] not in ("check-approvals", "check-live-contracts"):
             passed_empty.append(c["id"])
     record(G, "every ported validator runs on an empty product without a traceback", not crashed, crashed or "none")
-    record(G, "no validator passes an empty product (check-approvals is vacuously clean, as in v1)",
+    record(G, "no validator passes an empty product (check-approvals and check-live-contracts are vacuously clean)",
            not passed_empty, passed_empty or "none")
     # re-rooting: governed_root is the repo, harness config is the gate's, product config is .sdlc/config
     record(G, "hlib.load_paths_doc: governed_root '' (the product repo itself)",

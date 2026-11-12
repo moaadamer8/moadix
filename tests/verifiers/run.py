@@ -352,10 +352,18 @@ def group_restrict(p):
     agents = {f[:-3]: open(os.path.join(REPO, "agents", f)).read() for f in os.listdir(os.path.join(REPO, "agents"))
               if f.endswith(".md")}
     probe = agents.pop("replacement-probe", "")
+    # increment 5: the live verifier drives the browser through MOADIX's pinned Playwright MCP
+    # only (no Bash, Skill or Agent); tests/tools/run.py checks its MCP tools are the non-withheld ones.
+    live = agents.pop("live-verifier", "")
+    live_tools = (re.search(r"^tools: (.*)$", live, re.M) or [None, ""])[1].split(", ")
+    live_ok = live_tools[:4] == ["Read", "Grep", "Glob", "Write"] and all(
+        t.startswith("mcp__plugin_moadix_playwright__browser_") for t in live_tools[4:]) and len(live_tools) > 4
     tools_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write, Skill$", t, re.M) for t in agents.values())
-    record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only",
+    record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only; "
+              "the live verifier (increment 5) has Read/Grep/Glob/Write plus pinned Playwright MCP tools only",
            sorted(agents) == ["ac-coverage-critic", "code-reviewer", "design-reviewer", "typescript-reviewer"] and
-           tools_ok and re.search(r"^tools: Read$", probe, re.M), sorted(agents) + ["replacement-probe"])
+           tools_ok and live_ok and re.search(r"^tools: Read$", probe, re.M),
+           sorted(agents) + ["live-verifier", "replacement-probe"])
 
 
 # ===================================================================== 4. evidence
