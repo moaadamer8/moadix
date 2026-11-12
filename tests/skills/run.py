@@ -148,8 +148,8 @@ def group_manifest():
                len(vendored), len(listed)))
     labels = [str(ph["label"]) for ph in MAN["phases"]]
     from gate import pathmap
-    record(G, "the manifest covers all 16 gated phases plus 12 (Retro)",
-           labels[:16] == pathmap.LABELS and labels[16:] == ["12"], ", ".join(labels))
+    record(G, "the manifest covers all 16 gated phases plus 12 (Retro) and B (onboarding Baseline, increment 6)",
+           labels[:16] == pathmap.LABELS and labels[16:] == ["12", pathmap.BASELINE[0][1]], ", ".join(labels))
     bad = []
     for s in MAN["skills"]:
         d = os.path.join(SKILLS, s["name"])

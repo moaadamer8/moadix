@@ -486,13 +486,15 @@ def approve_until(p, pid, target):
 
 
 def gated(name, pid, phase, files):
+    # Increment 6: INIT on a repo that already has code starts an onboarding (phase B), so a
+    # greenfield fixture is INITialised first and gets its code afterwards.
     p = E.repo(name, docs=("00-brd.md",))
     E.write(p, ".gitignore", "node_modules/\n")
-    for rel, text in files.items():
-        E.write(p, rel, text)
     E.commit(p, "docs")
     E.init(p, pid)
-    E.commit(p, "init")
+    for rel, text in files.items():
+        E.write(p, rel, text)
+    E.commit(p, "init, then code")
     approve_until(p, pid, phase)
     return p
 
@@ -583,16 +585,18 @@ def test_claude_security():
     record("claude-security", "SARIF ingested as findings with stable SF-n ids from the gate's register",
            [fs[k]["id"] for k in ("v3:aaa", "v3:bbb", "v3:ccc") if k in fs] == ["SF-1", "SF-2", "SF-3"],
            json.dumps({k: (v["id"], v["severity"]) for k, v in fs.items()}))
-    record("claude-security", "a finding it could not confirm (rated LOW, no panel) lands as `unknown`, never low",
-           fs.get("v3:bbb", {}).get("severity") == "unknown" and fs.get("v3:bbb", {}).get("confirmed") is False,
+    record("claude-security", "a finding it could not confirm (rated LOW, no panel) is recorded unconfirmed with the "
+           "plugin's severity (increment 6, ruling 1: it blocks as unconfirmed, not as a rewritten severity)",
+           fs.get("v3:bbb", {}).get("severity") == "low" and fs.get("v3:bbb", {}).get("confirmed") is False,
            json.dumps(fs.get("v3:bbb")))
     ix = [x for x in index_lines(p) if x["tool"] == "claude-security"]
     record("claude-security", "the SARIF is in the evidence index, stamped with the commit",
            bool(ix) and ix[-1]["source_commit"] == head(p) and ix[-1]["stamp"].startswith("CLAUDE-SECURITY-REVISION-" + head(p)[:12]),
            json.dumps(ix[-1] if ix else {})[:220])
     rc, out = check(p, "check_claude_security")
-    record("claude-security", "planted high finding fails (findings only: the gate decides), unconfirmed one too",
-           rc == 1 and "[high] SF-1" in out and "[unknown] SF-2" in out and "UNCONFIRMED" in out, fails_line(out))
+    record("claude-security", "planted high finding fails (findings only: the gate decides), unconfirmed one too "
+           "(until triaged or waived)", rc == 1 and "[high] SF-1" in out and "SF-2" in out and "UNCONFIRMED" in out and
+           "unconfirmed, so it blocks until moadix:sf-triager" in out, fails_line(out))
     record("claude-security", "every SF-n must appear in sdlc/09-security-report.md", "SF-3 (medium) is in the gate's register but not" in out,
            fails_line(out))
     E.write(p, "sdlc/09-security-report.md", REPORT9 % "| SF-1 | low | injection | open |\n| SF-2 | unknown | ? | open |\n| SF-3 | medium | m | open |")
@@ -918,7 +922,8 @@ def test_waivers(p9):
     record("waivers", "WAIVE of a verifier finding that is not in the evidence is refused", "has no finding Z9" in out,
            out[:200])
     out = waive(p9, "SF-2")
-    record("waivers", "WAIVE of an unconfirmed Claude Security finding (unknown severity) is refused",
+    record("waivers", "WAIVE of a finding the phase-9 report rates `unknown` is refused when no current scan result "
+           "can say more (increment 6: unconfirmed findings with a result are waivable; tests/inc6 triage)",
            "CANNOT be waived" in out and "unknown" in out, out[:200])
     out = waive(p9, "SF-3")
     stt = E.prompt(p9, "STATUS")

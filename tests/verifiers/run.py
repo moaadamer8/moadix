@@ -358,11 +358,15 @@ def group_restrict(p):
     live_tools = (re.search(r"^tools: (.*)$", live, re.M) or [None, ""])[1].split(", ")
     live_ok = live_tools[:4] == ["Read", "Grep", "Glob", "Write"] and all(
         t.startswith("mcp__plugin_moadix_playwright__browser_") for t in live_tools[4:]) and len(live_tools) > 4
+    # increment 6: the SF triager (phase 9) and the baseline verifier (phase B) have no method skill
+    noskill = {k: agents.pop(k, "") for k in ("sf-triager", "baseline-verifier")}
+    noskill_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write$", t, re.M) for t in noskill.values())
     tools_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write, Skill$", t, re.M) for t in agents.values())
     record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only; "
-              "the live verifier (increment 5) has Read/Grep/Glob/Write plus pinned Playwright MCP tools only",
+              "the live verifier (increment 5) has Read/Grep/Glob/Write plus pinned Playwright MCP tools only; the "
+              "increment-6 triager and baseline verifier have no Skill",
            sorted(agents) == ["ac-coverage-critic", "code-reviewer", "design-reviewer", "typescript-reviewer"] and
-           tools_ok and live_ok and re.search(r"^tools: Read$", probe, re.M),
+           tools_ok and live_ok and noskill_ok and re.search(r"^tools: Read$", probe, re.M),
            sorted(agents) + ["live-verifier", "replacement-probe"])
 
 
