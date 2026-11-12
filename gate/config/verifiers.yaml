@@ -81,3 +81,12 @@ roles:
     triage: true
     when: unconfirmed
     scope: []
+# increment 6 (Amendment 2, onboarding): the fresh-context baseline verifier. Phase B of an
+# onboarded product: it reads the baseline documents and checks every claim against the code
+# at HEAD. Its findings at high (a claim the code does not support) block APPROVE B.
+  - agent: baseline-verifier
+    phase: "B"
+    method: null
+    baseline: true
+    when: always
+    scope: ["sdlc/00-*.md", "sdlc/02-*.md", "sdlc/03-*.md", "sdlc/04-*.md", "sdlc/B-*.md"]

@@ -21,6 +21,8 @@ version: 1
 always:
   skills:
     - request-review
+    - feature      # increment 6: commands/feature.md (how a feature cycle works)
+    - baseline     # increment 6: commands/baseline.md (onboarding phase B)
 phases:
   - label: "0"
     name: BRD
@@ -37,18 +39,21 @@ phases:
     gate_run: []
   - label: "2"
     name: PRD
+    during: ["B"]   # increment 6: the as-is PRD in onboarding phase B
     skills:
       - bmad-prd
     mcp: []
     gate_run: []
   - label: "3"
     name: HLD
+    during: ["B"]   # increment 6: bmad-architecture derives a spine from an existing codebase
     skills:
       - bmad-architecture
     mcp: []
     gate_run: []
   - label: "4"
     name: Threat Model
+    during: ["B"]   # increment 6: threat-model's bootstrap mode, from the code
     skills:
       - threat-model
       - threat-mitigation-mapping
@@ -172,19 +177,27 @@ phases:
       - reflect-queue
     mcp: []
     gate_run: []
+  - label: "B"
+    name: Baseline
+    # increment 6 (Amendment 2): onboarding. Its skills come from phases 2, 3 and 4 (`during`).
+    skills: []
+    mcp: []
+    gate_run: []
+    templates:
+      - templates/baseline/
 skills:
   - name: bmad-forge-idea
     skill_md_bytes: 10380
-    total_bytes: 28428
+    total_bytes: 29250
   - name: bmad-deep-recon
     skill_md_bytes: 9298
-    total_bytes: 78935
+    total_bytes: 79774
   - name: bmad-prd
     skill_md_bytes: 14047
-    total_bytes: 73548
+    total_bytes: 74368
   - name: bmad-architecture
     skill_md_bytes: 13869
-    total_bytes: 52891
+    total_bytes: 53739
   - name: threat-model
     skill_md_bytes: 7750
     total_bytes: 66973
