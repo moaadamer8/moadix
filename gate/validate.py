@@ -100,11 +100,15 @@ def run_one(root, c, env):
     if argv is None:
         return 127, why
     try:
-        p = subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=TIMEOUT,
+        limit = int(c.get("timeout") or TIMEOUT)  # increment 5: gate-run tools take longer
+    except (TypeError, ValueError):
+        limit = TIMEOUT
+    try:
+        p = subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=limit,
                            stdin=subprocess.DEVNULL)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except subprocess.TimeoutExpired:
-        return 124, "validator timed out after %ds" % TIMEOUT
+        return 124, "validator timed out after %ds" % limit
     except OSError as exc:
         return 127, "validator could not be executed: %r" % (exc,)
 

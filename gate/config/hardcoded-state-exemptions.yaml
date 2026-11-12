@@ -123,3 +123,52 @@ exemptions:
     token: 8
     reason: "Verifier policy (DESIGN.md §5 verifier roles table): which phase's APPROVE needs which verifier. A decision about phases, not a copy of gate state"
     owner: operator
+# increment 5: each gate-run validator files its evidence under .sdlc/evidence/<phase>/ for the
+# phase it is registered in (gate/config/registry.yaml), and the Claude Security scan is
+# scheduled only in phase 9. Policy decisions about phases (DESIGN.md §6: "Redocly in 5,
+# gitleaks/OSV/Trivy/Semgrep in 9, k6 thresholds in 10c"), not copies of gate state.
+  - file: gate/autoval.py
+    axis: phase
+    token: 9
+    reason: "DESIGN.md §5/§6: the Claude Security finding source is scheduled in phase 9 only (on request-review)"
+    owner: operator
+  - file: gate/secscan.py
+    axis: phase
+    token: 9
+    reason: "DESIGN.md §5: Claude Security is the phase-9 finding source; its evidence lives under phase 9"
+    owner: operator
+  - file: gate/v1/check_scanners.py
+    axis: phase
+    token: 9
+    reason: "DESIGN.md §6: gitleaks/OSV/Trivy/Semgrep are phase 9's gate-run tools; evidence under .sdlc/evidence/9"
+    owner: operator
+  - file: gate/v1/check_contracts.py
+    axis: phase
+    token: 5
+    reason: "DESIGN.md §6: Redocly is phase 5's gate-run tool; evidence under .sdlc/evidence/5"
+    owner: operator
+  - file: gate/v1/check_env.py
+    axis: phase
+    token: 6b
+    reason: "Increment 5: dotenvx encryption is checked in phase 6b (Provisioning); evidence under .sdlc/evidence/6b"
+    owner: operator
+  - file: gate/v1/check_live_contracts.py
+    axis: phase
+    token: 10a
+    reason: "Increment 5: Arazzo contract tests run against the local instance in phase 10a (Live Verification)"
+    owner: operator
+  - file: gate/v1/check_load.py
+    axis: phase
+    token: 10c
+    reason: "DESIGN.md §6: k6 thresholds are phase 10c's gate-run tool; evidence under .sdlc/evidence/10c"
+    owner: operator
+  - file: gate/v1/check_release.py
+    axis: phase
+    token: 11
+    reason: "Increment 5: release-please and the read-only GitHub check belong to phase 11 (Release)"
+    owner: operator
+  - file: gate/config/verifiers.yaml
+    axis: phase
+    token: 10a
+    reason: "Verifier policy (DESIGN.md §5 verifier roles table): the live verifier belongs to phase 10a"
+    owner: operator

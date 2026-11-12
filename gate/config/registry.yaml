@@ -230,3 +230,96 @@ components:
     args:
       - --phase
       - 8
+# increment 5: gate-run deterministic tools (gate/config/tools.yaml, gate/v1/toolrun.py),
+# Claude Security as the phase-9 finding source, the live verifier and v1's live probe.
+# timeout: seconds the worker allows this validator (default 180).
+  - id: check-contracts
+    kind: validator
+    phase: 5
+    status: active
+    module: check_contracts
+    timeout: 600
+    verifies:
+      - sdlc/05-lld/**
+  - id: check-env
+    kind: validator
+    phase: 6b
+    status: active
+    module: check_env
+    verifies:
+      - .env.example
+      - .env.*
+  - id: check-gitleaks
+    kind: validator
+    phase: 9
+    status: active
+    module: check_scanners
+    args:
+      - --tool
+      - gitleaks
+    timeout: 900
+  - id: check-osv
+    kind: validator
+    phase: 9
+    status: active
+    module: check_scanners
+    args:
+      - --tool
+      - osv-scanner
+    timeout: 900
+  - id: check-trivy
+    kind: validator
+    phase: 9
+    status: active
+    module: check_scanners
+    args:
+      - --tool
+      - trivy
+    timeout: 1800
+  - id: check-semgrep
+    kind: validator
+    phase: 9
+    status: active
+    module: check_scanners
+    args:
+      - --tool
+      - semgrep
+    timeout: 900
+  - id: check-claude-security
+    kind: validator
+    phase: 9
+    status: active
+    module: check_claude_security
+  - id: check-verifiers-10a
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 10a
+  - id: check-surface-live
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_surface_coverage
+    args:
+      - --live
+  - id: check-live-contracts
+    kind: validator
+    phase: 10a
+    status: active
+    module: check_live_contracts
+    timeout: 900
+  - id: check-load
+    kind: validator
+    phase: 10c
+    status: active
+    module: check_load
+    timeout: 2400
+  - id: check-release
+    kind: validator
+    phase: 11
+    status: active
+    module: check_release
+    timeout: 300

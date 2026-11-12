@@ -418,6 +418,7 @@ GATE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 PRODUCT_CONFIG = frozenset({
     "product-surface.yaml", "product-tests.yaml", "product-app.yaml", "concurrency.yaml",
     "mobile.yaml", "traceability-exemptions.yaml", "hardcoded-state-exemptions.yaml",
+    "product-tools.yaml",  # increment 5: the gate-run tools' product settings (images, load, live, env, release)
 })
 
 

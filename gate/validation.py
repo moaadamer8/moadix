@@ -41,7 +41,7 @@ from . import state
 
 GATE_DIR = os.path.dirname(os.path.realpath(__file__))
 WORKER = os.path.join(GATE_DIR, "validate.py")
-STALE_LOCK_SECONDS = 900
+STALE_LOCK_SECONDS = 3 * 3600  # increment 5: phase 9's scanners and 10c's load test run long
 
 
 def cache_dir(root):
@@ -96,7 +96,7 @@ def gate_version():
     for d, dirs, fs in os.walk(GATE_DIR):
         dirs[:] = sorted(x for x in dirs if x != "__pycache__")
         for f in sorted(fs):
-            if f.endswith((".py", ".yaml", ".toml", ".ini")):
+            if f.endswith((".py", ".yaml", ".toml", ".ini", ".js")):  # .js: the k6 wrapper (increment 5)
                 full = os.path.join(d, f)
                 h.update(os.path.relpath(full, GATE_DIR).encode() + b"\0")
                 with open(full, "rb") as fh:

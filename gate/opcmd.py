@@ -253,6 +253,43 @@ def _finding_severities(root):
     return out
 
 
+VERIFIER_FINDING = re.compile(r"^(?P<role>[a-z][a-z0-9-]*)\.(?P<fid>[A-Za-z0-9_-]{1,32})$")
+
+
+def _verifier_finding(root, wid):
+    """Increment 5: a verifier finding id is `<role>.<finding id>` (code-reviewer.S2,
+    live-verifier.F1), and Claude Security's are SF-n from the gate's register.
+    Returns None when wid is neither; else (severity or None, where/why). The severity
+    is the one in the gate-checked evidence at HEAD, never one the report claims."""
+    from . import secscan, verify
+    m = VERIFIER_FINDING.match(wid)
+    if m and m.group("role") in verify.roles():
+        role = verify.roles()[m.group("role")]
+        ef = verify.evidence_file(root, str(role["phase"]), m.group("role"))
+        try:
+            with open(ef) as f:
+                ev = json.load(f)
+        except (OSError, ValueError):
+            return None, "%s has no evidence at %s" % (m.group("role"), os.path.relpath(ef, root))
+        for fd in ev.get("findings") or []:
+            if isinstance(fd, dict) and str(fd.get("id")) == m.group("fid"):
+                sev = str(fd.get("severity") or "")
+                return (sev if sev in verify.SEVERITIES else "unknown"), "phase %s evidence of %s" % (
+                    role["phase"], m.group("role"))
+        return None, "%s's evidence has no finding %s" % (m.group("role"), m.group("fid"))
+    if re.match(r"^SF-\d+$", wid, re.I):
+        try:
+            with open(secscan.result_file(root)) as f:
+                res = json.load(f)
+        except (OSError, ValueError):
+            return None  # no Claude Security result: the phase-9 report's table decides (v1)
+        for fd in res.get("findings") or []:
+            if str(fd.get("id")).upper() == wid.upper():
+                return str(fd.get("severity") or "unknown"), "Claude Security, commit %s" % str(res.get("head"))[:12]
+        return None
+    return None
+
+
 def _waiver_policy():
     from .v1 import hlib
     out = {"require_expiry": True, "max_expiry_days": 180, "unwaivable_severities": ["high", "critical"]}
@@ -279,6 +316,15 @@ def _waive_gate(root, g):
     if days > pol["max_expiry_days"]:
         return "expiry %s is %d days out, beyond the %d-day maximum (gate/config/waivers.yaml)" % (
             g["expiry"], days, pol["max_expiry_days"])
+    vf = _verifier_finding(root, g["id"])
+    if vf is not None:
+        sev, where = vf
+        if sev is None:
+            return "%s names a verifier finding, but %s; refusing rather than granting blind" % (g["id"], where)
+        if sev in pol["unwaivable_severities"] or sev == "unknown":
+            return ("%s is a %s-severity verifier finding (%s) and CANNOT be waived. Fix it and verify again" % (
+                g["id"], sev, where))
+        return None
     key = g["id"].split(":", 1)[0].strip().upper()
     sevs = _finding_severities(root)
     if FINDING_ID.match(key):
@@ -289,7 +335,7 @@ def _waive_gate(root, g):
             return ("%s is a finding in the phase-9 report and its severity cannot be read (add a row "
                     "'| %s | <severity> | ... |'); refusing rather than granting blind" % (g["id"], key))
     sev = (sevs or {}).get(key)
-    if sev and sev in pol["unwaivable_severities"]:
+    if sev and (sev in pol["unwaivable_severities"] or sev in ("unknown", "unconfirmed")):
         return ("%s is a %s-severity finding and CANNOT be waived. Fix it, or downgrade it with evidence in the "
                 "phase-9 report" % (g["id"], sev))
     return None
