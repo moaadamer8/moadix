@@ -113,16 +113,36 @@ for f in "$HERE"/gate/v1/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/v1/$(basename
 for f in "$HERE"/gate/config/*.yaml "$HERE"/gate/config/*.toml "$HERE"/gate/config/*.ini; do
   put 0644 "$f" "$MOADIX_HOME/gate/config/$(basename "$f")"
 done
+# increment 5: the gate-run tools' own configs (semgrep rules, redocly config, the k6 wrapper)
+for sub in semgrep redocly k6; do
+  as_root /bin/mkdir -p "$MOADIX_HOME/gate/config/$sub"
+  for f in "$HERE"/gate/config/"$sub"/*; do put 0644 "$f" "$MOADIX_HOME/gate/config/$sub/$(basename "$f")"; done
+done
+# increment 5: the pinned tools, root-owned, straight into $MOADIX_HOME/tools (a venv cannot be
+# moved). Every download is checked against its sha256 pin; npm runs with --ignore-scripts and
+# uv installs wheels only, so no package code runs as root. Kept across updates (idempotent).
+if [[ $MODE == real ]]; then
+  say "3b/6 Fetching the pinned gate-run tools (gate/config/tools.yaml) into $MOADIX_HOME/tools"
+  as_root /usr/bin/env npm_config_cache="$work/npm-cache" /usr/bin/python3 -I "$HERE/managed/fetch_tools.py" \
+    "$MOADIX_HOME/tools" || fail "a pinned tool could not be fetched or did not match its sha256 (output above)"
+  pwcli="$MOADIX_HOME/tools/playwright-mcp-0.0.83/node_modules/playwright/cli.js"
+  /opt/homebrew/bin/node "$pwcli" install chromium >/dev/null || fail "Playwright's Chromium could not be installed"
+  echo "tools: $(ls "$MOADIX_HOME/tools" | tr '\n' ' ')"
+else
+  echo "(dry run: the pinned tools are not fetched; tests/tools/run.py uses ~/.cache/moadix-tools)"
+fi
 [[ -e "$MOADIX_HOME/gate/_testguard.py" ]] && fail "a test guard is in the installed gate; it must never be installed"
 printf 'created_cc_dir=%s\ninstalled=%s\nsource=%s\n' "$created_cc" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   "$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)" > "$work/install-record"
 put 0644 "$work/install-record" "$MOADIX_HOME/install-record"
 if [[ $MODE == real ]]; then
   as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
-    "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config"
+    "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
+    "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6"
 fi
 as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
-  "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config"
+  "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
+  "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6"
 
 # ---- 4. secrets ------------------------------------------------------------------
 if [[ $UPDATE == 0 ]]; then

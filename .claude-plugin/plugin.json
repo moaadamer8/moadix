@@ -1,8 +1,32 @@
 {
   "name": "moadix",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "SDLC gates for Claude Code: typed operator commands with authenticator codes, a signed ledger, and per-phase path maps. Requires the one-time admin setup in managed/install.sh.",
   "license": "MIT",
   "repository": "https://github.com/moaadamer8/moadix",
-  "keywords": ["sdlc", "gates", "approval", "ledger"]
+  "keywords": ["sdlc", "gates", "approval", "ledger"],
+  "mcpServers": {
+    "playwright": {
+      "command": "/opt/homebrew/bin/node",
+      "args": [
+        "/Library/Application Support/ClaudeCode/moadix/tools/playwright-mcp-0.0.83/node_modules/@playwright/mcp/cli.js",
+        "--isolated",
+        "--headless",
+        "--caps", "devtools",
+        "--storage-state", ".auth/storage-state.json",
+        "--allowed-origins", "http://127.0.0.1:*;http://localhost:*;https://127.0.0.1:*;https://localhost:*;http://[::1]:*",
+        "--output-dir", ".sdlc/cache/verify/10a/live-verifier/evidence/playwright"
+      ],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "${HOME}/Library/Caches/ms-playwright"
+      }
+    },
+    "github": {
+      "command": "/Library/Application Support/ClaudeCode/moadix/tools/github-mcp-server-2.0.3/github-mcp-server",
+      "args": ["stdio", "--read-only", "--toolsets", "repos,pull_requests,actions,code_security"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${MOADIX_GITHUB_TOKEN}"
+      }
+    }
+  }
 }

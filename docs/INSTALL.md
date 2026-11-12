@@ -132,6 +132,40 @@ Verifiers rely on the gate's hook replacing the prompt the agent writes with the
 
 If the result is anything but `PROBE-REPLACED` with a matching nonce, stop and report it. Nothing unsafe follows: every verifier's evidence must quote a receipt that exists only in the gate's replacement prompt, so without the replacement no evidence can pass and APPROVE of phases 6, 7 and 8 refuses.
 
+## Increment 5: the gate-run tools (once, when updating to 0.3.0)
+
+The installer now also fetches ten pinned tools into `/Library/Application Support/ClaudeCode/moadix/tools` (root-owned), checking every download against its sha256 pin. The list is in `gate/config/tools.yaml`. It takes a few minutes and needs the network: github.com and its release CDN, registry.npmjs.org, pypi.org and files.pythonhosted.org, and python-build-standalone for semgrep's Python. It then installs Playwright's Chromium into `~/Library/Caches/ms-playwright`.
+
+New machine-wide effects:
+- **Claude Security is force-enabled**: `claude-security@claude-plugins-official`, from Anthropic's official marketplace. That marketplace is now allowed and registered, but **every other plugin it lists is force-disabled**: 316 names, from `managed/official-plugins.txt`. If you use another official plugin today, it stops working. A plugin the marketplace adds later is not on that list until the file is regenerated.
+- The sandbox allowlist gains `release-assets.githubusercontent.com`, `api.osv.dev`, `api.deps.dev`, `osv-vulnerabilities.storage.googleapis.com`, `mirror.gcr.io`, `ghcr.io`, `pkg-containers.githubusercontent.com` and `api.github.com`. The sandbox may also write `~/Library/Caches/trivy` and `~/.semgrep`, so the agent's own feedback runs of Trivy and Semgrep work.
+- The plugin ships two MCP servers with pinned commands: `playwright` (the live verifier's browser) and `github` (`--read-only`).
+
+Steps, in Terminal:
+1. Close every Claude Code session.
+2. `cd ~/moadix && git push` (the plugin, its agents and its MCP servers install from GitHub).
+3. `managed/install.sh`: password once. Expect `3b/6 Fetching the pinned gate-run tools`, ten `got …` lines and a `tools:` line.
+4. For phase 11 only, store a **read-only** GitHub token for the gate (fine-grained; Contents, Pull requests, Actions and Code scanning alerts, all read-only). It goes in your login keychain:
+   `security add-generic-password -s moadix-github-readonly -a moadix -w`
+   It asks for the token twice. For the plugin's `github` MCP server, also `export MOADIX_GITHUB_TOKEN=<same token>` in the shell you start Claude Code from.
+5. Open Claude Code and run `/plugin marketplace update moadix`, `/reload-plugins`. Check `/plugin` shows `moadix` 0.3.0 and `claude-security` enabled, and `/mcp` lists `plugin:moadix:playwright` and `plugin:moadix:github`.
+6. For phase 10a: the live verifier's browser loads the session from `.auth/storage-state.json` in the product (gitignored). Create it once by logging in to the local instance with Playwright's codegen: `npx playwright codegen --save-storage=.auth/storage-state.json http://127.0.0.1:<port>`.
+7. Optional: `/usr/bin/python3 managed/fetch_tools.py ~/.cache/moadix-tools` and then `/usr/bin/python3 tests/tools/run.py`. Run this from Terminal to include the loopback-server cases that the Claude Code sandbox skips.
+
+Product settings the new checks read go in `.sdlc/config/product-tools.yaml` (the agent proposes it in `.sdlc-proposals/config/`, you `ADOPT` it):
+
+```
+images: [shop-api:1.4.0]                   # phase 9: trivy image (optional)
+env: {files: [.env.production]}            # phase 6b (default .env.production; keys from .env.example)
+live: {base_url: http://127.0.0.1:4173}    # phase 10a: loopback only
+load:                                      # phase 10c
+  base_url: http://127.0.0.1:4173          # loopback only
+  scripts: [load/checkout.js]
+  invariant_check: [python3, load/invariants.py]   # the product's own SQL invariant check, required
+release: {repo: owner/name}                # phase 11 (default: the origin remote)
+claude_security: {effort: medium}          # phase 9: low | medium | high
+```
+
 ## 5. Uninstall
 
 ```
