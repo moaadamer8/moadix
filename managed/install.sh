@@ -196,8 +196,23 @@ fi
 
 # ---- 5. managed settings --------------------------------------------------------
 say "5/6 Installing managed settings to $POLICY"
+# 0.5.2: the operator's local overlay (outside the repository; docs/INSTALL.md "Local overlay"): production
+# Firebase projects to protect and extra network hosts. Shown before it is applied.
+OVERLAY="${MOADIX_OVERLAY:-$HOME/.config/moadix/overlay.json}"
+if [[ -f "$OVERLAY" ]]; then
+  echo "Local overlay $OVERLAY:"
+  /usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("  protected Firebase projects: %s\n  extra network hosts: %s" % (", ".join(d.get("protected_firebase_projects") or []) or "none", ", ".join(d.get("extra_network_hosts") or []) or "none"))' "$OVERLAY" \
+    || fail "the local overlay $OVERLAY is not readable JSON"
+  if [[ $MODE == real ]]; then
+    read -r -p "Apply this overlay? [y/N] " ok
+    [[ "$ok" == y || "$ok" == Y ]] || fail "overlay not confirmed; nothing installed"
+  fi
+else
+  echo "No local overlay at $OVERLAY: no protected Firebase projects (firebase project commands are refused), no extra hosts"
+fi
 /usr/bin/python3 "$HERE/managed/render_policy.py" "$HERE/managed/managed-settings.json" "$CC_DIR" "$MOADIX_HOME" "$pin" "${PLUGIN:-none}" \
-  > "$work/managed-settings.json" || fail "could not render the policy"
+  --overlay "$OVERLAY" --overlay-out "$work/overlay.json" > "$work/managed-settings.json" || fail "could not render the policy"
+put 0644 "$work/overlay.json" "$MOADIX_HOME/gate/config/overlay.json"
 put 0644 "$work/managed-settings.json" "$POLICY"
 
 # ---- 6. in effect? ----------------------------------------------------------------

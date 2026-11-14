@@ -1,7 +1,15 @@
 #!/usr/bin/python3
 """Render managed/managed-settings.json for one machine.
 
-    render_policy.py <template> <cc_dir> <moadix_home> <pin> <owner/repo|none> > out.json
+    render_policy.py <template> <cc_dir> <moadix_home> <pin> <owner/repo|none>
+                     [--overlay FILE --overlay-out FILE] > out.json
+
+The local overlay (0.5.2) is the operator's own file outside the repository (default
+~/.config/moadix/overlay.json, docs/INSTALL.md "Local overlay"): production Firebase projects
+to protect and extra network hosts. Nothing product-specific is in the public template; the
+overlay is validated, merged into the rendered policy (one deny rule per protected project,
+the hosts appended to the sandbox allowlist), and written for the gate's main-branch guard
+(--overlay-out, installed root-owned as <gate>/config/overlay.json).
 
 Placeholders: __CC_DIR__ (the managed-settings directory), __MOADIX_HOME__ (the
 root-owned gate copy), __PIN__ (fingerprint of the Keychain secrets),
@@ -44,8 +52,48 @@ def sub(v, m):
     return v
 
 
+HOST = re.compile(r"^(?:\*\.)?(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+PROJECT = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+OVERLAY_KEYS = {"version", "protected_firebase_projects", "extra_network_hosts"}
+
+
+def load_overlay(path):
+    """The validated overlay {projects, hosts}; exits with the reason on anything malformed."""
+    try:
+        with open(path) as f:
+            doc = json.load(f)
+    except ValueError as e:
+        sys.exit("overlay %s is not JSON: %s" % (path, e))
+    if not isinstance(doc, dict) or doc.get("version") != 1:
+        sys.exit("overlay %s must be a JSON object with \"version\": 1" % path)
+    extra = sorted(set(doc) - OVERLAY_KEYS)
+    if extra:
+        sys.exit("overlay %s has keys it may not set: %s (allowed: %s)" % (path, ", ".join(extra),
+                                                                         ", ".join(sorted(OVERLAY_KEYS))))
+    projects, hosts = doc.get("protected_firebase_projects") or [], doc.get("extra_network_hosts") or []
+    if not isinstance(projects, list) or not all(isinstance(x, str) and PROJECT.match(x) for x in projects):
+        sys.exit("overlay: protected_firebase_projects must be a list of Firebase project ids (plain strings)")
+    for h in hosts:
+        if not isinstance(h, str) or not HOST.match(h):
+            sys.exit("overlay: extra_network_hosts entry %r is not a plain host name (no scheme, path, port or "
+                     "Markdown link; a leading *. is allowed)" % (h,))
+        if re.match(r"^\*\.[^.]+$", h) or h.count(".") < 1:
+            sys.exit("overlay: %r would allow a whole top-level domain" % h)
+    return {"projects": sorted(set(projects)), "hosts": list(dict.fromkeys(hosts))}
+
+
 def main():
-    tpl, cc_dir, home, pin, repo = sys.argv[1:6]
+    args = sys.argv[1:]
+    overlay = overlay_out = None
+    if "--overlay" in args:
+        k = args.index("--overlay")
+        overlay = args[k + 1]
+        del args[k:k + 2]
+    if "--overlay-out" in args:
+        k = args.index("--overlay-out")
+        overlay_out = args[k + 1]
+        del args[k:k + 2]
+    tpl, cc_dir, home, pin, repo = args[0:5]
     if not re.match(r"^[0-9a-f]{32}$", pin):
         sys.exit("bad pin")
     if repo != "none" and not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", repo):
@@ -78,6 +126,19 @@ def main():
         on = sorted(k for k, v in d["enabledPlugins"].items() if v is True)
         if on != sorted(ENABLED):
             sys.exit("the rendered policy enables %s, not exactly %s" % (on, sorted(ENABLED)))
+    ov = load_overlay(overlay) if overlay and os.path.exists(overlay) else {"projects": [], "hosts": []}
+    deny = d["permissions"]["deny"]
+    for pid in ov["projects"]:
+        deny.append("Bash(firebase*%s*)" % pid)
+    net = d["sandbox"]["network"]["allowedDomains"]
+    for h in ov["hosts"]:
+        if h not in net:
+            net.append(h)
+    if overlay_out:
+        with open(overlay_out, "w") as f:
+            json.dump({"version": 1, "protected_firebase_projects": ov["projects"],
+                       "extra_network_hosts": ov["hosts"], "source": overlay if overlay and os.path.exists(overlay)
+                       else None}, f, indent=1, sort_keys=True)
     text = json.dumps(d, indent=2) + "\n"
     left = sorted(set(re.findall(r"__(?:CC_DIR|MOADIX_HOME|PIN|MARKETPLACE_REPO)__", text)))
     if left:

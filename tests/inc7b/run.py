@@ -340,8 +340,8 @@ def test_rulings():
     rc, out = check(product("redoc", {"sdlc/05-lld/api.yaml": SPEC}), "check_contracts")
     record(G, "... and Redocly (an npm tool) lints through it", rc == 0, short(out))
     pj = json.load(open(os.path.join(REPO, ".claude-plugin", "plugin.json")))
-    record(G, "the pinned Playwright MCP server starts with the pinned Node too; plugin.json is 0.5.1",
-           "tools/node-24.22.2/node" in pj["mcpServers"]["playwright"]["command"] and pj["version"] == "0.5.1", pj["version"])
+    record(G, "the pinned Playwright MCP server starts with the pinned Node too; plugin.json is 0.5.2 or later",
+           "tools/node-24.22.2/node" in pj["mcpServers"]["playwright"]["command"] and pj["version"] >= "0.5.2", pj["version"])
     amd = open(os.path.join(REPO, "docs", "AMENDMENT-3.md")).read()
     record(G, "ruling 1 is in Amendment 3: TH- threats, STR- store release, T- tasks, SR- shared resources; TASK- dropped",
            "TH-/SEC-" in amd and "STR-" in amd and "T- (task)" in amd and "TASK-," not in amd.split("Rulings on increment 7")[1]

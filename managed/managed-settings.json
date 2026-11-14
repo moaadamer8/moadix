@@ -91,11 +91,28 @@
       "ListAgents",
       "RemoteTrigger",
       "Read(~/.claude/projects/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.config/configstore/**)",
       "Edit(~/.claude/**)",
       "Edit(/__CC_DIR__/**)",
       "Bash(sudo *)",
       "Bash(claude *)",
-      "Bash(security *)"
+      "Bash(security *)",
+      "Bash(git push*main*)",
+      "Bash(git push*HEAD:main*)",
+      "Bash(git push --all*)",
+      "Bash(git push --mirror*)",
+      "Bash(gh pr merge*)",
+      "Bash(vercel promote*)",
+      "Bash(vercel --prod*)",
+      "Bash(vercel deploy --prod*)",
+      "Bash(gh auth token*)",
+      "Bash(gh api*merge*)",
+      "Bash(gh api*-X PUT*)",
+      "Bash(gh api*--method PUT*)",
+      "Bash(gh api*-X PATCH*refs*)",
+      "Bash(gh api*--method PATCH*refs*)",
+      "Bash(firebase*firestore:delete*)"
     ]
   },
   "env": {
@@ -111,7 +128,9 @@
     "excludedCommands": [
       "docker *",
       "npx playwright *",
-      "playwright *"
+      "playwright *",
+      "gh *",
+      "firebase *"
     ],
     "filesystem": {
       "denyWrite": [
@@ -122,10 +141,13 @@
         "~/.claude",
         "~/.claude.json",
         "__CC_DIR__",
-        "~/Library/Keychains"
+        "~/Library/Keychains",
+        "~/.config/moadix"
       ],
       "denyRead": [
-        "~/.claude/projects"
+        "~/.claude/projects",
+        "~/.config/gh",
+        "~/.config/configstore"
       ],
       "allowWrite": [
         "~/.npm",

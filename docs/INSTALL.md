@@ -9,7 +9,7 @@ This takes about 10 minutes. You need your macOS password once, and your phone w
 - **Tools:** Claude Code 2.1.295 or newer (`claude --version`; this Mac has 2.1.322) and the Xcode command line tools (`clang`, `codesign`; both are present).
 - **Optional:** `brew install qrencode` shows a QR code. Without it you type a 32-letter key into the app instead.
 - **Know the machine-wide effects.** Once installed, they apply to every Claude Code session on this Mac, not just MOADIX projects:
-  - Every Bash command runs in the sandbox. `docker` and `playwright` are excluded from it.
+  - Every Bash command runs in the sandbox. `docker`, `playwright`, `gh` and `firebase` are excluded from it.
   - Only MOADIX's hooks run (`allowManagedHooksOnly`). Hooks from your other plugins (for example superpowers' SessionStart hook) stop running.
   - No other plugin marketplace can be added. Without `--plugin`, `strictKnownMarketplaces` is `[]`. With `--plugin <owner>/moadix` it allows exactly that repo, which serves as its own marketplace (`.claude-plugin/marketplace.json`), and `moadix@moadix` is force-enabled from it. How this affects plugins you already have installed was **not measured**; check `/plugin` after installing.
   - `sudo`, nested `claude`, scheduled tasks, cross-session messages and `--dangerously-skip-permissions` are refused.
@@ -193,6 +193,63 @@ New commands, typed alone with a code, like the others:
 - `FEATURE <feature-id> <code>`: starts a feature cycle on a product whose baseline is approved (released at phase 11, or onboarded at B). One at a time; a second is refused while one is active. Its 16 phases are approved with the usual `APPROVE <phase> <code>`; approving its phase 11 merges its documents into the product's and commits the merge. STATUS shows the active feature and the finished ones.
 - `COLLAPSE <phase> <code>`: records the size profile's collapse of the current phase (size S only: phases 1, 6b and 10c), with the reason and the checks that will not run. It is refused for any other phase or size.
 - `INIT <product-id> <code>` on a repository that already has code (any tracked file other than documentation) starts **onboarding at phase B**: the agent documents the product as it is, citing the code, and `APPROVE B <code>` approves the baseline. To start a new product the normal way, INIT it before any code is committed.
+
+## Main-branch guard, gh and firebase allowlists, local overlay (0.5.2)
+
+The policy (`managed/managed-settings.json`), the installer and the gate (`gate/mainguard.py`, called from `gate/pretool.py`) changed. The checker did not, so this is an ordinary update. The design and the operator's decisions are in `docs/mainguard.md`.
+
+Machine-wide effects:
+- `gh` and `firebase` run **outside** the sandbox (`excludedCommands`), with your own `gh` and `firebase` logins. They are therefore **allowlisted** by the gate:
+  - only the listed subcommands run;
+  - only when typed directly as the whole command;
+  - everything else is refused, including every wrapper, pipe, compound command, substitution, redirection or script around them.
+  The lists are in `docs/mainguard.md`.
+- **Pushes and deploys** are refused for every repository: any push whose target is main, every PR merge, and Vercel production deploys. That includes `git -C`, aliases, `sh -c`, `eval`, `xargs` and the other forms listed in `docs/mainguard.md`.
+- **Coarse deny rules.** Managed `permissions.deny` keeps the coarse text patterns as a first layer: pushes to main, `gh pr merge`, Vercel production, `gh auth token`, `gh api` merges and ref writes, and `firebase firestore:delete`. `*main*` also refuses branch names containing "main" (an accepted limit of that layer).
+- **Nothing product-specific is in the public repository.** Production Firebase projects and product network hosts come from your **local overlay**.
+
+### Local overlay
+
+A file on your Mac, outside the repository: `~/.config/moadix/overlay.json`. Set `MOADIX_OVERLAY` to read it from another path.
+
+- **Writable only by you.** The sandbox denies writes there, and the gate denies the agent's Write and Edit tools there.
+- **Applied by the installer.** It shows the file and asks before applying it. It renders it into the managed policy and installs a root-owned copy for the guard.
+- **Changing it.** Edit the file, then rerun `managed/install.sh`.
+
+```json
+{
+  "version": 1,
+  "protected_firebase_projects": ["<your-production-project-id>"],
+  "extra_network_hosts": ["<api.example.com>", "<*.example.com>"]
+}
+```
+
+- `protected_firebase_projects` lists Firebase project ids that no `firebase` command may target. The guard also resolves `.firebaserc` aliases. Each one also adds a managed deny rule `Bash(firebase*<id>*)`. Without an overlay, every `firebase` command that names a project is refused.
+- `extra_network_hosts` lists hosts added to the sandbox network allowlist. Each must be a plain host name: no `https://`, path, port or Markdown link. A leading `*.` is allowed, but not a whole top-level domain such as `*.com`.
+- No other key is accepted.
+
+Every allowed host can also be used to send data out of the sandbox (`docs/mainguard.md`, accepted risk). List only what your products need.
+
+Steps:
+1. Optional: create `~/.config/moadix/overlay.json` (format above) in Terminal.
+2. Close every Claude Code session.
+3. In Terminal: `cd ~/moadix && managed/install.sh`. Confirm the overlay when asked. The last line is `MOADIX is updated.`
+4. In a new Claude Code session in `~/moadix`, run the live check below, one Bash tool call per line.
+
+| # | Bash call | Expect |
+|---|---|---|
+| 1 | `bash tests/install/policy_live.sh` | `0 failed`: the overlay's hosts reachable, example.com refused, gh logged in |
+| 2 | `cd "$TMPDIR" && rm -rf pp && mkdir pp && cd pp && git init -q --bare remote.git && git init -q -b main work && cd work && git commit -q --allow-empty -m x && git branch feature-x && git remote add origin ../remote.git` | runs (setup) |
+| 3 | `git -C "$TMPDIR/pp/work" push origin main` | refused, `MOADIX: main-branch guard` |
+| 4 | `cd "$TMPDIR/pp/work" && git push origin feature-x` | **succeeds** (positive control) |
+| 5 | `gh pr list --limit 1` | runs (allowlisted) |
+| 6 | `gh pr merge 1` | refused |
+| 7 | `gh api -X PUT repos/o/r/pulls/1/merge` | refused (only GET) |
+| 8 | `gh auth token` | refused |
+| 9 | `sh -c 'gh pr list'` | refused (not typed directly) |
+| 10 | `vercel --yes --prod` | refused, `MOADIX: main-branch guard` |
+| 11 | `firebase deploy --project <your-production-project-id>` | refused (protected) |
+| 12 | `firebase projects:list` | runs |
 
 ## 5. Uninstall
 

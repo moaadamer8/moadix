@@ -9,6 +9,8 @@
     and managed paths are denied.
  5. Skill and MCP calls must be in the current phase's manifest (gate/manifest.py).
  6. Writes inside a product repo must fall in the current phase's path map.
+ Main-branch guard (gate/mainguard.py, every repository): no push to main, no PR
+ merge, no Vercel production deploy (operator decision 4 after 0.4.0).
  Verifiers (increment 4, gate/verify.py): an Agent call that launches a MOADIX
  verifier gets the gate's brief in place of the builder's prompt (updatedInput),
  or is refused when the gate did not schedule it; a verifier's own tool calls
@@ -22,7 +24,7 @@ Any internal error is a deny (fail closed).
 import os
 import re
 
-from . import autoval, bashcls, manifest, pathmap, state, verify
+from . import autoval, bashcls, mainguard, manifest, pathmap, state, verify
 
 TURN_TOOLS = {"CronCreate", "CronDelete", "ScheduleWakeup", "SendMessage", "ListAgents", "RemoteTrigger"}
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
@@ -142,6 +144,9 @@ def check_bash(cmd, cwd, cache):
         return "nested claude sessions and claude plugin/mcp commands are denied (invariant 4)"
     if GATE_NAMES.search(cmd):
         return "the agent has no command that changes gate state; operator commands are typed in chat (invariant 3)"
+    why = mainguard.check(cmd, cwd)  # main-branch and production guard, every repository (fails closed)
+    if why:
+        return why
     if "security" in verbs:
         toks = a["words"]
         for j, t in enumerate(toks):

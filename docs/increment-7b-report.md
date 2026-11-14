@@ -10,7 +10,7 @@
     - `gh` and `firebase` running outside the sandbox;
     - managed deny rules for pushing to main, `gh pr merge` and Vercel production.
   - The second gave four decisions:
-    - `gh` and `firebase` unsandboxed, with extra deny rules: `gh auth token`, `gh api` merge and ref writes, the production Firebase project `<production-project-id>`, `firestore:delete`;
+    - `gh` and `firebase` unsandboxed, with extra deny rules: `gh auth token`, `gh api` merge and ref writes, the production Firebase project `<production project id>`, `firestore:delete`;
     - the text patterns accepted as a coarse first layer;
     - option A: a guard in the gate that parses commands, applies to every repository and fails closed.
 - **What it does.** `gate/mainguard.py`, called from `pretool.check_bash` on every Bash command in every repository, reads the command as shell words. It refuses:
@@ -26,7 +26,7 @@
     - `Bash(gh pr merge*)`
     - `Bash(vercel promote*)`, `Bash(vercel --prod*)`, `Bash(vercel deploy --prod*)`
     - `Bash(gh auth token*)`, `Bash(gh api*merge*)`, `Bash(gh api*-X PUT*)`, `Bash(gh api*--method PUT*)`, `Bash(gh api*-X PATCH*refs*)`, `Bash(gh api*--method PATCH*refs*)`
-    - `Bash(firebase*<production-project-id>*)`, `Bash(firebase*firestore:delete*)`
+    - `Bash(firebase*<production project id>*)`, `Bash(firebase*firestore:delete*)`
   - **Commands excluded from the sandbox:** `gh *` and `firebase *`.
   - **Hosts added to the network allowlist:** nine product hosts (the Firestore, Firebase and Google API endpoints, Sentry and the Vercel API; their names now live only in the operator's local overlay).
 

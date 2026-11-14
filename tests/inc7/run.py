@@ -715,7 +715,7 @@ def test_misc():
            cmd == contract.coverage_doc() and "coverage" in hlib.load_yaml(
                os.path.join(REPO, "gate", "config", "phase-manifest.yaml"))["always"]["skills"], "")
     pj = json.load(open(os.path.join(REPO, ".claude-plugin", "plugin.json")))
-    record(G, "plugin.json is 0.5.1", pj.get("version") == "0.5.1", pj.get("version"))
+    record(G, "plugin.json is 0.5.1 or later", pj.get("version", "") >= "0.5.1", pj.get("version"))
 
 
 def main():

@@ -49,6 +49,9 @@ PROTECTED_EXTERNAL = [
     ("/Library/Application Support/ClaudeCode/**", "managed", "is the managed policy and MOADIX's root-owned home"),
     ("/etc/claude-code/**", "managed", "is the Linux managed policy directory"),
     ("~/Library/Keychains/**", "keychain", "holds Keychain databases"),
+    ("~/.config/moadix/**", "overlay", "is the operator's local policy overlay (protected projects, extra hosts); only "
+                                       "the operator edits it, and the installer shows it before applying it"),
+    ("~/.config/moadix", "overlay", "is the operator's local policy overlay directory"),
     ("~/.zshrc", "shell-rc", "sets launch-time environment for Claude Code"),
     ("~/.zshenv", "shell-rc", "sets launch-time environment for Claude Code"),
     ("~/.zprofile", "shell-rc", "sets launch-time environment for Claude Code"),

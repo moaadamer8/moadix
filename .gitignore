@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 moadix-scratch/
 *.keychain-db
+# the installed copy of the operator's local overlay (managed/render_policy.py --overlay-out); never committed
+gate/config/overlay.json
