@@ -322,10 +322,6 @@ product_dependencies:
     package: "@stryker-mutator/core"
     version: 10.1.1
     license: Apache-2.0
-  - name: testcontainers-node
-    package: testcontainers
-    version: 12.2.1
-    license: MIT
   - name: msw
     package: msw
     version: 3.0.3
@@ -348,4 +344,4 @@ product_dependencies:
   # Transitive non-permissive or unlisted licences in these product deps (npm lock of all six):
   #   axe-core 4.14.0 MPL-2.0; @axe-core/playwright 4.14.0 MPL-2.0;
   #   caniuse-lite 1.0.30001826 CC-BY-4.0 (via @stryker-mutator/core -> @babel/core -> browserslist);
-  #   tweetnacl 0.14.5 Unlicense (via testcontainers -> ssh2 chain).
+  #   (tweetnacl 0.14.5, Unlicense, came only through the removed Testcontainers pin; ruling 3 on increment 7b.)

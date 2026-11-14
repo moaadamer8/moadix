@@ -1,0 +1,77 @@
+PASS  [T1 secrets] the run's environment is built from scratch: only PATH, HOME, LANG, CI, NODE_ENV, TZ
+PASS  [T1 secrets] hostile: passing GH_TOKEN into a confined run is refused
+PASS  [T1 secrets] hostile: passing NPM_TOKEN into a confined run is refused
+PASS  [T1 secrets] hostile: passing DOTENV_PRIVATE_KEY into a confined run is refused
+PASS  [T1 secrets] hostile: passing AWS_SECRET_ACCESS_KEY into a confined run is refused
+PASS  [T1 secrets] hostile: passing DB_PASSWORD into a confined run is refused
+PASS  [T1 secrets] hostile: a compose service with a secret-looking variable is refused
+PASS  [T1 secrets] hostile: a compose service pointed at a real (non-test) host is refused
+PASS  [T1 secrets] hostile: a build arg carrying a token is refused
+PASS  [T1 secrets] hostile Dockerfile: a secret mount is refused
+PASS  [T1 secrets] hostile Dockerfile: an SSH mount is refused
+PASS  [T2/T7 mounts and escalation] the run is non-root, drops every capability, forbids new privileges, has a read-only root
+PASS  [T2/T7 mounts and escalation] the source is a read-only named volume, the output the only writable one, no host path anywhere
+PASS  [T2/T7 mounts and escalation] hostile: a source volume '/Users/moad' is refused (only gate-created named volumes)
+PASS  [T2/T7 mounts and escalation] hostile: a source volume '/var/run/docker.sock' is refused (only gate-created named volumes)
+PASS  [T2/T7 mounts and escalation] hostile: a source volume '../x' is refused (only gate-created named volumes)
+PASS  [T2/T7 mounts and escalation] hostile: a source volume 'moadix-r2-src/../../etc' is refused (only gate-created named volumes)
+PASS  [T2/T7 mounts and escalation] hostile compose: privileged is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: cap_add is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: devices is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: host network is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: host PID is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: host IPC is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: extra_hosts is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: a root user is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: security_opt is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: volumes_from is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: a host root bind is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: the Docker socket is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: a relative host path is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: a home path is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: a long-form bind is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: an external volume is refused
+PASS  [T2/T7 mounts and escalation] hostile compose: top-level networks are refused (the gate makes the only network)
+PASS  [T2/T7 mounts and escalation] control: an allowlisted compose file becomes a gate-generated, hardened project
+PASS  [T3/T6 output and persistence] control: a plain JSON report is accepted
+PASS  [T3/T6 output and persistence] hostile: a symlink in the output (pointing at ~/.zshrc) is refused, so nothing is copied through it
+PASS  [T3/T6 output and persistence] hostile: output above the size cap is refused
+PASS  [T3/T6 output and persistence] hostile: a report that is not the tool's JSON (a forged PASS line) is refused, not believed
+PASS  [T3/T6 output and persistence] hostile: a missing report is a refusal, never a pass
+PASS  [T4/T8 network] a Tier E run has --network none
+PASS  [T4/T8 network] hostile: network host is refused (only none or the run's internal network)
+PASS  [T4/T8 network] hostile: network bridge is refused (only none or the run's internal network)
+PASS  [T4/T8 network] hostile: network default is refused (only none or the run's internal network)
+PASS  [T4/T8 network] hostile: network container:x is refused (only none or the run's internal network)
+PASS  [T4/T8 network] hostile compose: a port published on 0.0.0.0 is refused
+PASS  [T4/T8 network] hostile Dockerfile: ADD <url> (a download during the build) is refused
+PASS  [T4/T8 network] the image build has --network none by default (BuildKit)
+PASS  [T4/T8 network] build.network: registry uses the run's egress network (classic builder), never the default bridge
+PASS  [T4/T8 network] hostile: build.network host is refused
+PASS  [T4/T8 network] hostile Dockerfile: FROM without a digest is refused
+PASS  [T4/T8 network] control: FROM a digest and FROM an earlier stage pass
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] the defaults are section 3.5's (E-test: 2 CPUs, 4 GiB, 512 pids, 15 min)
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] a product may raise a limit to 2x through ADOPT
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] hostile: above 2x is refused
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] hostile: a limit key that is not a limit is refused
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] the limits reach the engine: --cpus, --memory = --memory-swap, --pids-limit, nofile, tmpfs size
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] ruling 6: install scripts run only for packages the adopted product-tools.yaml lists
+PASS  [T5 resources (ruling 5) and install scripts (ruling 6)] hostile: an install_scripts entry that is not a package name is refused
+PASS  [fail closed] image node is blocked by the licence ruling: UNKNOWN with the reason
+PASS  [fail closed] image python is blocked by the licence ruling: UNKNOWN with the reason
+PASS  [fail closed] image chromium is blocked by the licence ruling: UNKNOWN with the reason
+PASS  [fail closed] image zap is blocked by the licence ruling: UNKNOWN with the reason
+PASS  [fail closed] ruling 1: no Docker -> UNKNOWN (never a run on the host)
+PASS  [fail closed] every pinned image ref is by digest; Testcontainers and the Docker socket appear nowhere
+PASS  [merged validators] control: the feature's SEC-002 merged into the product threat model passes check-threat-model
+PASS  [merged validators] planted: an addition the full product validator rejects (SEC-002 with no verification method) fails the merged view
+PASS  [merged validators] control: the merged BRD passes check-handoff-0
+PASS  [merged validators] planted: a feature LLD file that would overwrite the product's fails (the merge would collide)
+PASS  [merged validators] outside a feature cycle it has nothing to do (the product's own validators judge the product)
+PASS  [merged validators] registered in feature scope for the merged phases 0-6b (7 and later are not merged)
+PASS  [rulings] ruling 3: Testcontainers is out of the tool table and the pins, with its one-line reason
+PASS  [rulings] ruling 4: H20 and the phase-3 gate name .dependency-cruiser.json, JSON only, in the amendment and catalogue
+PASS  [rulings] the design closes gap 7 (compose generated from an allowlist) and gap 8 (the confined image build)
+PASS  [guard] no test read, wrote or started a real product, keychain or ~/.claude
+
+75 checks, 75 passed, 0 failed (4 s)

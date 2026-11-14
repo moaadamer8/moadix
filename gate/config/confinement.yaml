@@ -1,0 +1,72 @@
+# MOADIX confined runner (increment 7c; docs/confinement-design.md, approved with rulings).
+# Installed root-owned with the gate. Read by gate/confined.py.
+#
+#   tiers.<name>   default limits (section 3.5). A product may raise any of them to at most
+#                  max_factor x the default through ADOPT of product-tools.yaml `limits:`.
+#   images         the base images, pinned by digest. `status: blocked` keeps an image from being
+#                  used: every gate that needs it reports UNKNOWN with the reason, until the
+#                  operator rules (ruling 2 on increment 7b: permissive or MPL-2.0-unmodified only).
+#   services       the gate's own service containers (ruling 3 on increment 7b); never Testcontainers.
+version: 1
+max_factor: 2
+uid: 10001
+tiers:
+  E-lint:
+    cpus: 2
+    memory_mb: 2048
+    pids: 256
+    tmp_mb: 512
+    out_mb: 50
+    wall_s: 300
+  E-test:
+    cpus: 2
+    memory_mb: 4096
+    pids: 512
+    tmp_mb: 1024
+    out_mb: 200
+    wall_s: 900
+  E-mutation:
+    cpus: 4
+    memory_mb: 8192
+    pids: 1024
+    tmp_mb: 2048
+    out_mb: 200
+    wall_s: 3600
+  L:
+    cpus: 2
+    memory_mb: 2048
+    pids: 512
+    tmp_mb: 1024
+    out_mb: 200
+    wall_s: 1800
+  build:
+    cpus: 2
+    memory_mb: 4096
+    pids: 512
+    tmp_mb: 2048
+    out_mb: 50
+    wall_s: 900
+images:
+  node:
+    ref: "docker.io/library/node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
+    status: blocked
+    reason: "Debian base: bash and coreutils are GPL-3+, glibc is LGPL-2.1+ (read in the image's /usr/share/doc/*/copyright, 2026-11-14). Ruling 2 on increment 7b allows only permissive or MPL-2.0-unmodified licences: stopped for the operator's ruling."
+  python:
+    ref: "docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
+    status: blocked
+    reason: "Debian base: bash and coreutils are GPL-3+, glibc is LGPL-2.1+ (read in the image, 2026-11-14). Stopped for the operator's ruling (ruling 2 on increment 7b)."
+  chromium:
+    ref: null
+    status: blocked
+    reason: "Not pinned: the proposed Playwright image (mcr.microsoft.com/playwright, Ubuntu base) carries the same GPL/LGPL userland; not pulled until the licence ruling."
+  zap:
+    ref: "ghcr.io/zaproxy/zaproxy:20261026-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
+    status: blocked
+    reason: "Debian base with OpenJDK (GPL-2.0 with the Classpath exception) and firefox-esr (MPL-2.0); the GPL components stop it under ruling 2 on increment 7b."
+services:
+  postgres:
+    image: null
+    status: blocked
+    reason: "postgres is under the PostgreSQL licence (permissive), but the official image is Debian-based (GPL/LGPL userland): same ruling as the base images."
+    port: 5432
+    env_url: DATABASE_URL

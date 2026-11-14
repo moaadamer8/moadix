@@ -344,8 +344,7 @@ def test_rulings():
            "tools/node-24.22.2/node" in pj["mcpServers"]["playwright"]["command"] and pj["version"] >= "0.5.2", pj["version"])
     amd = open(os.path.join(REPO, "docs", "AMENDMENT-3.md")).read()
     record(G, "ruling 1 is in Amendment 3: TH- threats, STR- store release, T- tasks, SR- shared resources; TASK- dropped",
-           "TH-/SEC-" in amd and "STR-" in amd and "T- (task)" in amd and "TASK-," not in amd.split("Rulings on increment 7")[1]
-           .split("##")[1] and "code-simplifier was removed" in amd, "")
+           "TH-/SEC-" in amd and "STR-" in amd and "T- (task)" in amd and "TASK-," not in next(ln for ln in amd.splitlines() if ln.startswith("| Trace IDs")) and "code-simplifier was removed" in amd, "")
     record(G, "ruling 4: code-simplifier is no longer in the tool table", "| Anthropic code-simplifier |" not in amd, "")
     # ruling 2: phase 12 gated on a product cycle; FEATURE waits for it
     p = product("retro")

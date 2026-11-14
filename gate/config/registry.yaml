@@ -843,3 +843,67 @@ components:
     status: active
     module: check_workflows
     timeout: 600
+# increment 7c: the product-document validators on the merged view in a feature cycle (FC; increment 6's gap).
+  - id: check-merged-0
+    kind: validator
+    scope: feature
+    phase: 0
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 0
+  - id: check-merged-1
+    kind: validator
+    scope: feature
+    phase: 1
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 1
+  - id: check-merged-2
+    kind: validator
+    scope: feature
+    phase: 2
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 2
+  - id: check-merged-3
+    kind: validator
+    scope: feature
+    phase: 3
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 3
+  - id: check-merged-4
+    kind: validator
+    scope: feature
+    phase: 4
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 4
+  - id: check-merged-5
+    kind: validator
+    scope: feature
+    phase: 5
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 5
+  - id: check-merged-6b
+    kind: validator
+    scope: feature
+    phase: 6b
+    status: active
+    module: check_merged
+    args:
+      - --phase
+      - 6b

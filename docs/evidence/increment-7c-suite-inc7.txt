@@ -1,0 +1,121 @@
+PASS  [coverage-lint] control: every phase-0 topic listed (size-S defaults pre-filled, the rest with real reasons) -> passes
+PASS  [coverage-lint] planted: COVERAGE.md missing -> fails
+PASS  [coverage-lint] planted: a topic left out (B13) -> fails, naming it
+PASS  [coverage-lint] planted: a topic listed twice -> fails
+PASS  [coverage-lint] planted: an ID from another phase (R1) -> fails
+PASS  [coverage-lint] control: a topic anchored to a real section with content -> passes
+PASS  [coverage-lint] planted: a dead anchor -> fails
+PASS  [coverage-lint] planted: a missing file -> fails
+PASS  [coverage-lint] planted: a hollow section -> fails
+PASS  [coverage-lint] planted: an external link -> fails
+PASS  [coverage-lint] planted: N/A with an empty reason ('N/A') -> fails
+PASS  [coverage-lint] planted: N/A with boilerplate ('N/A: none') -> fails
+PASS  [coverage-lint] planted: N/A with boilerplate 2 ('N/A: not applicable') -> fails
+PASS  [coverage-lint] planted: N/A with too short ('N/A: tbd later') -> fails
+PASS  [coverage-lint] planted: the same reason copied onto three topics -> fails as boilerplate
+PASS  [size-rule] planted: `size-default` on a topic that is not N/A by default at size S (B9) -> fails
+PASS  [size-rule] planted: a partial default (B17: only the 100x path is N/A at S) written as N/A -> fails
+PASS  [size-rule] planted: `size-default` while the BRD declares no size (B19) -> fails
+PASS  [size-rule] control: phase 9 at size S with SV7 (ZAP passive baseline, turned on at S) covered -> passes
+PASS  [size-rule] planted: SV7 N/A although size S turns on the ZAP baseline -> fails
+PASS  [size-rule] control: phase 4 at size M (T20 names ASVS L2, pytm in T3) -> passes
+PASS  [size-rule] planted: at size M the T20 section names only ASVS L1 -> fails (M turns on L2)
+PASS  [size-rule] planted: at size M the Stryker threshold is 60%% (M turns on >= 70%%) -> fails
+PASS  [size-rule] the size rule reads B19: at M, H23 is N/A by default for WEB (no mobile) and not for APP-FIRST
+PASS  [size-rule] size L: no topic is N/A by default
+PASS  [size-rule] the skeleton pre-fills the size defaults with their canned reason; partial ones stay TODO with the note
+PASS  [discovery-lint] control: two questions, 2-4 options each, a recommendation and the chosen option -> passes
+PASS  [discovery-lint] planted: no discovery log -> fails
+PASS  [discovery-lint] planted: one option -> fails
+PASS  [discovery-lint] planted: a recommendation that is no option -> fails
+PASS  [discovery-lint] planted: no answer logged -> fails
+PASS  [discovery-lint] planted: an answer that is no option -> fails
+PASS  [discovery-lint] planted: a reused Q-n -> fails
+PASS  [discovery-lint] planted: five options -> fails
+PASS  [discovery-lint] control: `No questions: <reason>` -> passes
+PASS  [discovery-lint] planted: `No questions` without a reason -> fails
+PASS  [adr-lint] control: a MADR record (context, 3 alternatives, criteria, decision, consequences, dated source) -> passes
+PASS  [adr-lint] planted: no criteria -> fails
+PASS  [adr-lint] planted: one alternative -> fails
+PASS  [adr-lint] planted: an undated source -> fails
+PASS  [adr-lint] planted: superseding a record that does not exist -> fails
+PASS  [adr-lint] planted: a title that does not match the file -> fails
+PASS  [adr-lint] planted: an ADR number used twice -> fails
+PASS  [trace-lint] control: BG-1 -> US-001 -> H-1 -> L-1; a register row (SEC-001) and a v1 task (T-001) -> passes
+PASS  [trace-lint] planted: a reference to an ID nothing defines (H-9) -> fails as dangling
+PASS  [trace-lint] planted: an ID defined twice (H-1) -> fails
+PASS  [trace-lint] planted: H-1 cites no upstream ID -> fails as an orphan
+PASS  [trace-lint] planted: H-1 was defined when phase 3 was approved and is now gone -> fails (IDs never reused or deleted)
+PASS  [trace-lint] control: TH-1 and SR-1 cite US-001/H-1, STR-1 cites RL-1, T-001 cites US-001 -> passes
+PASS  [trace-lint] planted: SR-1 with no upstream ID -> fails as an orphan (ruling 1: upstream checks on)
+PASS  [trace-lint] planted: TH-1 with no upstream ID -> fails as an orphan (ruling 1: upstream checks on)
+PASS  [trace-lint] planted: T-001 with no upstream ID -> fails as an orphan (ruling 1: upstream checks on)
+PASS  [trace-lint] planted: STR-1 with no upstream ID -> fails as an orphan (ruling 1: upstream checks on)
+PASS  [ears-lint] control: EARS ACs (event, unwanted), an NFR with a unit, a role x action matrix with a deny -> passes
+PASS  [ears-lint] planted: an AC in no EARS template -> fails
+PASS  [ears-lint] planted: a vague term (fast) -> fails
+PASS  [ears-lint] planted: a compound requirement -> fails
+PASS  [ears-lint] planted: a story without an unwanted-behaviour AC -> fails
+PASS  [ears-lint] planted: an NFR without a number and unit -> fails
+PASS  [ears-lint] planted: a blank matrix cell -> fails
+PASS  [ears-lint] planted: a matrix that denies nothing -> fails
+PASS  [ears-lint] planted: no matrix at all -> fails
+PASS  [ears-lint] baseline (phase B): an as-is AC marked `(as-is, not EARS: why)` is accepted
+PASS  [cite-lint] control: every claim sourced (inline link or footnote) with a retrieval date, every link resolving -> passes
+PASS  [cite-lint] planted: a URL without a date -> fails
+PASS  [cite-lint] planted: a date in the future -> fails
+PASS  [cite-lint] planted: an uncited legal claim (R4) -> fails
+PASS  [cite-lint] planted: a footnote source without URL and date -> fails
+PASS  [cite-lint] planted: a link the gate found dead (HTTP 404 in its cache) -> fails
+PASS  [cite-lint] a link nobody checked yet is UNKNOWN in a feedback run (never a pass)
+PASS  [cite-lint] ... and check-contract exits 2 (unknown) for it
+PASS  [cite-lint] a feature cycle with no research additions (optional, Amendment 2 as built) -> passes
+PASS  [critic] no gap-critic evidence -> APPROVE 0 refused (every gated phase has a critic; missing fails closed)
+PASS  [critic] moadix:gap-critic is scheduled in phase 0; the gate's brief names the role, every topic, the size defaults, the BLOCKER rules and CRITIC.json
+PASS  [critic] the critic launched under another spelling than moadix:gap-critic -> refused
+PASS  [critic] the critic cannot write the documents it judges (only its evidence directory)
+PASS  [critic] control: clean CRITIC.json (every topic checked, no finding) -> APPROVE 0 recorded
+PASS  [critic] an open BLOCKER -> APPROVE 1 refused, the finding named
+PASS  [critic] WAIVE of a BLOCKER (gap-critic.R4) -> refused: a BLOCKER cannot be waived
+PASS  [critic] an unwaived MAJOR -> APPROVE 1 refused, saying how to waive it
+PASS  [critic] WAIVE gap-critic.R7 with a reason -> recorded
+PASS  [critic] with the MAJOR waived and one MINOR -> APPROVE 1 recorded; the MINOR is not in the summary
+PASS  [critic] the MINOR finding goes to the operator's file (.sdlc/cache/minor/product-1.md), and REVIEW counts it
+PASS  [critic] planted CRITIC.json: a verdict field ("approved": true) -> the evidence fails
+PASS  [critic] planted CRITIC.json: a topic left out of topics_checked -> the evidence fails
+PASS  [critic] planted CRITIC.json: a quote that is not at the cited lines -> the evidence fails
+PASS  [critic] planted CRITIC.json: a citation outside the file -> the evidence fails
+PASS  [critic] planted CRITIC.json: a topic of another phase -> the evidence fails
+PASS  [critic] planted CRITIC.json: a severity outside BLOCKER/MAJOR/MINOR -> the evidence fails
+PASS  [critic] planted CRITIC.json: a finding without a fix -> the evidence fails
+PASS  [critic] phase 12 (Retro) is gated (ruling 2): its contract validator and gap-critic check are registered
+PASS  [overrides] the Stop hook keeps the pre-filled skeleton in .sdlc/coverage/ (size S defaults with their reason)
+PASS  [overrides] ADOPT of coverage-overrides.yaml (turn_on B24, an N/A ruling for B13) -> recorded
+PASS  [overrides] after the operator turned B24 on, its `size-default` N/A fails
+PASS  [overrides] `N/A: operator` is accepted for the ruled topic (B13); a turned-on topic cannot be N/A at all (B24)
+PASS  [overrides] ADOPT of a bad overrides file (may only set turn_on and na) -> refused
+PASS  [overrides] ADOPT of a bad overrides file (not a coverage topic) -> refused
+PASS  [overrides] ADOPT of a bad overrides file (needs a real reason) -> refused
+PASS  [phase7-rules] the code reviewer's brief lists the three phase-7 rules (R7-1..R7-3) and asks for a `rule` on violations
+PASS  [phase7-rules] a medium finding tagged R7-3 is a MAJOR: check-verifiers-7 fails, naming the rule and the waiver
+PASS  [phase7-rules] after WAIVE code-reviewer.S1 with a reason -> check-verifiers-7 passes
+PASS  [phase7-rules] planted: a rule id that does not exist (R9) -> the evidence fails
+PASS  [phase7-rules] the phase-7 implementation skill (test-driven-development) carries the three rules, recorded as a MOADIX change
+PASS  [hygiene] no vendored skill's folder or name contains BMad/BMAD
+PASS  [hygiene] the four renamed BMAD skills keep their MIT licence file and record their upstream name
+PASS  [hygiene] every vendored skill records source URL, commit, licence and retrieval date
+PASS  [hygiene] the self-approval grep (now also push and done/ready wording) finds nothing unallowed in the skills
+PASS  [tools] the eleven new gate-run tools are pinned to exact versions (Amendment 3 section 4)
+PASS  [tools] binary pins carry a sha256 per platform; npm and PyPI pins point at committed lockfiles
+PASS  [tools] nothing from the rejected list is pinned
+PASS  [tools] ruling 3: axe-core and @axe-core/playwright (MPL-2.0, fetched unmodified) are pinned product dependencies, and THIRD-PARTY.md records every MPL-2.0 component with its source
+PASS  [tools] MCP servers stay phase-scoped: Context7 in 1, 3, 5, 7; Playwright in 10a and 10b; GitHub in 11
+PASS  [tools] the monthly pin proposal: SessionStart says it is due when the pins are over 30 days old, not before
+PASS  [fixes] F-1: the INIT message names all 7 files BMad core installs, with the count
+PASS  [fixes] F-2: the WEB and WEB→APP profiles declare 6b and 10c, the phases the gate runs for them
+PASS  [operator] APPROVE/REVIEW summaries show BLOCKER and MAJOR findings only; MINORs are counted with their file
+PASS  [operator] /moadix:coverage (every phase) is generated from the topic catalogue and matches it
+PASS  [operator] plugin.json is 0.5.1 or later
+PASS  [guard] no test read, wrote or started a real product, keychain or ~/.claude
+
+119 checks, 119 passed, 0 failed (37 s)

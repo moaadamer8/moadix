@@ -52,7 +52,7 @@ Critic BLOCKER: untestable AC or missing authorization rule.
 
 ### Phase 3 HLD (role: staff architect)
 
-H1 quality attributes ranked with trade-offs · H2 C4 context and containers as LikeC4 source · H3 architecture style with alternatives · H4 module boundaries · H5 data architecture · H6 performance design and budgets · H7 scalability · H8 concurrency and integrity · H9 integrations and failure behaviour · H10 security architecture · H11 reliability, backups, RTO/RPO · H12 observability · H13 deployment and rollback · H14 cost · H15 technology choices as ADRs · H16 future-proofing · H17 multi-tenancy isolation · H18 privacy and data residency · H19 i18n/RTL architecture · H20 fitness functions as dependency-cruiser rules · H21 operability for a solo operator · H22 ATAM risks, sensitivity and trade-off points · H23 readiness for native clients
+H1 quality attributes ranked with trade-offs · H2 C4 context and containers as LikeC4 source · H3 architecture style with alternatives · H4 module boundaries · H5 data architecture · H6 performance design and budgets · H7 scalability · H8 concurrency and integrity · H9 integrations and failure behaviour · H10 security architecture · H11 reliability, backups, RTO/RPO · H12 observability · H13 deployment and rollback · H14 cost · H15 technology choices as ADRs · H16 future-proofing · H17 multi-tenancy isolation · H18 privacy and data residency · H19 i18n/RTL architecture · H20 fitness functions as dependency-cruiser rules in `.dependency-cruiser.json` (JSON only) · H21 operability for a solo operator · H22 ATAM risks, sensitivity and trade-off points · H23 readiness for native clients
 
 Critic BLOCKER: no tenant-isolation design, or an unaddressed H1 trade-off.
 
@@ -88,7 +88,7 @@ Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
 
 ### Phase 8 Testing (role: SDET / QA lead)
 
-TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register
+TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (service containers the gate starts; no Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register
 
 Critic BLOCKER: untested P1 AC, missing cross-tenant deny test, lowered threshold.
 

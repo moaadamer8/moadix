@@ -9,6 +9,8 @@ Overrides earlier sections of DESIGN.md where they differ. Decided by the operat
 4. Gate-run Node tools use a pinned Node 24 LTS fetched by the installer into the tools cache (checksum verified), never the system Node.
 5. In-flight products start the contract at their current phase; already approved phases are not re-linted.
 
+**Rulings on increment 7b (2026-11-14):** Docker is a hard requirement for the gates that execute product code (fail closed to UNKNOWN); no Testcontainers and no Docker socket for product code, ever; JSON-only configuration for LikeC4 and dependency-cruiser (`.dependency-cruiser.json`); the resource limits of docs/confinement-design.md section 3.5, raisable at most 2x through ADOPT; a package's install script runs only when listed in an adopted product-tools.yaml.
+
 ## 1. Cross-phase contract (every phase, Baseline and feature cycles)
 
 | Element | Rule | Deterministic check (gate-run) |
@@ -48,8 +50,8 @@ P1 stories traced to goals · P2 EARS acceptance criteria · P3 role × action m
 Gate: `ears-lint` (each AC matches an EARS template; no vague terms such as fast, user-friendly, appropriate, etc., TBD; no compound requirements; every NFR has number and unit; role × action matrix complete). Evidence: PRD, AC.json. Critic BLOCKER: untestable AC or missing authorization rule.
 
 ### Phase 3 HLD — role: staff architect
-H1 quality attributes ranked with trade-offs · H2 C4 context and containers as LikeC4 source · H3 architecture style with alternatives · H4 module boundaries · H5 data architecture · H6 performance design and budgets · H7 scalability · H8 concurrency and integrity · H9 integrations and failure behaviour · H10 security architecture · H11 reliability, backups, RTO/RPO · H12 observability · H13 deployment and rollback · H14 cost · H15 technology choices as ADRs · H16 future-proofing · H17 multi-tenancy isolation · H18 privacy and data residency · H19 i18n/RTL architecture · H20 fitness functions as dependency-cruiser rules · H21 operability for a solo operator · H22 ATAM risks, sensitivity and trade-off points · H23 readiness for native clients.
-Gate: LikeC4 build exits 0; `.dependency-cruiser.cjs` rules name the H4 modules; every container appears in H4/H13; every H1 attribute has a measurable scenario. Critic BLOCKER: no tenant-isolation design, or an unaddressed H1 trade-off.
+H1 quality attributes ranked with trade-offs · H2 C4 context and containers as LikeC4 source · H3 architecture style with alternatives · H4 module boundaries · H5 data architecture · H6 performance design and budgets · H7 scalability · H8 concurrency and integrity · H9 integrations and failure behaviour · H10 security architecture · H11 reliability, backups, RTO/RPO · H12 observability · H13 deployment and rollback · H14 cost · H15 technology choices as ADRs · H16 future-proofing · H17 multi-tenancy isolation · H18 privacy and data residency · H19 i18n/RTL architecture · H20 fitness functions as dependency-cruiser rules in `.dependency-cruiser.json` (JSON only) · H21 operability for a solo operator · H22 ATAM risks, sensitivity and trade-off points · H23 readiness for native clients.
+Gate: LikeC4 build exits 0 (JSON configuration only); `.dependency-cruiser.json` rules name the H4 modules (JSON only: a JS or TS config is refused, ruling 4 on increment 7b); every container appears in H4/H13; every H1 attribute has a measurable scenario. Critic BLOCKER: no tenant-isolation design, or an unaddressed H1 trade-off.
 
 ### Phase 4 Threat Model — role: security architect
 T1 assets · T2 data flows and trust boundaries · T3 STRIDE per element · T4 abuse cases · T5 authorization/IDOR · T6 authentication attacks · T7 injection and input · T8 privacy threats (LINDDUN categories) · T9 supply chain · T10 business-logic races · T11 controls mapped to OWASP ASVS 5.0.0 IDs (V1–V17) · T12 residual risk · T13 cross-tenant threats (queries, caches, files, jobs) · T14 feature abuse · T15 detection and alerting (Top 10:2025 A09) · T16 exceptional conditions and fail-open paths (A10) · T17 secrets and key management · T18 third-party trust (webhook signatures, SSRF, OAuth redirects) · T19 AI/LLM features or N/A · T20 ASVS level with reason.
@@ -72,7 +74,7 @@ I1 task breakdown T- → AC · I2 definition of done per task · I3 slice order 
 Gate: `tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a T- task; every closed T- task links its tests. Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
 
 ### Phase 8 Testing — role: SDET / QA lead
-TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register.
+TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (service containers the gate starts; no Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register.
 Gate: JUnit, coverage JSON, ac-trace.json (no AC without a passing test), Stryker mutation.json threshold by size, Schemathesis report, axe JSON, no skipped test without waiver. Critic BLOCKER: untested P1 AC, missing cross-tenant deny test, lowered threshold.
 
 ### Phase 9 Security Verification — role: AppSec engineer
@@ -125,7 +127,6 @@ Keep everything already in MOADIX. Add (pin exact versions, verify each LICENSE 
 | knip | 7, B | Dead code and unused dependencies |
 | OWASP pytm | 4, B, FC | Threat model as code |
 | Stryker JS | 8, B | Mutation score |
-| Testcontainers (Node) | 8 | Real-database integration tests |
 | MSW | 8 | HTTP doubles |
 | Schemathesis | 8, 10b | Contract and fuzz tests from OpenAPI |
 | axe-core | 6, 8, 10a | Accessibility checks |
@@ -134,6 +135,8 @@ Keep everything already in MOADIX. Add (pin exact versions, verify each LICENSE 
 | Lighthouse CI | 10a | Performance and web-vitals assertions |
 | zizmor, actionlint | 11 | CI workflow security and lint |
 | Playwright toHaveScreenshot | 10b | Visual regression LTR and RTL |
+
+Testcontainers was removed from this table (ruling 3 on increment 7b): it needs the Docker API, and product code never gets a Docker socket; the gate starts service containers (for example Postgres) itself on the internal network and passes the tests their address.
 
 Anthropic code-simplifier was removed from this table (ruling 4 on increment 7): it is a plugin agent, not a skill, and the operator chose to skip it.
 

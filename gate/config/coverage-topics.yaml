@@ -174,7 +174,7 @@ phases:
     name: "HLD"
     role: "staff architect"
     blockers: "no tenant-isolation design, or an unaddressed H1 trade-off."
-    gate: "LikeC4 build exits 0; `.dependency-cruiser.cjs` rules name the H4 modules; every container appears in H4/H13; every H1 attribute has a measurable scenario."
+    gate: "LikeC4 build exits 0 (JSON configuration only); `.dependency-cruiser.json` rules name the H4 modules (JSON only); every container appears in H4/H13; every H1 attribute has a measurable scenario."
     topics:
       - id: H1
         title: "quality attributes ranked with trade-offs"
@@ -215,7 +215,7 @@ phases:
       - id: H19
         title: "i18n/RTL architecture"
       - id: H20
-        title: "fitness functions as dependency-cruiser rules"
+        title: "fitness functions as dependency-cruiser rules in `.dependency-cruiser.json` (JSON only)"
       - id: H21
         title: "operability for a solo operator"
       - id: H22
@@ -453,7 +453,7 @@ phases:
       - id: TS5
         title: "authz matrix allow and deny incl. cross-tenant"
       - id: TS6
-        title: "real-database integration (Testcontainers)"
+        title: "real-database integration (service containers the gate starts; no Testcontainers)"
       - id: TS7
         title: "HTTP doubles (MSW), no live third-party calls"
       - id: TS8

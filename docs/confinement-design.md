@@ -1,6 +1,6 @@
 # Confinement design for gates that run product code
 
-2026-11-14 · increment 7b · **design only, for review: nothing here is built.**
+2026-11-14 · increment 7b, approved with rulings; gaps 7 and 8 (sections 3.8 and 3.9) added in increment 7c. What 7c built is in docs/increment-7c-report.md.
 
 Amendment 3 asks the gate to run tools that execute or load product code or product configuration. A product's code is written by the agent the gate is supervising, so every such run must be treated as running untrusted code. This document says how those runs are confined, before any of them is built.
 
@@ -112,6 +112,57 @@ Every executing gate calls one gate function, `confined.run(tier, image, argv, i
 | ZAP | L. `zap-baseline.py` (passive) with the gate's rules file; SARIF and JSON go to `/out`. |
 | Lighthouse CI | L. Chromium image with the gate's lhci config; budgets from U16 and H6. |
 | axe | L. A gate-owned Playwright script plus axe-core (MPL-2.0, fetched unmodified, ruling 3) visits the URLs from LV-INVENTORY.csv and screen-states.csv. JSON goes to `/out`. |
+
+### 3.8 The product's compose file is never run as written (gap 7, increment 7c)
+
+The product's `docker-compose.yml` is written by the agent, so it is product-controlled. The gate **generates** its own compose project from an allowlisted schema. It reads only the keys below from the product's file and refuses the run (FAIL, naming the key) on anything else. It writes a new file in the gate's scratch folder, adds its own hardening, and runs `docker compose -p moadix-<product>-<run> -f <that file>`. The product's file is never passed to Docker.
+
+| Product key (per service) | Taken as | Refused |
+|---|---|---|
+| `image` | only `name@sha256:<digest>` | a tag without a digest |
+| `build` | `context` (a subfolder of the export) and `dockerfile` (a path inside it); the gate builds the image itself (3.9) | `args` from the environment, `secrets`, `ssh`, `network`, `cache_from`/`cache_to` outside the gate, `additional_contexts` |
+| `command`, `entrypoint`, `working_dir` | literal strings or lists | |
+| `environment` | literal key/values. The gate refuses a value that looks like a secret (the check-baseline secret rule) or names a production host (V15). | `env_file` |
+| `depends_on`, `healthcheck` | as written (`healthcheck.test` runs inside the container) | |
+| `expose` | as written (internal network only) | |
+| `ports` | **dropped**: nothing is published. Scanners reach services by name on the internal network. A port bound to an address other than loopback is refused, so a product cannot expect it. | a non-loopback `host_ip` |
+| `volumes` | `tmpfs` entries, and named volumes the gate creates per run (`moadix-<run>-<name>`) | host-path (bind) volumes, `external` volumes, the Docker socket, any absolute or `..` source |
+| anything else | | `privileged`, `cap_add`, `devices`, `network_mode`, `pid`, `ipc`, `userns_mode`, `security_opt`, `extra_hosts`, `dns`, `sysctls`, `ulimits`, `user` (the gate sets it), `volumes_from`, `links`, `profiles`, `configs`, `secrets`, top-level `networks`, `include`, `extends`, YAML anchors and merge keys the gate's parser does not read |
+
+**What the gate adds to every service:**
+
+- `user: "10001:10001"`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `read_only: true` with a size-capped tmpfs `/tmp`;
+- the run's CPU, memory and pids limits (3.5);
+- one network `moadix-<run>`, created with `internal: true`;
+- labels `moadix.run=<id>`.
+
+Service containers that the tests need (for example Postgres, ruling 3 on increment 7b) are not taken from the product's compose file. They come from the gate's own catalogue:
+
+- a digest-pinned image with its licence read;
+- fixed credentials generated per run (not secrets: they exist only inside the internal network for the run);
+- the tests get the address by environment (`DATABASE_URL=postgres://moadix:<run-password>@postgres:5432/test`).
+
+No container receives a Docker socket, ever.
+
+### 3.9 Building the app image (gap 8, increment 7c)
+
+`docker build` runs the Dockerfile's `RUN` steps, which is product code. The build is confined like this:
+
+- **Context.** The `git archive HEAD` export only, streamed to `docker build -` as a tar, so there is no host path. `.dockerignore` comes from the export. No `.git`, no `.sdlc/` and no `.env*` are in it.
+- **Base images.** Every `FROM` must name an image by `@sha256:` digest, or a stage of the same file. Anything else is refused before the build starts.
+- **No secrets.** No `--secret`, no `--ssh` (BuildKit then fails any `RUN --mount=type=secret|ssh`), no SSH agent forwarding, and no build args from the environment. Only literal `build.args` from the adopted product-tools.yaml are passed, each checked by the secret rule.
+- **No host mounts.** `RUN --mount=type=bind` can only bind from the build context. The gate passes no `--build-context` and no `--output` to a host path. The image is loaded into the Docker engine and tagged `moadix/<product>:<run>`.
+- **Network.**
+  - `--network none` by default: a Dockerfile that downloads during the build fails. The product installs dependencies in the gate's install step (3.4), whose read-only output is added to the context.
+  - A product may declare `build.network: registry` in an adopted product-tools.yaml. The build then uses the classic builder on the gate's egress network, reaching the registry hosts only, through the allowlisting proxy.
+  - BuildKit cannot attach to a custom network, so the classic builder is used for those builds.
+- **Limits and lifetime.** The 3.5 limits apply to the build: a wall clock of 15 min. The image, its build cache and the run's containers are removed after the run.
+
+**Accepted risks of the build:**
+
+- `RUN` steps execute as **root inside the build container**. A non-root build is not possible for arbitrary Dockerfiles, so the builder's isolation (BuildKit/runc inside the Docker VM) is trusted, as in 5.1.
+- With `build.network: registry`, a `RUN` step can talk to the registry hosts. Any upload a registry accepts is a channel out. It carries no secrets, because none are present.
+- The resulting image runs only under 3.2's restrictions, as uid 10001, whatever its `USER` says.
 
 ## 4. Decisions inside the design
 

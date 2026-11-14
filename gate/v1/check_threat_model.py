@@ -184,7 +184,7 @@ def check_contention(text, errs, warns):
                     "and never analysed is an unexamined race." % sr)
 
     nums = sorted(int(c.split("-")[1]) for c in blocks)
-    for a, b in zip(nums, nums[1:], strict=False):
+    for a, b in zip(nums, nums[1:]):  # noqa: B905  (Python 3.9: no strict=; the lengths differ by design)
         if b != a + 1:
             warns.append("CON-ID sequence gap between CON-%03d and CON-%03d." % (a, b))
     live = [c for c in blocks
@@ -252,7 +252,7 @@ def check(path):
     nums = sorted(int(s.split("-")[1]) for s in ids)
     if nums and nums[0] != 1:
         warns.append("SEC-IDs start at %03d rather than 001." % nums[0])
-    for a, b in zip(nums, nums[1:], strict=False):
+    for a, b in zip(nums, nums[1:]):  # noqa: B905  (Python 3.9: no strict=; the lengths differ by design)
         if b != a + 1:
             warns.append("SEC-ID sequence gap between SEC-%03d and SEC-%03d." % (a, b))
 

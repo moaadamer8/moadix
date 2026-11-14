@@ -55,7 +55,7 @@ os.environ["MOADIX_TEST_GITHUB_TOKEN"] = TOK   # the fixture gate's stand-in for
 def record(group, name, ok, evidence=""):
     RESULTS.append((group, name, bool(ok)))
     ev = " ".join(str(evidence).split())
-    print("%s  [%s] %s\n      %s" % ("PASS" if ok else "FAIL", group, name, ev[:600]))
+    print("%s  [%s] %s\n      %s" % ("PASS" if ok else "FAIL", group, name, ev[:1500]))
 
 
 def git(p, *args):
@@ -175,13 +175,16 @@ def product_config(p):
 
 # ------------------------------------------------------------------ documents
 PRODUCT_DOCS = {
+    "sdlc/01-research.md": open(os.path.join(fixtures.FIXDOCS, "sdlc", "01-research.md")).read(),
     "sdlc/02-prd.md": open(os.path.join(fixtures.FIXDOCS, "sdlc", "02-prd.md")).read(),
     "sdlc/03-hld.md": "# HLD\n\nOne process serves notes.\n",
     "sdlc/04-threat-model.md": ("# Threat model\n\n## Trust Boundaries\n\n| ID | Boundary | Description |\n|---|---|---|\n"
                                 "| TB-1 | browser to server | notes arrive from the browser |\n\n"
                                 "### SEC-001 - Stored XSS in a note\n\n- **Trust boundary:** TB-1\n- **STRIDE:** Tampering\n"
                                 "- **Threat:** a note carries script\n- **Mitigation requirement:** escape on output\n"
-                                "- **Owner phase:** 7\n"),
+                                "- **Owner phase:** 7\n- **Verification method:** unit test of the output encoder\n\n"
+                                "## Shared resources\n\n_none_ - each request is stateless and the notes store has a "
+                                "single writer\n"),
     "sdlc/05-lld.md": "# LLD\n\nUS-001: POST /notes stores a note.\n",
 }
 
@@ -202,7 +205,8 @@ def feature_docs(fid, n=2, prd_extra="", sec_id="SEC-002"):
         pre + "04-threat-model.md": "# Threat model additions\n\n### TH-%d - Deleting another visitor's note\n\nAgainst "
                                     "%s.\n\n### %s - Deleting another visitor's note\n\n"
                                     "- **Trust boundary:** TB-1\n- **STRIDE:** Tampering\n- **Threat:** TH-%d, delete by id "
-                                    "guess\n- **Mitigation requirement:** check ownership\n- **Owner phase:** 7\n" % (
+                                    "guess\n- **Mitigation requirement:** check ownership\n- **Owner phase:** 7\n"
+                                    "- **Verification method:** a test deletes another visitor's note and expects 403\n" % (
                                         n, us, sec_id, n),
         pre + "4/SEC-CONTROLS.csv": "sec_id,th_id,asvs_id,verification\n%s,TH-%d,V8.2.1,ownership unit test\n" % (sec_id, n),
         pre + "05-lld.md": "# LLD changes\n\n%s: DELETE /notes/{id}, owner only.\n" % us,
@@ -306,9 +310,9 @@ def test_feature():
             E.write(p, "sdlc/features/F1/04-threat-model.md", docs["sdlc/features/F1/04-threat-model.md"])
         E.commit(p, "feature phase %s" % lab)
         rv, ctx = approve(p, lab)
-        outs.append((lab, ok_rec(ctx), short(ctx, 160)))
+        outs.append((lab, ok_rec(ctx), short(ctx, 160 if ok_rec(ctx) else 900)))
     record(G, "feature phases 0-4 approved through the gate's worker (check-feature on each)",
-           all(o[1] for o in outs), outs)
+           all(o[1] for o in outs), [o for o in outs if not o[1]] or outs)
     _b, pl = E.payload(p, len(E.ledger(p)))
     record(G, "each feature APPROVE line carries the feature id and the validator digest it relied on",
            pl.get("feature") == "F1" and pl.get("phase") == "4" and str((pl.get("validation") or {}).get("digest", "")).startswith("sha256:"),
@@ -512,7 +516,7 @@ def test_onboarding():
     outs = []
     for lab in ("0", "1"):
         rv, ctx = approve(p, lab)
-        outs.append((lab, ok_rec(ctx), short(ctx, 120)))
+        outs.append((lab, ok_rec(ctx), short(ctx, 120 if ok_rec(ctx) else 900)))
     E.write(p, "sdlc/features/O1/02-prd.md", docs["sdlc/features/O1/02-prd.md"] +
             "- **AC-3:** If the note is empty, then the system shall not refuse it.\n")
     E.commit(p, "O1 PRD contradicting the baseline")

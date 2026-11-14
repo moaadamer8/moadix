@@ -678,7 +678,7 @@ def test_misc():
     record(G, "ruling 3: axe-core and @axe-core/playwright (MPL-2.0, fetched unmodified) are pinned product dependencies, "
               "and THIRD-PARTY.md records every MPL-2.0 component with its source",
            {"axe-core", "@axe-core/playwright"} <= {str(x.get("package")) for x in prod} and
-           all(x.get("license") for x in prod) and len(prod) == 6 and
+           all(x.get("license") for x in prod) and len(prod) == 5 and
            all(w in third for w in ("lightningcss", "hypothesis", "certifi", "@axe-core/playwright",
                                     "https://registry.npmjs.org/axe-core")), prod)
     mf = {x["label"]: x for x in hlib.load_yaml(os.path.join(REPO, "gate", "config", "phase-manifest.yaml"))["phases"]}
