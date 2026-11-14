@@ -1,0 +1,62 @@
+{
+ "lighthouseVersion": "12.6.1",
+ "finalDisplayedUrl": "http://sut.moadix.test:3000/",
+ "requestedUrl": "http://sut.moadix.test:3000/",
+ "fetchTime": "2026-11-14T21:19:32.501Z",
+ "categories": {
+  "performance": {
+   "id": "performance",
+   "score": 1
+  },
+  "accessibility": {
+   "id": "accessibility",
+   "score": 0.56
+  },
+  "best-practices": {
+   "id": "best-practices",
+   "score": 0.69
+  },
+  "seo": {
+   "id": "seo",
+   "score": 0.75
+  }
+ },
+ "audits": {
+  "largest-contentful-paint": {
+   "id": "largest-contentful-paint",
+   "score": 1,
+   "numericValue": 900.884,
+   "numericUnit": "millisecond"
+  },
+  "cumulative-layout-shift": {
+   "id": "cumulative-layout-shift",
+   "score": 1,
+   "numericValue": 0,
+   "numericUnit": "unitless"
+  },
+  "total-blocking-time": {
+   "id": "total-blocking-time",
+   "score": 1,
+   "numericValue": 0,
+   "numericUnit": "millisecond"
+  },
+  "interactive": {
+   "id": "interactive",
+   "score": 1,
+   "numericValue": 900.884,
+   "numericUnit": "millisecond"
+  },
+  "first-contentful-paint": {
+   "id": "first-contentful-paint",
+   "score": 1,
+   "numericValue": 601.442,
+   "numericUnit": "millisecond"
+  },
+  "speed-index": {
+   "id": "speed-index",
+   "score": 1,
+   "numericValue": 601.442,
+   "numericUnit": "millisecond"
+  }
+ }
+}

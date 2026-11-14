@@ -120,7 +120,8 @@ put 0755 "$work/moadix-checker" "$CHECKER"
 for f in "$HERE"/gate/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/$(basename "$f")"; done
 # increment 2: the ported v1 validators and the gate's own config (registry, policies)
 for f in "$HERE"/gate/v1/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/v1/$(basename "$f")"; done
-for f in "$HERE"/gate/config/*.yaml "$HERE"/gate/config/*.toml "$HERE"/gate/config/*.ini; do
+# increment 7d: *.json too (critic.schema.json, increment 7, was missing from the installed gate)
+for f in "$HERE"/gate/config/*.yaml "$HERE"/gate/config/*.toml "$HERE"/gate/config/*.ini "$HERE"/gate/config/*.json; do
   put 0644 "$f" "$MOADIX_HOME/gate/config/$(basename "$f")"
 done
 # increment 6: BMad core's shared scripts (vendored verbatim), which the gate installs into products' _bmad/
@@ -130,10 +131,19 @@ for f in "$HERE"/gate/bmad/LICENSE "$HERE"/gate/bmad/TRADEMARK.md "$HERE"/gate/b
 done
 for f in "$HERE"/gate/bmad/scripts/*.py; do put 0644 "$f" "$MOADIX_HOME/gate/bmad/scripts/$(basename "$f")"; done
 # increment 5: the gate-run tools' own configs (semgrep rules, redocly config, the k6 wrapper)
-for sub in semgrep redocly k6; do
+# increment 7b: vacuum, squawk and actionlint configs (they were missing from the installed gate until 7d)
+for sub in semgrep redocly k6 vacuum squawk actionlint; do
   as_root /bin/mkdir -p "$MOADIX_HOME/gate/config/$sub"
   for f in "$HERE"/gate/config/"$sub"/*; do put 0644 "$f" "$MOADIX_HOME/gate/config/$sub/$(basename "$f")"; done
 done
+# increment 7d: the lockfiles the confined runner installs the gate's own tools from, and its scripts
+for d in "$HERE"/gate/config/locks/*/; do
+  sub="locks/$(basename "$d")"
+  as_root /bin/mkdir -p "$MOADIX_HOME/gate/config/$sub"
+  for f in "$d"*; do put 0644 "$f" "$MOADIX_HOME/gate/config/$sub/$(basename "$f")"; done
+done
+as_root /bin/mkdir -p "$MOADIX_HOME/gate/exec"
+for f in "$HERE"/gate/exec/*; do put 0644 "$f" "$MOADIX_HOME/gate/exec/$(basename "$f")"; done
 # increment 5: the pinned tools, root-owned, straight into $MOADIX_HOME/tools (a venv cannot be
 # moved). Every download is checked against its sha256 pin; npm runs with --ignore-scripts and
 # uv installs wheels only, so no package code runs as root. Kept across updates (idempotent).
@@ -158,11 +168,15 @@ if [[ $MODE == real ]]; then
   as_root /usr/sbin/chown root:wheel "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
     "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
     "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6" "$MOADIX_HOME/gate/bmad" \
-    "$MOADIX_HOME/gate/bmad/scripts"
+    "$MOADIX_HOME/gate/bmad/scripts" "$MOADIX_HOME/gate/config/vacuum" "$MOADIX_HOME/gate/config/squawk" \
+    "$MOADIX_HOME/gate/config/actionlint" "$MOADIX_HOME/gate/config/locks" "$MOADIX_HOME/gate/exec"
+  as_root /usr/sbin/chown -R root:wheel "$MOADIX_HOME/gate/config/locks"
 fi
 as_root /bin/chmod 0755 "$CC_DIR" "$MOADIX_HOME" "$MOADIX_HOME/bin" "$MOADIX_HOME/gate" \
   "$MOADIX_HOME/gate/v1" "$MOADIX_HOME/gate/config" "$MOADIX_HOME/gate/config/semgrep" \
-  "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6" "$MOADIX_HOME/gate/bmad" "$MOADIX_HOME/gate/bmad/scripts"
+  "$MOADIX_HOME/gate/config/redocly" "$MOADIX_HOME/gate/config/k6" "$MOADIX_HOME/gate/bmad" "$MOADIX_HOME/gate/bmad/scripts" \
+  "$MOADIX_HOME/gate/config/vacuum" "$MOADIX_HOME/gate/config/squawk" "$MOADIX_HOME/gate/config/actionlint" \
+  "$MOADIX_HOME/gate/config/locks" "$MOADIX_HOME/gate/config/locks"/* "$MOADIX_HOME/gate/exec"
 
 # ---- 4. secrets ------------------------------------------------------------------
 if [[ $UPDATE == 0 ]]; then

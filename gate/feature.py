@@ -311,6 +311,25 @@ def merge_plan(root, fid, seq=None):
         contents[target] = after
         files.append({"target": target, "sources": [src], "before_sha256": _sha(before),
                       "after_sha256": _sha(after), "added_bytes": len(after) - len(before)})
+    # Increment 7c (ruling 3): an onboarded product's baseline B- documents (test inventory, known gaps,
+    # accounts) take the feature's B- additions, so the merged baseline stays complete.
+    fdir = os.path.join(root, folder(fid))
+    for fn in sorted(os.listdir(fdir)) if os.path.isdir(fdir) else []:
+        if not re.match(r"^B-[\w.-]+\.md$", fn) or not os.path.isfile(os.path.join(root, "sdlc", fn)):
+            continue
+        target, src = "sdlc/%s" % fn, "%s/%s" % (folder(fid), fn)
+        with open(os.path.join(root, target), "rb") as f:
+            before = f.read()
+        with open(os.path.join(root, src), "rb") as f:
+            add = f.read().decode("utf-8", errors="replace")
+        marker = "<!-- MOADIX merge: feature %s -->" % fid
+        if marker.encode() in before:
+            raise FeatureError("%s already holds a merge of feature %s" % (target, fid))
+        block = "\n\n%s\n## Feature %s%s\n\n%s" % (marker, fid, " (ledger seq %d)" % seq if seq else "", _strip_title(add))
+        after = before.rstrip(b"\n") + b"\n" + block.encode()
+        contents[target] = after
+        files.append({"target": target, "sources": [src], "before_sha256": _sha(before), "after_sha256": _sha(after),
+                      "added_bytes": len(after) - len(before)})
     lld = os.path.join(root, folder(fid), "05-lld")
     if os.path.isdir(lld):
         for a, _d, fs in os.walk(lld):

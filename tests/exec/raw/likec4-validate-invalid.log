@@ -1,0 +1,14 @@
+[2m21:12:24.893[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mlayout[22m wasm[0m
+[2m21:12:24.899[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mworkspace:[22m /work[0m
+[2m21:12:25.273[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mworkspace:[22m found 1 source files[0m
+[2m21:12:25.273[0m [1m[31mERROR[0m [1m[36mlikec4[0m Invalid /work/model.c4
+    [2mLine 5: [22m[31mExpecting token of type '}' but found `notes`.[39m
+    [2mLine 5: [22m[31mExpecting: one of these possible Token sequences:[39m
+          [31m  1. [extend][39m
+          [31m  2. [Dot][39m
+          [31m  3. [-[][39m
+          [31m  4. [<->][39m
+          [31m...[39m
+    [2mLine 5: [22m[31mExpecting token of type '}' but found `system`.[39m[0m
+[2m21:12:25.346[0m [1m[31mERROR[0m [1m[36mlikec4.c4:validate[0m [31m[31m✗ Invalid[31m[2m (1 files, 3 errors)[22m[39m[0m
+[2m21:12:25.347[0m [1m[32mINFO [0m [1m[36mlikec4.c4:validate[0m [32mvalidate 454ms[39m[0m

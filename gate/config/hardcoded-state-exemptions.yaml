@@ -277,3 +277,43 @@ exemptions:
     token: 9
     reason: "Increment 7b: SEC-VERIFICATION.csv is phase 9's (security verification) artifact"
     owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 3
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 4
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 6
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 7
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 8
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 9
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 10a
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator
+  - file: gate/v1/check_exec.py
+    axis: phase
+    token: 10b
+    reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
+    owner: operator

@@ -61,7 +61,9 @@ PROTECTED_EXTERNAL = [
 ]
 
 # v1 phases (id, label, name, allow globs relative to the repo root). Increment 7 (Amendment 3): each
-# phase also owns sdlc/<label>/ (COVERAGE.md, DISCOVERY.md, adr/), and phase 4 owns tm/ (pytm).
+# phase also owns sdlc/<label>/ (COVERAGE.md, DISCOVERY.md, adr/), and phase 4 owns tm/ (pytm). Increment 7c
+# (ruling 3): in a feature cycle of an onboarded product, the feature's additions to the baseline's B- documents
+# are written in 6b (accounts), 8 (test inventory) and 9 (known gaps) and merge at 11 like the other documents.
 PHASES = [
     (0, "0", "BRD", ["sdlc/00-*.md", "sdlc/00-forge/**", "sdlc/0/**"]),
     (1, "1", "Research", ["sdlc/01-*.md", "sdlc/01-research/**", "sdlc/decisions/**", "sdlc/1/**"]),
@@ -70,15 +72,15 @@ PHASES = [
     (4, "4", "Threat Model", ["sdlc/04-*.md", "sdlc/4/**", "tm/**"]),
     (5, "5", "LLD", ["sdlc/05-*.md", "sdlc/05-lld/**", "api/**", "openapi/**", "sdlc/5/**"]),
     (6, "6", "UX", ["sdlc/06-*.md", "design/**", "sdlc/6/**"]),
-    (7, "6b", "Provisioning", ["sdlc/06b-*.md", ".env.example", "sdlc/6b/**"]),
+    (7, "6b", "Provisioning", ["sdlc/06b-*.md", ".env.example", "sdlc/6b/**", "sdlc/B-accounts.md"]),
     (8, "7", "Tasks and Implementation", [
         "sdlc/07-*.md", "src/**", "public/**", "package.json", "index.html", "mobile/**",
         "docker-compose.yml", "compose/**", "Dockerfile", ".dockerignore", "scripts/**",
         "package-lock.json", "tsconfig.json", "next.config.*", "next-env.d.ts", "drizzle.config.*",
         "vitest.config.*", "playwright.config.*", "eslint.config.*", ".prettierrc*", "prettier.config.*",
         ".prettierignore", ".github/workflows/**", "tests/**", "sdlc/7/**"]),
-    (9, "8", "Testing", ["sdlc/08-*.md", "tests/**", "ui-tests/**", "test-results/**", "pytest.ini", "sdlc/8/**"]),
-    (10, "9", "Security Verification", ["sdlc/09-*.md", "security/**", "sdlc/9/**"]),
+    (9, "8", "Testing", ["sdlc/08-*.md", "tests/**", "ui-tests/**", "test-results/**", "pytest.ini", "sdlc/8/**", "sdlc/B-test-inventory.md"]),
+    (10, "9", "Security Verification", ["sdlc/09-*.md", "security/**", "sdlc/9/**", "sdlc/B-known-gaps.md"]),
     (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**", "sdlc/10a/**"]),
     (12, "10b", "Regression Suites", ["sdlc/10b-*.md", "e2e/**", "e2e-mobile/**", ".maestro/**", ".github/workflows/**", "sdlc/10b/**"]),
     (13, "10c", "Concurrency and Load", ["sdlc/10c-*.md", "evidence/concurrency/**", "load/**", "sdlc/10c/**"]),

@@ -251,6 +251,18 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>` | refused (protected) |
 | 12 | `firebase projects:list` | runs |
 
+## Confined gates: the real-engine suite (0.6.0, Terminal)
+
+The gates that run product code (`check-exec-*`) need Docker Desktop running. They need the images in `gate/config/confinement.yaml` set to `status: cleared` once you have ruled on their licences (`docs/increment-7d-report.md` section 2). Until then, every such gate reports UNKNOWN.
+
+After clearing the images, and with no other container running, run once in Terminal from the repository:
+
+```
+/usr/bin/python3 tests/confined-engine/run.py
+```
+
+It refuses to start if a container or compose project that is not its own is running, and names each one. Stopped projects (for example a parked stack) are listed and left untouched. It pulls the node and python images by digest and runs its hostile fixtures. At the end it removes everything labelled `moadix.run=es*` and checks that nothing else changed.
+
 ## 5. Uninstall
 
 ```

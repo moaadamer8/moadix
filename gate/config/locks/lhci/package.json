@@ -1,0 +1,7 @@
+{
+  "name": "moadix-tool-lhci",
+  "private": true,
+  "dependencies": {
+    "@lhci/cli": "0.15.1"
+  }
+}

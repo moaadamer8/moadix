@@ -142,6 +142,8 @@ Anthropic code-simplifier was removed from this table (ruling 4 on increment 7):
 
 Licences: MPL-2.0 is accepted for tools and product dependencies fetched unmodified from their registry and never vendored (ruling 3); axe-core and @axe-core/playwright are added on that basis.
 
+**Licence rule (ruling 1 on increment 7c).** The rule "permissive, or MPL-2.0 unmodified" applies to what is vendored into or shipped from this repository. Software that is only pulled unmodified by digest from its official source and executed, never vendored or redistributed by MOADIX (the confined runner's base images and service images), may carry any OSI-approved licence, including GPL and LGPL. Each such image is recorded in THIRD-PARTY.md with its digest, source and the licences found in it. Anything non-OSI, or with a field-of-use restriction, still stops and is reported.
+
 Rejected (do not add): Spectral, Atlas migrate lint, Threagile, Threat Dragon, STRIDE GPT, Syft/Grype, trufflehog, CodeQL, Snyk, Pact, Chromatic/Argos/Lost Pixel, Artillery/Locust, changesets, ralph-loop, commit-commands, Anthropic frontend-design, Figma plugin, Infracost/Doppler/Infisical/SOPS, Appium MCP.
 
 MCP servers stay phase-scoped: Playwright, DevTools, mobile-mcp only in 10a/10b; Context7 only in 1, 3, 5, 7; GitHub only in 11.

@@ -221,14 +221,22 @@ def test_limits():
 # ------------------------------------------------------------------ fail closed (ruling 1, ruling 2)
 def test_fail_closed():
     G = "fail closed"
-    for name in ("node", "python", "chromium", "zap"):
+    # the fixture gate copy clears the images for the engine double (increment 7d); the repository's
+    # configuration, which is what installs, keeps them blocked until the operator rules
+    saved_cfg = confined.CONFIG
+    confined.CONFIG = os.path.join(REPO, "gate", "config", "confinement.yaml")
+    for name in ("node", "node-full", "python", "chromium", "zap", "postgres"):
         why = unavailable(confined.image, name)
         record(G, "image %s is blocked by the licence ruling: UNKNOWN with the reason" % name, why and "blocked" in why, why)
+    confined.CONFIG = saved_cfg
     saved = confined.DOCKER_DIRS
+    saved_env = os.environ.pop("MOADIX_TEST_ENGINE", None)
     confined.DOCKER_DIRS = (os.path.join(E.base, "nowhere"),)
     ok, why = confined.docker_available()
-    why2 = unavailable(confined.run, "r6", "node", ["true"], "E-test", "/dev/null")
+    why2 = unavailable(confined.Run, "r6-fail-closed")
     confined.DOCKER_DIRS = saved
+    if saved_env:
+        os.environ["MOADIX_TEST_ENGINE"] = saved_env
     record(G, "ruling 1: no Docker -> UNKNOWN (never a run on the host)", not ok and "hard requirement" in why and
            why2 and "hard requirement" in why2, (why, why2))
     cfg = confined._yaml(confined.CONFIG)

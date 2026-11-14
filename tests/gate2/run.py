@@ -281,12 +281,14 @@ def group_port():
              "check-lv-inventory-10a", "check-workflows-11"}
     # increment 7c adds the merged product-plus-feature validators (feature scope, phases 0-6b)
     inc7 |= {c["id"] for c in comps if c["module"] == "check_merged"}
+    # increment 7d adds the executing gates through the confined runner (22 phase/gate pairs)
+    inc7 |= {c["id"] for c in comps if c["module"] == "check_exec"}
     v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
     inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
     n5 = len([c for c in comps if c["id"] in inc5])
     record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks, increment 5's %d and "
               "increment 6's %d, increment 7's %d)" % (len(v1c), len(inc4), n5, len(inc6), len(inc7)),
-           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20 and len(inc7) == 44,
+           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20 and len(inc7) == 66,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")

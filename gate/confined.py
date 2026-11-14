@@ -21,14 +21,15 @@ anything it cannot establish raises Unavailable (the gate reports UNKNOWN) or Re
   check_output(dir, max_bytes)      no links, devices or oversize output
   docker_available()                Docker is a hard requirement (ruling 1): UNKNOWN without it
 
-The engine calls themselves (`docker volume create`, `docker cp`, `docker run`, `docker compose`)
-are in run(); in this increment every base image is blocked by the licence ruling, so run()
-stops at image() with UNKNOWN (docs/increment-7c-report.md).
+The engine calls are in class Run (increment 7d): named volumes loaded with `docker cp` (no host
+path), a gate-controlled helper that sets their owner, internal networks, the allowlisting egress
+proxy for the install step, confined execution with OOM and wall-clock detection, and close(),
+which removes everything carrying the run's label. Tested against a real engine by
+tests/confined-engine (Terminal).
 """
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 
@@ -328,51 +329,184 @@ def read_json_output(d, name, max_bytes=20 << 20):
             raise Refused("%s is not JSON: %s" % (name, e)) from None
 
 
-# ------------------------------------------------------------------ the run
-def run(run_id, image_name, argv, tier, export_tar, product_tools=None, network="none", timeout_pad=30):
-    """Run argv on the export in a confined container; returns (rc, stdout, stderr, out_dir).
-    Raises Unavailable (UNKNOWN) or Refused (FAIL)."""
-    ok, why = docker_available()
-    if not ok:
-        raise Unavailable(why)
-    img = image(image_name)
-    lim = limits(tier, product_tools)
-    d = docker_path()
-    src, out = "moadix-%s-src" % run_id, "moadix-%s-out" % run_id
-    work = None
-    try:
-        for v in (src, out):
-            subprocess.run([d, "volume", "create", "--label", "moadix.run=%s" % run_id, v], check=True,
-                           capture_output=True, timeout=60)
-        # copy the export into the read-only source volume through a throwaway helper (no host bind)
-        helper = "moadix-%s-load" % run_id
-        subprocess.run([d, "create", "--name", helper, "--network", "none", "--mount",
-                        "type=volume,src=%s,dst=/src" % src, img, "true"], check=True, capture_output=True, timeout=60)
-        with open(export_tar, "rb") as f:
-            subprocess.run([d, "cp", "-", "%s:/src" % helper], stdin=f, check=True, capture_output=True, timeout=300)
-        subprocess.run([d, "rm", "-f", helper], capture_output=True, timeout=60)
-        p = subprocess.run([d] + run_argv(run_id, img, argv, lim, src, out, network=network), capture_output=True,
-                           text=True, timeout=lim["wall_s"] + timeout_pad)
-        import tempfile
-        work = tempfile.mkdtemp(prefix="moadix-out-")
-        helper = "moadix-%s-unload" % run_id
-        subprocess.run([d, "create", "--name", helper, "--network", "none", "--mount",
-                        "type=volume,src=%s,dst=/out,readonly" % out, img, "true"], check=True, capture_output=True,
-                       timeout=60)
-        subprocess.run([d, "cp", "%s:/out/." % helper, work], check=True, capture_output=True, timeout=300)
-        subprocess.run([d, "rm", "-f", helper], capture_output=True, timeout=60)
-        probs = check_output(work, lim["out_mb"] << 20)
-        if probs:
-            raise Refused("the run's output was refused: %s" % "; ".join(probs))
-        return p.returncode, p.stdout[-20000:], p.stderr[-20000:], work
-    except subprocess.TimeoutExpired:
-        subprocess.run([d, "rm", "-f", "moadix-%s" % run_id], capture_output=True, timeout=60)
-        raise Refused("the run exceeded its wall clock (%ss)" % lim["wall_s"]) from None
-    except subprocess.CalledProcessError as e:
-        raise Unavailable("the engine refused a setup step: %s" % (e.stderr or b"").decode(errors="replace")[:200]) \
-            from None
-    finally:
-        for v in (src, out):
-            subprocess.run([d, "volume", "rm", "-f", v], capture_output=True, timeout=60)
-        if work and not os.path.isdir(work):
-            shutil.rmtree(work, ignore_errors=True)
+# ------------------------------------------------------------------ the engine (increment 7d)
+REGISTRIES = ("registry.npmjs.org", "pypi.org", "files.pythonhosted.org")
+PROXY_ALIAS = "moadix-proxy"
+SUT_ALIAS = "sut.moadix.test"  # never a bare name: Chromium force-upgrades http://app (.app is HSTS-preloaded)
+
+
+def fixture_engine():
+    """In a test fixture's gate copy only (tests/lib/_testguard.py present, never installed), the suites may
+    point the runner at the engine double through MOADIX_TEST_ENGINE. The installed gate ignores it."""
+    if os.path.exists(os.path.join(GATE_DIR, "_testguard.py")):
+        p = os.environ.get("MOADIX_TEST_ENGINE")
+        if p and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def engine():
+    return fixture_engine() or docker_path()
+
+
+class Run(object):
+    """One confined run: everything it creates carries the label moadix.run=<id> and is removed by close()."""
+
+    def __init__(self, run_id, product_tools=None):
+        if not re.match(r"^[a-z0-9][a-z0-9-]{3,40}$", run_id):
+            raise Refused("run id %r is not a plain lower-case id" % run_id)
+        d = engine()
+        if not d:
+            raise Unavailable("Docker is not installed (it is a hard requirement for the gates that run product code)")
+        self.d, self.id, self.pt = d, run_id, product_tools or {}
+        self.label = "moadix.run=%s" % run_id
+        ok, why = self._version()
+        if not ok:
+            raise Unavailable(why)
+        self.volumes, self.networks, self.containers = [], [], []
+        self.uid = int(config().get("uid") or 10001)
+
+    def _version(self):
+        try:
+            p = subprocess.run([self.d, "version", "--format", "{{.Server.Version}}"], capture_output=True, text=True,
+                               timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return False, "docker version failed: %r" % (e,)
+        if p.returncode != 0 or not p.stdout.strip():
+            return False, "the Docker engine is not reachable: %s" % (p.stderr or "").strip()[:200]
+        return True, p.stdout.strip()
+
+    def _d(self, args, timeout=120, stdin=None, check=True):
+        try:
+            p = subprocess.run([self.d] + list(args), capture_output=True, timeout=timeout, stdin=stdin)
+        except subprocess.TimeoutExpired:
+            raise Unavailable("docker %s timed out" % args[0]) from None
+        if check and p.returncode != 0:
+            raise Unavailable("docker %s failed: %s" % (" ".join(args[:2]), p.stderr.decode(errors="replace")[:300]))
+        return p
+
+    # ---- resources
+    def volume(self, name):
+        v = "moadix-%s-%s" % (self.id, name)
+        self._d(["volume", "create", "--label", self.label, v])
+        self.volumes.append(v)
+        return v
+
+    def network(self, name, internal=True):
+        n = "moadix-%s-%s" % (self.id, name)
+        self._d(["network", "create", "--label", self.label] + (["--internal"] if internal else []) + [n])
+        self.networks.append(n)
+        return n
+
+    def _helper(self, img, mounts, argv, user="0"):
+        """A gate-controlled helper (never product code): no network, no capabilities beyond chown."""
+        args = ["run", "--rm", "--label", self.label, "--network", "none", "--user", user, "--cap-drop", "ALL"]
+        if user == "0":
+            args += ["--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER"]
+        for src, dst, ro in mounts:
+            args += ["--mount", "type=volume,src=%s,dst=%s%s" % (src, dst, ",readonly" if ro else "")]
+        return self._d(args + ["--entrypoint", argv[0], img] + list(argv[1:]), timeout=300)
+
+    def load(self, vol, tar_path, img):
+        """Copy a tar (the git archive export, or gate files) into a volume, then hand it to the run's uid,
+        read-only for everyone else. No host path is mounted: `docker cp` streams the tar."""
+        c = "moadix-%s-load-%s" % (self.id, vol.rsplit("-", 1)[-1])
+        self._d(["create", "--name", c, "--label", self.label, "--network", "none", "--mount",
+                 "type=volume,src=%s,dst=/v" % vol, "--entrypoint", "true", img])
+        try:
+            with open(tar_path, "rb") as f:
+                self._d(["cp", "-", "%s:/v" % c], stdin=f, timeout=600)
+        finally:
+            self._d(["rm", "-f", c], check=False)
+        self._helper(img, [(vol, "/v", False)], ["chown", "-R", "%d:%d" % (self.uid, self.uid), "/v"])
+
+    def own(self, vol, img, uid=None):
+        self._helper(img, [(vol, "/v", False)], ["chown", "%d:%d" % (uid or self.uid, uid or self.uid), "/v"])
+
+    def copy_out(self, vol, dest, img):
+        c = "moadix-%s-unload-%s" % (self.id, vol.rsplit("-", 1)[-1])
+        self._d(["create", "--name", c, "--label", self.label, "--network", "none", "--mount",
+                 "type=volume,src=%s,dst=/v,readonly" % vol, "--entrypoint", "true", img])
+        try:
+            os.makedirs(dest, exist_ok=True)
+            self._d(["cp", "%s:/v/." % c, dest], timeout=600)
+        finally:
+            self._d(["rm", "-f", c], check=False)
+
+    # ---- the egress proxy and the install step (3.4)
+    def proxy(self, install_net, egress_net, proxy_src_vol):
+        img = image("python")
+        name = "moadix-%s-proxy" % self.id
+        self._d(["run", "-d", "--name", name, "--label", self.label, "--network", egress_net,
+                 "--user", "%d:%d" % (self.uid, self.uid), "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                 "--read-only", "--memory", "256m", "--pids-limit", "128", "--mount",
+                 "type=volume,src=%s,dst=/p,readonly" % proxy_src_vol, img, "python3", "/p/egress_proxy.py", "3128"]
+                + list(REGISTRIES))
+        self.containers.append(name)
+        self._d(["network", "connect", "--alias", PROXY_ALIAS, install_net, name])
+        return name
+
+    def execute(self, img, argv, tier, mounts, network="none", env=None, user=None, aliases=(), name=None,
+                detach=False, tmpfs=()):
+        """Run argv confined (3.2). mounts: [(volume, path, readonly)]; /out is the only writable one."""
+        lim = limits(tier, self.pt)
+        name = name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower()))
+        e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/home", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+        for k, v in (env or {}).items():
+            if SECRETISH.search(k) or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", k):
+                raise Refused("environment variable %s may not be passed into a confined run" % k)
+            e[k] = str(v)
+        args = ["run", "--name", name, "--label", self.label, "--user", user or "%d:%d" % (self.uid, self.uid),
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+                "--tmpfs", "/tmp:rw,nosuid,nodev,size=%dm,uid=%d,gid=%d" % (lim["tmp_mb"], self.uid, self.uid),  # noqa: S108
+                "--network", network, "--cpus", str(lim["cpus"]), "--memory", "%dm" % lim["memory_mb"],
+                "--memory-swap", "%dm" % lim["memory_mb"], "--pids-limit", str(lim["pids"]),
+                "--ulimit", "nofile=4096:4096", "--ulimit", "fsize=%d" % (lim["out_mb"] << 20)]
+        for a in aliases:
+            args += ["--network-alias", a]
+        for t in tmpfs:
+            if not re.match(r"^/[\w./-]+$", t) or t in ("/", "/proc", "/sys", "/dev"):
+                raise Refused("tmpfs %r is not allowed" % t)
+            args += ["--tmpfs", "%s:rw,nosuid,nodev,size=64m" % t]
+        for src, dst, ro in mounts:
+            if not re.match(r"^moadix-[a-z0-9-]+$", src):
+                raise Refused("volume %r is not a gate-created named volume" % src)
+            args += ["--mount", "type=volume,src=%s,dst=%s%s" % (src, dst, ",readonly" if ro else "")]
+        for k in sorted(e):
+            args += ["--env", "%s=%s" % (k, e[k])]
+        args += ["-d"] if detach else []
+        args += [img] + list(argv)
+        joined = " ".join(args)
+        if "docker.sock" in joined or "type=bind" in joined or re.search(r"(^| )(-v|--volume)( |=)", joined):
+            raise Refused("a confined run may not mount a host path or the Docker socket")
+        self.containers.append(name)
+        if detach:
+            self._d(args, timeout=120)
+            return 0, "", ""
+        try:
+            p = subprocess.run([self.d] + args, capture_output=True, text=True, timeout=lim["wall_s"] + 30)
+        except subprocess.TimeoutExpired:
+            self._d(["rm", "-f", name], check=False)
+            raise Refused("the run exceeded its wall clock (%ss)" % lim["wall_s"]) from None
+        state = self._d(["inspect", "--format", "{{.State.OOMKilled}}", name], check=False).stdout.decode().strip()
+        self._d(["rm", "-f", name], check=False)
+        if state == "true":
+            raise Refused("the run exceeded its memory limit (%d MiB) and was killed" % lim["memory_mb"])
+        return p.returncode, p.stdout[-20000:], p.stderr[-20000:]
+
+    def close(self):
+        """Remove everything this run created, by label (containers, then networks, then volumes)."""
+        out = self._d(["ps", "-aq", "--filter", "label=%s" % self.label], check=False).stdout.decode().split()
+        if out:
+            self._d(["rm", "-f"] + out, check=False, timeout=300)
+        for n in self._d(["network", "ls", "-q", "--filter", "label=%s" % self.label], check=False).stdout.decode().split():
+            self._d(["network", "rm", n], check=False)
+        vols = self._d(["volume", "ls", "-q", "--filter", "label=%s" % self.label], check=False).stdout.decode().split()
+        if vols:
+            self._d(["volume", "rm", "-f"] + vols, check=False, timeout=300)
+
+    def leftovers(self):
+        found = []
+        for kind in (["ps", "-aq"], ["network", "ls", "-q"], ["volume", "ls", "-q"]):
+            found += self._d(kind + ["--filter", "label=%s" % self.label], check=False).stdout.decode().split()
+        return found

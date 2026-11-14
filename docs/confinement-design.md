@@ -164,6 +164,21 @@ No container receives a Docker socket, ever.
 - With `build.network: registry`, a `RUN` step can talk to the registry hosts. Any upload a registry accepts is a channel out. It carries no secrets, because none are present.
 - The resulting image runs only under 3.2's restrictions, as uid 10001, whatever its `USER` says.
 
+### 3.10 As built (increment 7d)
+
+The gates are `gate/v1/check_exec.py --gate <name> --phase <label>`, one registry entry per gate and phase (22). Every gate takes its verdict from the tool's raw output file in the run's `/out` volume, never from exit codes or summary lines alone. Where the build differs from the table in 3.7, this list wins:
+
+- **LikeC4** runs `likec4 validate` and `likec4 export json`. On a parse error, `export json` exits 0 with an empty model, so the gate fails a model with no elements as well as a failing `validate`.
+- **pytm** runs `tm/model.py --json`. Mapping threats to TH-/SEC- stays with SEC-CONTROLS.csv (7b). The gate requires a model that runs and has elements and flows.
+- **Stryker** runs on `node:24-bookworm` (catalogue name `node-full`), because its command runner needs `ps`, which `node:24-slim` lacks. Each gate calls its tool by an explicit path under `/deps`, never through `npx`. With the product's packages absent, `npx stryker` fetched an unrelated old package named `stryker`.
+- **Test suites** run in the E-test tier on `--network none`. If `tests.services` in product-tools.yaml names a catalogue service (only `postgres` today), the run instead gets an internal network with that service container. The service has a data volume, a tmpfs for its socket and trust auth, reachable only on that network. The product's compose file is not used for tests.
+- **Schemathesis** reads the one JUnit file it writes, whose name carries a timestamp. Two reports are refused.
+- **ZAP** runs as uid 1000, the image's own user; it executes no product code. It needs `/zap/wrk` to be a mount, so the gate's output volume is mounted there and chowned to 1000 first. The gate reads the JSON report: High fails, Medium and below are reported. No rules file is used yet.
+- **Lighthouse CI and axe** reach the app as `sut.moadix.test`. Chromium force-upgrades `http://app` to HTTPS because `.app` is an HSTS-preloaded TLD, so the app alias is never a bare service name. The default budgets are LCP 2500 ms, CLS 0.1 and TBT 200 ms; product-tools.yaml `budgets:` overrides them. axe visits the paths in product-tools.yaml `live.paths`, not yet the LV-INVENTORY.csv and screen-states.csv URLs. Critical and serious violations fail.
+- **The runner** (`confined.Run`) never mounts a host path. The export and the gate's own files reach named volumes through `docker cp` from a stopped container, then a capability-minimal helper chowns them to uid 10001. Everything carries the label `moadix.run=<id>` and `close()` removes it by that label. Install steps reach the registries only through `gate/egress_proxy.py`, a CONNECT proxy for registry.npmjs.org, pypi.org and files.pythonhosted.org on port 443. The proxy sits on the egress network and joins the internal install network as `moadix-proxy`.
+
+Proof: `tests/inc7d` checks the argv and verdicts with an engine double, in the sandbox. `tests/confined-engine` checks the enforcement against a real engine, in Terminal.
+
 ## 4. Decisions inside the design
 
 1. **Containers, not `sandbox-exec`, for E and L.** A Seatbelt profile cannot change the uid, and the operator's home is readable unless it is listed path by path.
@@ -195,4 +210,4 @@ No container receives a Docker socket, ever.
 
 ## 7. Not built (by instruction)
 
-None of the executing gates, the confined runner, the Linux tools cache or the image pins is built in 7b. The merged product-plus-feature validators are also not built. Both are listed as remaining work in docs/increment-7b-report.md.
+In 7b, none of the executing gates, the confined runner, the Linux tools cache or the image pins was built. 7c built the runner policy and the merged validators. 7d built the gates, the image pins and the engine calls (3.10). Still not built: a Linux tools cache, since tools are installed per run from the gate's lockfiles through the proxy.

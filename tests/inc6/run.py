@@ -193,6 +193,8 @@ def feature_docs(fid, n=2, prd_extra="", sec_id="SEC-002"):
     us = "US-%03d" % n
     pre = "sdlc/features/%s/" % fid
     return {
+        # increment 7d: phase 4 at size M turns T3 on, so the pytm gate runs the product's model (engine double)
+        "tm/model.py": "from pytm import TM\n\ntm = TM('notes')\ntm.process()\n",
         pre + "00-brd.md": "# BRD additions: %s\n\n- **Size:** M\n\n## Business Goals\n\n| ID | Goal | Metric | Priority |\n"
                            "|---|---|---|---|\n| BG-%d | Let a visitor remove a note | removals | must |\n" % (fid, n),
         pre + "02-prd.md": "# PRD additions: %s\n\n## Roles and actions\n\n| Role | Delete own note | Delete another's "
@@ -308,6 +310,7 @@ def test_feature():
             record(G, "a new SEC-ID that conflicts with the product's (SEC-001 redefined) is refused",
                    "NOT recorded" in ctx and "ID conflict" in ctx and "SEC-001" in ctx, short(ctx, 300))
             E.write(p, "sdlc/features/F1/04-threat-model.md", docs["sdlc/features/F1/04-threat-model.md"])
+            E.write(p, "tm/model.py", docs["tm/model.py"])  # increment 7d: T3 on at size M runs the pytm gate
         E.commit(p, "feature phase %s" % lab)
         rv, ctx = approve(p, lab)
         outs.append((lab, ok_rec(ctx), short(ctx, 160 if ok_rec(ctx) else 900)))
@@ -510,7 +513,13 @@ def test_onboarding():
     ctx = E.prompt(p, "FEATURE O1 %s" % E.fresh())
     record(G, "FEATURE on the onboarded product is recorded (its baseline is approved)", ok_rec(ctx), short(ctx, 160))
     docs = feature_docs("O1")
-    docs["sdlc/features/O1/04-threat-model.md"] = docs["sdlc/features/O1/04-threat-model.md"]
+    # increment 7c (ruling 3): the merged baseline must stay complete, so the feature keeps the baseline shape: a
+    # current status for its SEC-ID and coverage rows for its ACs (B- additions merge into the baseline's B- docs)
+    docs["sdlc/features/O1/04-threat-model.md"] = docs["sdlc/features/O1/04-threat-model.md"] + (
+        "- **Current status:** mitigated\n- **Evidence:** src/app.js:5\n")
+    docs["sdlc/features/O1/B-test-inventory.md"] = ("# Test inventory additions\n\n## Coverage\n\n| Acceptance criterion | "
+                                                   "Test |\n|---|---|\n| US-002/AC-1 | tests/app.test.js:2-4 |\n"
+                                                   "| US-002/AC-2 | tests/app.test.js:2-4 |\n")
     E.write(p, "sdlc/features/O1/00-brd.md", docs["sdlc/features/O1/00-brd.md"])
     E.commit(p, "O1 BRD")
     outs = []
@@ -526,7 +535,7 @@ def test_onboarding():
     write_all(p, docs)
     E.commit(p, "O1 documents")
     rv, ctx = approve(p, "2")
-    outs.append(("2", ok_rec(ctx), short(ctx, 120)))
+    outs.append(("2", ok_rec(ctx), short(ctx, 120 if ok_rec(ctx) else 900)))
     approve_direct(p, "legacyprod", pathmap.LABELS[pathmap.LABELS.index("3"):pathmap.LABELS.index("11")], feature="O1")
     contract_fixture.ready(E, p, "11")  # increment 7: commit the contract files before the release spec pins HEAD
     gh_spec(p)

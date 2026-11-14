@@ -63,6 +63,17 @@ class Env(object):
             os.chmod(p, 0o755)
         with open(os.path.join(self.home, "gate", "config", "trusted-bin.yaml"), "w") as f:
             f.write("# test fixture: the docker shim only\ndirs:\n  - %s\n" % self.shim)
+        # increment 7d: the confined runner talks to the engine double in fixture gate copies (never a real
+        # engine), with the images cleared in this copy only (the repository's confinement.yaml is unchanged)
+        dbl = os.path.join(self.shim, "engine-double")
+        shutil.copy(os.path.join(LIB, "engine_double.py"), dbl)
+        os.chmod(dbl, 0o755)
+        cy = os.path.join(self.home, "gate", "config", "confinement.yaml")
+        with open(cy) as f:
+            text = f.read()
+        with open(cy, "w") as f:
+            f.write(text.replace("status: blocked", "status: cleared"))
+        self.engine = dbl
         return self
 
     def remove(self):
@@ -70,7 +81,8 @@ class Env(object):
 
     def env(self, **extra):
         e = dict(os.environ, MOADIX_GUARD_ROOT=self.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD_SHIM=self.shim,
-                 MOADIX_TEST_CLOCK_OFFSET=str(self.offset))
+                 MOADIX_TEST_CLOCK_OFFSET=str(self.offset), MOADIX_TEST_ENGINE=os.path.join(self.shim, "engine-double"),
+                 MOADIX_DOUBLE_DIR=os.path.join(self.base, "engine-double"))
         e.update(extra)
         return e
 

@@ -1,0 +1,5 @@
+[2m21:13:58.635[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mlayout[22m wasm[0m
+[2m21:13:58.641[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mworkspace:[22m /work[0m
+[2m21:13:58.855[0m [1m[32mINFO [0m [1m[36mlikec4.lang[0m [2mworkspace:[22m found 1 source files[0m
+[2m21:13:58.937[0m [1m[32mINFO [0m [1m[36mlikec4.c4:validate[0m [32m✓ Valid[39m[2m (1 files)[22m[0m
+[2m21:13:58.938[0m [1m[32mINFO [0m [1m[36mlikec4.c4:validate[0m [32mvalidate 303ms[39m[0m

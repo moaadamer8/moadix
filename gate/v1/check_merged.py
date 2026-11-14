@@ -14,7 +14,8 @@ validator the registry lists for this phase among the product-document validator
 FAIL/UNKNOWN lines are reported under their names.
 
 Exit 0 every merged validator passes; 1 a failure (or a merge that would collide); 2 unknown.
-Phases whose documents are not merged (7 and later) have no entry in the registry.
+Phases whose documents are not merged (7 and later) have no entry in the registry. An onboarded product's
+merged view is judged by check-baseline's completeness rules (ruling 3 on increment 7c).
 """
 import io
 import json
@@ -60,14 +61,15 @@ def main(argv):
         if not fid:
             print("OK no feature cycle is active; the product's own validators judge the product documents")
             return 0
-        if st.get("mode") == "onboarding":
-            # An onboarded product's documents follow the baseline shape (check-baseline: as-is, citing code), not
-            # the greenfield product validators, so those cannot judge its merged view. Its feature additions are
-            # judged by check-feature and the contract linters. Reported, not silently passed.
-            print("OK N/A: onboarded product; its baseline documents are validated by check-baseline, not the "
-                  "greenfield product-document validators (docs/increment-7c-report.md, open question)")
-            return 0
-        comps = [c for c in validate.validators_for(label, "product") if str(c.get("module")) in PRODUCT_DOC_MODULES]
+        onboarded = st.get("mode") == "onboarding"
+        if onboarded:
+            # Ruling 3 on increment 7c: an onboarded product's documents follow the baseline shape, so its merged
+            # view is judged by check-baseline's completeness rules (sections, goals, stories, gaps register, no
+            # secrets, never production), not by the greenfield validators; citations are not required of the
+            # feature's additions.
+            comps = [c for c in validate.validators_for("B", "product") if str(c.get("module")) == "check_baseline"]
+        else:
+            comps = [c for c in validate.validators_for(label, "product") if str(c.get("module")) in PRODUCT_DOC_MODULES]
         if not comps:
             print("OK phase %s has no product-document validator to run on the merged view" % label)
             return 0
@@ -98,6 +100,8 @@ def main(argv):
             env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ.get("HOME", "/var/empty"),
                    "LANG": "en_US.UTF-8", "TMPDIR": tmp, "MOADIX_PRODUCT_ROOT": tree, "MOADIX_PHASE_DOC": doc_path,
                    "MOADIX_GATE_RUN": "yes", "MOADIX_FEATURE": ""}
+            if onboarded:
+                env["MOADIX_BASELINE_COMPLETENESS_ONLY"] = "1"
             for k in ("MOADIX_GUARD_ROOT", "MOADIX_GUARD_REPO", "MOADIX_GUARD_SHIM"):
                 if k in os.environ:
                     env[k] = os.environ[k]

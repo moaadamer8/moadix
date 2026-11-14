@@ -92,8 +92,10 @@ def citations(text):
 
 
 def section(text, name):
-    m = re.search(r"^##\s+%s\b.*?$(.*?)(?=^##\s|\Z)" % re.escape(name), text, re.M | re.S | re.I)
-    return m.group(1) if m else None
+    """The section's body. Increment 7c: every section of that name, joined, so the sections a merged
+    feature adds (under its '## Feature <id>' block) count with the baseline's own."""
+    ms = re.findall(r"^##\s+%s\b.*?$(.*?)(?=^##\s|\Z)" % re.escape(name), text, re.M | re.S | re.I)
+    return "\n".join(ms) if ms else None
 
 
 def rows(text, prefix):
@@ -117,7 +119,7 @@ def main():
     errs, notes = [], []
     print("check-baseline (phase B: the existing product, as it is, with every claim citing code)")
     hd = head(root)
-    if not hd:
+    if not hd and os.environ.get("MOADIX_BASELINE_COMPLETENESS_ONLY") != "1":
         print("  UNKNOWN  the repository has no commit; citations resolve against HEAD")
         return 2
     docs = {}
@@ -137,10 +139,14 @@ def main():
         if "{{" in text:
             errs.append("%s: unfilled template placeholders remain (%s)" % (
                 rel, ", ".join(sorted(set(re.findall(r"\{\{[^}]*\}\}", text)))[:4])))
-    # every citation resolves at HEAD, and is code
+    # every citation resolves at HEAD, and is code. Increment 7c (ruling 3): on the merged view of an
+    # onboarded product and a feature (gate/v1/check_merged.py), only the completeness rules apply: a
+    # feature's additions describe new work and cite no existing code. The worker sets this; the agent
+    # cannot set the worker's environment.
+    completeness_only = os.environ.get("MOADIX_BASELINE_COMPLETENESS_ONLY") == "1"
     memo = {}
     total = 0
-    for _what, (rel, text) in docs.items():
+    for _what, (rel, text) in ([] if completeness_only else docs.items()):
         for cit, path, a, b in citations(text):
             total += 1
             if path.startswith(("sdlc/", ".sdlc/")):
@@ -154,6 +160,8 @@ def main():
                     cit, rel, b, path, n, hd[:12]))
 
     def needs_cite(rel, where, text):
+        if completeness_only:
+            return
         if not citations(text):
             errs.append("%s: %s cites no code (path:line); every claim about the existing product cites the code "
                         "that shows it" % (rel, where))
@@ -263,14 +271,14 @@ def main():
             for m in rx.finditer(URL.sub(" ", acc[1])):
                 errs.append("%s holds what looks like a secret value (%s...); name where it lives, never the value" % (
                     acc[0], m.group(0)[:6]))
-    notes.append("%d citation(s) checked against %s" % (total, hd[:12]))
+    notes.append("%d citation(s) checked against %s" % (total, (hd or "the merged view")[:12]))
     for n in notes:
         print("  note  %s" % n)
     for e in errs:
         print("  FAIL  %s" % e)
     if errs:
         return 1
-    print("  PASS  the baseline is complete and every claim cites code that exists at %s" % hd[:12])
+    print("  PASS  the baseline is complete%s" % ("" if completeness_only else " and every claim cites code that exists at %s" % hd[:12]))
     return 0
 
 

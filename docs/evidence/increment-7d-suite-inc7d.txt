@@ -1,0 +1,117 @@
+PASS  [verdict from raw output] eslint: 1 error in the real report fails
+PASS  [verdict from raw output] tsc: TS2322 in the real output fails
+PASS  [verdict from raw output] tsc: exit 2 with no parsable line still fails
+PASS  [verdict from raw output] knip: 4 issues in the real report fail
+PASS  [verdict from raw output] dependency-cruiser: the real report (0 errors) passes
+PASS  [verdict from raw output] likec4: the real invalid model fails (validate exit 1, empty export)
+PASS  [verdict from raw output] likec4: an empty export with validate exit 0 still fails (LikeC4 exits 0 on a parse error)
+PASS  [verdict from raw output] likec4: the real valid model passes
+PASS  [verdict from raw output] pytm: the real model passes (elements and flows)
+PASS  [verdict from raw output] pytm: a model that exits non-zero fails
+PASS  [verdict from raw output] pytm: a model with no flows fails
+PASS  [verdict from raw output] stryker: 70% passes a 70% threshold
+PASS  [verdict from raw output] stryker: 70% fails an 80% threshold
+PASS  [verdict from raw output] tests: the real failing JUnit fails
+PASS  [verdict from raw output] tests: the real passing JUnit passes
+PASS  [verdict from raw output] schemathesis: the real failing check fails
+PASS  [verdict from raw output] zap: the real report (no High) passes, its Mediums reported
+PASS  [verdict from raw output] lighthouse: the real LHR passes the default budgets
+PASS  [verdict from raw output] lighthouse: the real LHR fails a 500 ms LCP budget
+PASS  [verdict from raw output] axe: the real critical and serious violations fail
+PASS  [verdict from raw output] zap: a High alert fails
+PASS  [verdict from raw output] tests: zero tests never passes
+PASS  [verdict from raw output] tests: a skipped test never passes
+PASS  [gates through the runner] pytm (phase 4): the real passing output passes
+PASS  [gates through the runner] pytm: nothing labelled is left after the run
+PASS  [gates through the runner] likec4 (phase 3): the real passing output passes
+PASS  [gates through the runner] likec4: nothing labelled is left after the run
+PASS  [gates through the runner] dependency-cruiser (phase 3): the real passing output passes
+PASS  [gates through the runner] dependency-cruiser: nothing labelled is left after the run
+PASS  [gates through the runner] knip (phase 7): the real passing output passes
+PASS  [gates through the runner] knip: nothing labelled is left after the run
+PASS  [gates through the runner] eslint (phase 7): the real passing output passes
+PASS  [gates through the runner] eslint: nothing labelled is left after the run
+PASS  [gates through the runner] tsc (phase 7): the real passing output passes
+PASS  [gates through the runner] tsc: nothing labelled is left after the run
+PASS  [gates through the runner] stryker (phase 8): the real passing output passes
+PASS  [gates through the runner] stryker: nothing labelled is left after the run
+PASS  [gates through the runner] tests (phase 8): the real passing output passes
+PASS  [gates through the runner] tests: nothing labelled is left after the run
+PASS  [gates through the runner] schemathesis (phase 8): the real passing output passes
+PASS  [gates through the runner] schemathesis: nothing labelled is left after the run
+PASS  [gates through the runner] zap (phase 9): the real passing output passes
+PASS  [gates through the runner] zap: nothing labelled is left after the run
+PASS  [gates through the runner] lhci (phase 10a): the real passing output passes
+PASS  [gates through the runner] lhci: nothing labelled is left after the run
+PASS  [gates through the runner] axe (phase 6): the real passing output passes
+PASS  [gates through the runner] axe: nothing labelled is left after the run
+PASS  [gates through the runner] pytm: the failing output fails the gate
+PASS  [gates through the runner] likec4: the failing output fails the gate
+PASS  [gates through the runner] dependency-cruiser: the failing output fails the gate
+PASS  [gates through the runner] knip: the failing output fails the gate
+PASS  [gates through the runner] eslint: the failing output fails the gate
+PASS  [gates through the runner] tsc: the failing output fails the gate
+PASS  [gates through the runner] stryker: the failing output fails the gate
+PASS  [gates through the runner] tests: the failing output fails the gate
+PASS  [gates through the runner] schemathesis: the failing output fails the gate
+PASS  [gates through the runner] zap: the failing output fails the gate
+PASS  [gates through the runner] lhci: the failing output fails the gate
+PASS  [gates through the runner] axe: the failing output fails the gate
+PASS  [gates through the runner] dependency-cruiser also runs at phase 7 (evidence filed under it)
+PASS  [gates through the runner] schemathesis also runs at phase 10b (evidence filed under it)
+PASS  [gates through the runner] axe also runs at phase 8 (evidence filed under it)
+PASS  [gates through the runner] axe also runs at phase 10a (evidence filed under it)
+PASS  [argv the engine receives] control: the eslint run went through the double (35 calls, 7 runs)
+PASS  [argv the engine receives] no call carries a host path, a bind mount or the Docker socket
+PASS  [argv the engine receives] every run, create, volume and network carries the run's label
+PASS  [argv the engine receives] every run drops all capabilities and sets no-new-privileges
+PASS  [argv the engine receives] the product-code run: --network none, read-only, uid 10001, the E-lint limits, /src read-only, /deps read-only
+PASS  [argv the engine receives] the install step runs on an internal network, through the proxy only (HTTPS_PROXY), never the egress network
+PASS  [argv the engine receives] the only non-internal network is the proxy's egress network
+PASS  [argv the engine receives] live gate: the scanner and the app share only the run's internal live network
+PASS  [argv the engine receives] live gate: the app answers as sut.moadix.test (never a name Chromium upgrades to HTTPS)
+PASS  [argv the engine receives] live gate: the app image is built from the committed Dockerfile, with no network and the build limits
+PASS  [argv the engine receives] the gate's own axe runner is loaded into a read-only volume, never from the product
+PASS  [forged output] tests: a JUnit report with zero tests is never believed
+PASS  [forged output] eslint: a summary object in place of ESLint's report is never believed
+PASS  [forged output] schemathesis: two JUnit reports where one is expected is never believed
+PASS  [forged output] zap: a text line claiming PASS in place of ZAP's JSON is never believed
+PASS  [forged output] lhci: an LHR without the audits is never believed
+PASS  [forged output] axe: no report at all (exit 0) is never believed
+PASS  [forged output] knip: a report with trailing garbage is never believed
+PASS  [applicability and inputs] a gate whose topic is N/A in the phase's COVERAGE.md reports N/A and runs nothing
+PASS  [applicability and inputs] pytm: needs tm/model.py
+PASS  [applicability and inputs] eslint: package-lock.json is required
+PASS  [applicability and inputs] dependency-cruiser: needs .dependency-cruiser.json
+PASS  [applicability and inputs] likec4: needs model sources
+PASS  [applicability and inputs] stryker: stryker.conf.js) is refused
+PASS  [applicability and inputs] likec4: likec4.config.ts) is refused
+PASS  [applicability and inputs] schemathesis without an OpenAPI description under sdlc/05-lld fails
+PASS  [applicability and inputs] a live gate without live.compose in product-tools.yaml fails (the gate never guesses the app)
+PASS  [applicability and inputs] an unknown gate name is a usage error, never a pass
+PASS  [fail closed] control: the fixture copy (images cleared for the double) passes
+PASS  [fail closed] pytm with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] likec4 with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] dependency-cruiser with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] knip with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] eslint with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] tsc with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] stryker with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] tests with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] schemathesis with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] zap with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] lhci with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] axe with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run
+PASS  [fail closed] the engine is not reachable: UNKNOWN (never a run on the host)
+PASS  [installer and locks] the installer copies gate/*.py (check_exec, confined, egress_proxy), gate/exec and every lock directory
+PASS  [installer and locks] the installer copies gate/config/*.json (critic.schema.json was never installed before 7d)
+PASS  [installer and locks] the installer creates the 7b tool configuration directories (semgrep redocly k6 vacuum squawk actionlint)
+PASS  [installer and locks] every gate lock file equals its tools/ copy (10 files)
+PASS  [installer and locks] every gate tool has a lock directory (axe-runner, dependency-cruiser, knip, lhci, likec4, pytm, schemathesis)
+PASS  [installer and locks] the npm locks carry integrity hashes; the Python locks carry --hash pins
+PASS  [installer and locks] the registry carries one check-exec entry per gate and phase (22)
+PASS  [installer and locks] every image a gate uses is pinned by digest, with its source and a status
+PASS  [installer and locks] THIRD-PARTY.md records each image's digest and source (ruling 1)
+PASS  [guard] no test read, wrote or started a real product, keychain or ~/.claude
+
+115 checks, 115 passed, 0 failed (109 s)

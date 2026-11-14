@@ -63,3 +63,18 @@ MPL-2.0 is accepted only for tools and product dependencies that are fetched unm
 | @axe-core/playwright | 4.14.0 | MPL-2.0 | product dependency (phases 6, 8, 10a), pinned in `gate/config/tools.yaml` `product_dependencies` | https://registry.npmjs.org/@axe-core/playwright |
 
 The licences of hypothesis and certifi were taken from their PyPI metadata; the others were read from the LICENSE file in the published package (docs/evidence/increment-7-licences.md).
+
+## Pulled unmodified by digest and executed, never vendored: container images (ruling 1 on increment 7c)
+
+The confined runner (`gate/confined.py`, `gate/config/confinement.yaml`) pulls these images unmodified, by digest, from their official source and runs them. None of them is in this repository and MOADIX never redistributes them. Ruling 1 on increment 7c: such software may carry any OSI-approved licence, GPL and LGPL included; anything non-OSI or with a field-of-use restriction stops and is reported.
+
+The licences below are the main software's, plus the `License:` identifiers found in the image's Debian/Ubuntu `/usr/share/doc/*/copyright` files (scan of 2026-11-14, `docs/increment-7d-report.md` section 2). Every image contains some non-OSI identifiers, mostly for documentation and data files. No field-of-use restriction was found. Because of those identifiers, every image is `status: blocked` until the operator rules.
+
+| Image (catalogue name) | Reference (digest) | Source | Main software licence | Non-OSI identifiers found |
+|---|---|---|---|---|
+| node | `docker.io/library/node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54` | https://hub.docker.com/_/node (Docker Official Image, Debian 12) | Node.js: MIT (bundled deps MIT/BSD/ISC/Apache-2.0); npm: Artistic-2.0 | GFDL-NIV (manuals), CC-BY-3.0, public-domain, Beerware (libmd, PAM), Latex2e, verbatim-copy notices on the GPL/LGPL texts (liblzma5 and others) |
+| node-full | `docker.io/library/node:24-bookworm@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c283509267c97f025b7496` | https://hub.docker.com/_/node (Docker Official Image, Debian 12; Stryker needs `ps`) | as node | as node, plus perl's RRA-KEEP-THIS-NOTICE, TEXT-TABS and DONT-CHANGE-THE-GPL notices |
+| python | `docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b` | https://hub.docker.com/_/python (Docker Official Image, Debian 13) | CPython: PSF-2.0 | as node |
+| chromium | `mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f` | https://mcr.microsoft.com/en-us/artifact/mar/playwright (Microsoft, Ubuntu 24.04) | Playwright: Apache-2.0; Chromium: BSD-3-Clause and others | GFDL, CC-BY-3.0/4.0, CC-BY-SA-2.0/3.0/4.0 (icon and theme data), public-domain, Beerware, BSL-1 |
+| zap | `ghcr.io/zaproxy/zaproxy:20261026-stable@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238` | https://github.com/zaproxy/zaproxy/pkgs/container/zaproxy (ZAP project, Debian 12, ZAP 2.17.0) | ZAP: Apache-2.0 | GFDL, CC-BY, public-domain, Beerware |
+| postgres | `docker.io/library/postgres:17-bookworm@sha256:40865bc877a289da75963d97d72b59633f639fc5af7a4e856bfa3714cae5b536` | https://hub.docker.com/_/postgres (Docker Official Image, Debian 12, PostgreSQL 17) | PostgreSQL licence (OSI-approved) | GFDL, public-domain, Beerware |

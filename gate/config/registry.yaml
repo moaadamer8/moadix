@@ -907,3 +907,263 @@ components:
     args:
       - --phase
       - 6b
+# increment 7d: the gates that execute product code, through the confined runner (gate/confined.py). Each applies
+# unless its coverage topic is N/A in the phase's COVERAGE.md; without Docker or with an uncleared image: UNKNOWN.
+  - id: check-exec-pytm-4
+    kind: validator
+    scope: both
+    phase: 4
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - pytm
+      - --phase
+      - 4
+  - id: check-exec-pytm-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - pytm
+      - --phase
+      - B
+  - id: check-exec-likec4-3
+    kind: validator
+    scope: both
+    phase: 3
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - likec4
+      - --phase
+      - 3
+  - id: check-exec-likec4-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - likec4
+      - --phase
+      - B
+  - id: check-exec-dependency-cruiser-3
+    kind: validator
+    scope: both
+    phase: 3
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - dependency-cruiser
+      - --phase
+      - 3
+  - id: check-exec-dependency-cruiser-7
+    kind: validator
+    scope: both
+    phase: 7
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - dependency-cruiser
+      - --phase
+      - 7
+  - id: check-exec-dependency-cruiser-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - dependency-cruiser
+      - --phase
+      - B
+  - id: check-exec-knip-7
+    kind: validator
+    scope: both
+    phase: 7
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - knip
+      - --phase
+      - 7
+  - id: check-exec-knip-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - knip
+      - --phase
+      - B
+  - id: check-exec-eslint-7
+    kind: validator
+    scope: both
+    phase: 7
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - eslint
+      - --phase
+      - 7
+  - id: check-exec-tsc-7
+    kind: validator
+    scope: both
+    phase: 7
+    status: active
+    module: check_exec
+    timeout: 1500
+    args:
+      - --gate
+      - tsc
+      - --phase
+      - 7
+  - id: check-exec-stryker-8
+    kind: validator
+    scope: both
+    phase: 8
+    status: active
+    module: check_exec
+    timeout: 4800
+    args:
+      - --gate
+      - stryker
+      - --phase
+      - 8
+  - id: check-exec-stryker-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 4800
+    args:
+      - --gate
+      - stryker
+      - --phase
+      - B
+  - id: check-exec-tests-8
+    kind: validator
+    scope: both
+    phase: 8
+    status: active
+    module: check_exec
+    timeout: 2400
+    args:
+      - --gate
+      - tests
+      - --phase
+      - 8
+  - id: check-exec-tests-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_exec
+    timeout: 2400
+    args:
+      - --gate
+      - tests
+      - --phase
+      - B
+  - id: check-exec-schemathesis-8
+    kind: validator
+    scope: both
+    phase: 8
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - schemathesis
+      - --phase
+      - 8
+  - id: check-exec-schemathesis-10b
+    kind: validator
+    scope: both
+    phase: 10b
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - schemathesis
+      - --phase
+      - 10b
+  - id: check-exec-zap-9
+    kind: validator
+    scope: both
+    phase: 9
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - zap
+      - --phase
+      - 9
+  - id: check-exec-lhci-10a
+    kind: validator
+    scope: both
+    phase: 10a
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - lhci
+      - --phase
+      - 10a
+  - id: check-exec-axe-6
+    kind: validator
+    scope: both
+    phase: 6
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - axe
+      - --phase
+      - 6
+  - id: check-exec-axe-8
+    kind: validator
+    scope: both
+    phase: 8
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - axe
+      - --phase
+      - 8
+  - id: check-exec-axe-10a
+    kind: validator
+    scope: both
+    phase: 10a
+    status: active
+    module: check_exec
+    timeout: 3900
+    args:
+      - --gate
+      - axe
+      - --phase
+      - 10a

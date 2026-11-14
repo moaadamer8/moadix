@@ -1,0 +1,60 @@
+PASS  [api-tools] control: an OWASP-clean spec, no release yet, squawk-clean Postgres migration -> passes (real vacuum, squawk)
+PASS  [api-tools] the gate records the evidence with the three tool versions
+PASS  [api-tools] planted: the 429 response removed -> vacuum's OWASP rule fails the phase
+PASS  [api-tools] planted: a migration with serial ids and a blocking index -> squawk fails the phase
+PASS  [api-tools] the product's own .squawk.toml (switching the rules off) is never read
+PASS  [api-tools] dialect sqlite: squawk is N/A, reported, not run
+PASS  [api-tools] planted: SQL committed but no migrations.dialect declared -> fails
+PASS  [api-tools] planted: a path removed since the released spec (oasdiff ERR) with no ADR -> fails (real oasdiff)
+PASS  [api-tools] ... an accepted ADR naming /notes with a deprecation plan approves the breaking change -> passes
+PASS  [api-tools] ... a merely proposed ADR does not
+PASS  [api-tools] planted: no OpenAPI description -> fails
+PASS  [ux-files] control: DTCG tokens, body text 17.4:1, every system state, every PRD screen -> passes
+PASS  [ux-files] planted: a token with an unknown $type -> fails
+PASS  [ux-files] planted: a malformed colour -> fails
+PASS  [ux-files] planted: an alias to nothing -> fails
+PASS  [ux-files] planted: an alias cycle -> fails
+PASS  [ux-files] planted: tokens.json missing -> fails
+PASS  [ux-files] planted: body text at 2.7:1 (#9e9e9e on white) -> fails
+PASS  [ux-files] planted: no body-text pair -> fails
+PASS  [ux-files] planted: a screen without its loading state -> fails
+PASS  [ux-files] planted: an n/a state without a reason -> fails
+PASS  [ux-files] planted: a designed state whose reference is not committed -> fails
+PASS  [ux-files] planted: a PRD screen missing from the inventory -> fails
+PASS  [workflows] control: a pinned, least-privilege workflow -> passes (real zizmor and actionlint)
+PASS  [workflows] planted: an action pinned by tag, not SHA -> zizmor fails the phase
+PASS  [workflows] planted: an attacker-controlled expression in a run step -> zizmor (template injection) fails
+PASS  [workflows] planted: an invalid workflow key value -> actionlint fails
+PASS  [workflows] the product's own zizmor.yml (disabling the rule) is never read
+PASS  [workflows] planted: no workflow at all -> fails
+PASS  [sec-csv] control: every SEC-ID and threat mapped (one accepted risk), every control verified -> both pass
+PASS  [sec-csv] planted (phase 4): a SEC-ID with no control row -> fails
+PASS  [sec-csv] planted (phase 4): a threat with neither control nor accepted risk -> fails
+PASS  [sec-csv] planted (phase 4): an ASVS ID outside V1-V17 -> fails
+PASS  [sec-csv] planted (phase 4): a threat the model does not define -> fails
+PASS  [sec-csv] planted (phase 4): the wrong header -> fails
+PASS  [sec-csv] planted (phase 9): a control left unverified -> fails
+PASS  [sec-csv] planted (phase 9): a failed verification -> fails
+PASS  [sec-csv] planted (phase 9): evidence that is not committed -> fails
+PASS  [sec-csv] planted (phase 9): an unknown result -> fails
+PASS  [lv-inventory] control: every designed screen and component state exercised with an artifact -> passes
+PASS  [lv-inventory] planted: a designed state left out -> fails
+PASS  [lv-inventory] planted: a failed state -> fails
+PASS  [lv-inventory] planted: a pass with no artifact -> fails
+PASS  [lv-inventory] planted: a reused LV-ID -> fails
+PASS  [rulings] the read-only gates and phase 12's checks are registered in their phases, product and feature scope
+PASS  [rulings] ruling 5: gate-run npm tools run on the pinned Node 24.22.2 from the tools folder, never the system Node
+PASS  [rulings] ... and Redocly (an npm tool) lints through it
+PASS  [rulings] the pinned Playwright MCP server starts with the pinned Node too; plugin.json is 0.5.2 or later
+PASS  [rulings] ruling 1 is in Amendment 3: TH- threats, STR- store release, T- tasks, SR- shared resources; TASK- dropped
+PASS  [rulings] ruling 4: code-simplifier is no longer in the tool table
+PASS  [rulings] ruling 2: after 11b the product is at phase 12; FEATURE is refused and STATUS shows the retro pending
+PASS  [rulings] phase 12 owns sdlc/12-*: writable now; phase 11's documents are frozen
+PASS  [rulings] APPROVE 12 runs phase 12's contract and gap critic like any phase, and records
+PASS  [rulings] ... after which FEATURE F1 is recorded
+PASS  [proceed-past] WAIVE never passes a BLOCKER
+PASS  [proceed-past] PROCEED-PAST (operator, with code) passes the BLOCKER: recorded, and the reply names the finding
+PASS  [proceed-past] the ledger line records the finding it passed: topic, severity, quote, citation, evidence sha256, commit
+PASS  [guard] no test read, wrote or started a real product, keychain or ~/.claude
+
+58 checks, 58 passed, 0 failed (44 s)

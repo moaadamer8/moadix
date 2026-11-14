@@ -1,0 +1,7 @@
+{
+  "name": "moadix-tool-knip",
+  "private": true,
+  "dependencies": {
+    "knip": "6.44.1"
+  }
+}

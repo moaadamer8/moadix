@@ -1,0 +1,7 @@
+{
+  "name": "moadix-tool-dependency-cruiser",
+  "private": true,
+  "dependencies": {
+    "dependency-cruiser": "18.7.0"
+  }
+}
