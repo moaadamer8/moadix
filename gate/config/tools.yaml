@@ -145,10 +145,32 @@ tools:
     bin: node_modules/@playwright/mcp/cli.js
     lock: tools/npm/playwright-mcp/package-lock.json
     network: []
+# increment 7b (ruling 5 on increment 7): the Node runtime for every gate-run npm tool. A pinned Node 24
+# LTS from nodejs.org, checked against its SHASUMS256.txt, in the tools cache: never the system Node, never a
+# change to the operator's Node. v24.22.2 (2026-10-27) is the newest 24.x at least 14 days old on 2026-11-14.
+  - name: node
+    version: 24.22.2
+    kind: archive
+    bin: node
+    network: []
+    # checksums: https://nodejs.org/dist/v24.22.2/SHASUMS256.txt ; licence: MIT (Node.js LICENSE)
+    assets:
+      darwin-arm64:
+        url: https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz
+        sha256: aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a
+      darwin-x64:
+        url: https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-x64.tar.gz
+        sha256: d5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52
+      linux-x64:
+        url: https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-x64.tar.gz
+        sha256: 361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9
+      linux-arm64:
+        url: https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-arm64.tar.gz
+        sha256: 95c264150aceb7f3437a29fd6984924f5f8d1511ea3cbd6c508b83f6c555dae2
 # increment 7 (Amendment 3 section 4): the new gate-run tools. Pins researched 2026-11-14, each the
 # newest release at least 14 days old; every LICENSE file read (docs/increment-7-report.md, section 4).
 # Permissive (MIT, ISC, Apache-2.0, Apache-2.0 OR MIT) themselves; likec4, lhci and schemathesis pull in
-# MPL-2.0 dependencies, fetched unmodified from their registries (an open question in the report).
+# MPL-2.0 dependencies, fetched unmodified from their registries (accepted: ruling 3 on increment 7).
   - name: oasdiff
     version: 1.35.0
     kind: archive
@@ -294,7 +316,7 @@ images:
     # The image bundles Debian packages, OpenJDK, firefox-esr etc. whose licences were not scanned.
 # Product dependencies (Amendment 3 section 4): the PRODUCT installs these; MOADIX pins the version it
 # expects and has read each LICENSE. Not fetched by MOADIX. axe-core and @axe-core/playwright are
-# MPL-2.0 (not permissive) and are NOT listed: stopped and reported (docs/increment-7-report.md).
+# MPL-2.0, added under ruling 3 on increment 7.
 product_dependencies:
   - name: stryker-js
     package: "@stryker-mutator/core"
@@ -312,6 +334,16 @@ product_dependencies:
     package: "@playwright/test"
     version: 1.64.1
     license: Apache-2.0
+  # ruling 3 on increment 7: MPL-2.0 accepted for product dependencies fetched unmodified from their
+  # registry and never vendored here (THIRD-PARTY.md records each with its source).
+  - name: axe-core
+    package: axe-core
+    version: 4.14.0
+    license: MPL-2.0
+  - name: axe-core-playwright
+    package: "@axe-core/playwright"
+    version: 4.14.0
+    license: MPL-2.0
   # EXCLUDED (not permissive, MPL-2.0): axe-core 4.14.0, @axe-core/playwright 4.14.0.
   # Transitive non-permissive or unlisted licences in these product deps (npm lock of all six):
   #   axe-core 4.14.0 MPL-2.0; @axe-core/playwright 4.14.0 MPL-2.0;

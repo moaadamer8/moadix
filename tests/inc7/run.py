@@ -299,8 +299,19 @@ def test_trace():
     f, *_ = contract.trace_lint(p, st_for("5", phases=[{"label": "3", "status": "APPROVED", "commit": c}]))
     record(G, "planted: H-1 was defined when phase 3 was approved and is now gone -> fails (IDs never reused or deleted)",
            has(f, "H-1 was defined when an earlier phase was approved"), f)
-    f, *_ = lint("trace", dict(TRACE, **{"sdlc/04-tm.md": "# TM\n\n### SR-1 Shared notes table\n\nNo upstream.\n"}), "5")
-    record(G, "T-/SR- (the open prefix conflict) are not checked for upstream: a SR-1 with no upstream -> passes", not f, f)
+    # ruling 1 on increment 7: T- task, SR- shared resource, TH- threat, STR- store-release item; all upstream-checked
+    tm = "# TM\n\n### TH-1 Note tampering\n\nAgainst US-001 in H-1.\n\n### SR-1 Shared notes table\n\nWritten by H-1.\n"
+    f, *_ = lint("trace", dict(TRACE, **{"sdlc/04-tm.md": tm, "sdlc/11b-store.md": "# Store\n\n### STR-1 Privacy "
+                                         "label\n\nFrom RL-1.\n", "sdlc/11-release.md": "# Release\n\n### RL-1 SBOM"
+                                         "\n\nFrom L-1.\n"}), "5")
+    record(G, "control: TH-1 and SR-1 cite US-001/H-1, STR-1 cites RL-1, T-001 cites US-001 -> passes", not f, f)
+    for rel, text, ident in (("sdlc/04-tm.md", "# TM\n\n### SR-1 Shared notes table\n\nNo upstream.\n", "SR-1"),
+                             ("sdlc/04-tm.md", "# TM\n\n### TH-1 Tampering\n\nNothing cited.\n", "TH-1"),
+                             ("sdlc/07-tasks.md", "# Tasks\n\n### T-001 — Save route\n\nNo story.\n", "T-001"),
+                             ("sdlc/11b-store.md", "# Store\n\n### STR-1 Privacy label\n\nNothing.\n", "STR-1")):
+        f, *_ = lint("trace", dict(TRACE, **{rel: text}), "5")
+        record(G, "planted: %s with no upstream ID -> fails as an orphan (ruling 1: upstream checks on)" % ident,
+               has(f, "%s points at no existing upstream" % ident), f)
 
 
 # ------------------------------------------------------------------ ears-lint
@@ -511,10 +522,10 @@ def test_critic():
                             env=E.env(MOADIX_PRODUCT_ROOT=p), capture_output=True, text=True)
         record(G, "planted CRITIC.json: %s -> the evidence fails" % label, rc.returncode == 1 and why in rc.stdout,
                short(rc.stdout, 400))
-    record(G, "phase 12 has topics but no APPROVE: it is not gated, so no critic and no contract validator is scheduled",
-           not contract.gated("12") and contract.topics("12") and
-           not any(c["id"].endswith("-12") for c in __import__("hlib").load_yaml(
-               os.path.join(REPO, "gate", "config", "registry.yaml"))["components"]), "")
+    reg = {c["id"] for c in __import__("hlib").load_yaml(os.path.join(REPO, "gate", "config", "registry.yaml"))["components"]}
+    record(G, "phase 12 (Retro) is gated (ruling 2): its contract validator and gap-critic check are registered",
+           contract.gated("12") and len(contract.topics("12")) == 10 and {"check-contract-12", "check-verifiers-12"} <= reg,
+           sorted(x for x in reg if x.endswith("-12")))
 
 
 # ------------------------------------------------------------------ operator overrides (ADOPT) and the skeleton
@@ -663,9 +674,13 @@ def test_misc():
     record(G, "nothing from the rejected list is pinned", not [r for r in rejected if r in names_only],
            [r for r in rejected if r in names_only])
     prod = hlib.load_yaml(os.path.join(REPO, "gate", "config", "tools.yaml")).get("product_dependencies") or []
-    record(G, "axe-core (MPL-2.0, not permissive) is not added; the other product dependencies are pinned with a licence",
-           not any("axe" in str(x.get("package")) for x in prod) and all(x.get("license") for x in prod) and len(prod) == 4,
-           prod)
+    third = open(os.path.join(REPO, "THIRD-PARTY.md")).read()
+    record(G, "ruling 3: axe-core and @axe-core/playwright (MPL-2.0, fetched unmodified) are pinned product dependencies, "
+              "and THIRD-PARTY.md records every MPL-2.0 component with its source",
+           {"axe-core", "@axe-core/playwright"} <= {str(x.get("package")) for x in prod} and
+           all(x.get("license") for x in prod) and len(prod) == 6 and
+           all(w in third for w in ("lightningcss", "hypothesis", "certifi", "@axe-core/playwright",
+                                    "https://registry.npmjs.org/axe-core")), prod)
     mf = {x["label"]: x for x in hlib.load_yaml(os.path.join(REPO, "gate", "config", "phase-manifest.yaml"))["phases"]}
     record(G, "MCP servers stay phase-scoped: Context7 in 1, 3, 5, 7; Playwright in 10a and 10b; GitHub in 11",
            all("context7" in mf[x]["mcp"] for x in ("1", "3", "5", "7")) and
@@ -700,7 +715,7 @@ def test_misc():
            cmd == contract.coverage_doc() and "coverage" in hlib.load_yaml(
                os.path.join(REPO, "gate", "config", "phase-manifest.yaml"))["always"]["skills"], "")
     pj = json.load(open(os.path.join(REPO, ".claude-plugin", "plugin.json")))
-    record(G, "plugin.json is 0.5.0", pj.get("version") == "0.5.0", pj.get("version"))
+    record(G, "plugin.json is 0.5.1", pj.get("version") == "0.5.1", pj.get("version"))
 
 
 def main():

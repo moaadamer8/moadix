@@ -1,0 +1,3 @@
+# MOADIX: vacuum runs the OWASP rules only (Amendment 3, phase 5). The product's own vacuum or
+# Spectral configuration is never read.
+extends: [[vacuum:owasp, all]]

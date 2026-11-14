@@ -117,12 +117,10 @@ def tool_path():
 
 
 def node():
-    for d in TRUSTED_BIN:
-        p = os.path.join(d, "node")
-        if os.access(p, os.X_OK):
-            return p
-    raise ToolUnavailable("node is required for the npm-packaged tools and was not found in %s" % (
-        ", ".join(TRUSTED_BIN)))
+    """The pinned Node 24 LTS in the tools cache (ruling 5 on increment 7): never the system Node.
+    Missing means the npm tools cannot run (UNKNOWN), never a fallback to PATH or Homebrew."""
+    p, _t = tool("node")
+    return p
 
 
 GITHUB_KEYCHAIN_SERVICE = "moadix-github-readonly"

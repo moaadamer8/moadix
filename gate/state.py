@@ -24,7 +24,7 @@ SDLC = ".sdlc"
 PHASE_HEADER = "# MOADIX gate state, derived from ledger.jsonl. Written only by the gate.\n"
 # Bumped when the rendering changes. A phase.yaml with an OLDER version line is
 # regenerated from the verified ledger (a gate update), not reported as drift.
-RENDER_VERSION = 4
+RENDER_VERSION = 5  # increment 7b: phase 12 (Retro) is a gated phase
 GIT = "/usr/bin/git"
 GATE_FILES = ("product", "phase", "ledger")
 

@@ -148,8 +148,9 @@ def fails(out):
     return " | ".join(x.strip() for x in out.splitlines() if re.match(r"^\s+(FAIL|UNKNOWN)", x))[:500] or short(out)
 
 
-GOOD_WF = ("on: {push: {branches: [main]}}\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n"
-           "      - uses: googleapis/release-please-action@%s\n" % ("a" * 40))
+GOOD_WF = ("name: release\non: {push: {branches: [main]}}\npermissions: {}\njobs:\n  release:\n    name: release\n"
+           "    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n"
+           "      - uses: googleapis/release-please-action@%s  # v4\n" % ("a" * 40))  # zizmor/actionlint clean (7b)
 RELEASE_FILES = {"release-please-config.json": json.dumps({"packages": {".": {"release-type": "node"}}}),
                  ".release-please-manifest.json": json.dumps({".": "1.2.0"}),
                  ".github/workflows/release.yml": GOOD_WF}
@@ -198,9 +199,12 @@ def feature_docs(fid, n=2, prd_extra="", sec_id="SEC-002"):
                            "- **AC-2:** If the note belongs to another visitor, then the system shall refuse the "
                            "deletion.\n%s" % (fid, us, n, prd_extra),
         pre + "03-hld.md": "# HLD changes\n\nA DELETE route next to POST /notes.\n",
-        pre + "04-threat-model.md": "# Threat model additions\n\n### %s - Deleting another visitor's note\n\n"
-                                    "- **Trust boundary:** TB-1\n- **STRIDE:** Tampering\n- **Threat:** delete by id guess\n"
-                                    "- **Mitigation requirement:** check ownership\n- **Owner phase:** 7\n" % sec_id,
+        pre + "04-threat-model.md": "# Threat model additions\n\n### TH-%d - Deleting another visitor's note\n\nAgainst "
+                                    "%s.\n\n### %s - Deleting another visitor's note\n\n"
+                                    "- **Trust boundary:** TB-1\n- **STRIDE:** Tampering\n- **Threat:** TH-%d, delete by id "
+                                    "guess\n- **Mitigation requirement:** check ownership\n- **Owner phase:** 7\n" % (
+                                        n, us, sec_id, n),
+        pre + "4/SEC-CONTROLS.csv": "sec_id,th_id,asvs_id,verification\n%s,TH-%d,V8.2.1,ownership unit test\n" % (sec_id, n),
         pre + "05-lld.md": "# LLD changes\n\n%s: DELETE /notes/{id}, owner only.\n" % us,
         pre + "05-lld/delete-%s.md" % fid.lower(): "DELETE /notes/{id} returns 204.\n",
         pre + "06-ux.md": "# UX\n\nA delete button on each note.\n",
@@ -239,7 +243,13 @@ def test_feature():
     ctx = E.prompt(p, "FEATURE F1 %s" % E.fresh())
     record(G, "FEATURE before the product's baseline is approved (not released at 11) is refused",
            "NOT recorded" in ctx and "no approved baseline" in ctx, short(ctx))
-    approve_direct(p, "featprod", pathmap.LABELS[pathmap.LABELS.index("9"):pathmap.LABELS.index("11b")])
+    approve_direct(p, "featprod", pathmap.LABELS[pathmap.LABELS.index("9"):pathmap.LABELS.index("12")])
+    # increment 7b (ruling 2): the release is done, but a FEATURE waits for the product cycle's retro
+    ctx = E.prompt(p, "FEATURE F1 %s" % E.fresh())
+    st = status(p)
+    record(G, "FEATURE while the product cycle's phase 12 (Retro) is pending is refused; STATUS shows it pending",
+           "NOT recorded" in ctx and "phase 12 (Retro)" in ctx and "PENDING: phase 12 (Retro)" in st, short(ctx))
+    approve_direct(p, "featprod", ["12"])
     n0 = len(E.ledger(p))
     ctx = E.prompt(p, "FEATURE F1 %s" % E.fresh())
     body, pl = E.payload(p, n0 + 1) if len(E.ledger(p)) > n0 else ({}, {})
@@ -265,7 +275,7 @@ def test_feature():
     docs = feature_docs("F1")
     # phases 0..4 through the real worker and APPROVE
     labs = ["0", "1", "2", "3", "4"]
-    stage = {"0": ["00-brd.md"], "2": ["02-prd.md"], "3": ["03-hld.md"], "4": ["04-threat-model.md"]}
+    stage = {"0": ["00-brd.md"], "2": ["02-prd.md"], "3": ["03-hld.md"], "4": ["04-threat-model.md", "4/SEC-CONTROLS.csv"]}
     outs = []
     for lab in labs:
         for f in stage.get(lab, []):
@@ -337,9 +347,15 @@ def test_feature():
            log.startswith("MOADIX gate|MOADIX: merge feature F1") and git(p, "rev-parse", "HEAD~1") == hd0 and
            not git(p, "status", "--porcelain", "--", ".", ":(exclude).sdlc"), log)
     approve_direct(p, "featprod", ["11b"], feature="F1")
+    ctx = E.prompt(p, "FEATURE F2 %s" % E.fresh())
+    st = status(p)
+    record(G, "after 11b, F1's phase 12 (Retro) is pending: FEATURE F2 is refused and STATUS says so (ruling 2)",
+           "NOT recorded" in ctx and "phase 12 (Retro) of feature F1 is pending" in ctx and "PENDING" in st,
+           short(ctx, 260))
+    approve_direct(p, "featprod", ["12"], feature="F1")
     st = status(p)
     fy = open(os.path.join(p, ".sdlc", "features", "F1", "phase.yaml")).read()
-    record(G, "after 11b the feature is done: STATUS lists it as finished (merged), its phase.yaml says done",
+    record(G, "after 12 the feature is done: STATUS lists it as finished (merged), its phase.yaml says done",
            "finished features: F1 (merged at seq %d)" % n in st and "status: done" in fy and "INTEGRITY OK" in st,
            short(st, 260))
     ctx = E.prompt(p, "FEATURE F2 %s" % E.fresh())

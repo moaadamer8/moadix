@@ -272,16 +272,19 @@ def group_port():
     # verifier check, and check-seam (BMAD half) in the first phase of a product
     inc6 = {c["id"] for c in comps if c["module"] in ("check_feature", "check_baseline", "check_seam")} | {
         "check-verifiers-B"}
-    # increment 7 adds check-contract per gated phase (16 + B) and check-verifiers for the 12 phases
-    # whose only verifier is the gap critic
+    # increment 7 adds check-contract per gated phase (17 with 12, gated in 7b, + B) and check-verifiers
+    # for the 13 phases whose only verifier is the gap critic
     inc7 = {c["id"] for c in comps if c["module"] == "check_contract"} | {
-        "check-verifiers-%s" % x for x in ("0", "1", "2", "3", "4", "5", "6b", "9", "10b", "10c", "11", "11b")}
+        "check-verifiers-%s" % x for x in ("0", "1", "2", "3", "4", "5", "6b", "9", "10b", "10c", "11", "11b", "12")}
+    # increment 7b adds the read-only tool gates (phases 4, 5, 6, 9, 10a, 11)
+    inc7 |= {"check-sec-controls-4", "check-api-tools-5", "check-ux-files-6", "check-sec-verification-9",
+             "check-lv-inventory-10a", "check-workflows-11"}
     v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
     inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
     n5 = len([c for c in comps if c["id"] in inc5])
     record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks, increment 5's %d and "
               "increment 6's %d, increment 7's %d)" % (len(v1c), len(inc4), n5, len(inc6), len(inc7)),
-           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20 and len(inc7) == 29,
+           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20 and len(inc7) == 37,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")

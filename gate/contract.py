@@ -676,15 +676,14 @@ def adr_lint(root, st, label=None):
 
 # Amendment 3's trace levels; a definition of a level-k ID must reference at least one
 # existing ID of a lower level. BG, NFR, TB and CON are MOADIX's built prefixes (v1).
-# A SEC-ID cites its trust boundary (TB-n), as the built threat models do (level 4 < 4.5).
-# T- and SR- are NOT checked for upstream: the built documents already use T-nnn for
-# tasks (phase 7) and SR-n for shared resources (phase 4), while Amendment 3 uses them
-# for threats and store-release items. That conflict awaits the operator's ruling
-# (docs/increment-7-report.md); duplicates and dangling references are still checked.
-LEVELS = {"B": 0, "BR": 0, "BG": 0, "R": 1, "P": 2, "US": 2, "NFR": 2, "H": 3, "ADR": 3, "TB": 4, "SEC": 4.5, "L": 5,
-          "U": 6, "V": 7, "TASK": 8, "TS": 9, "SF": 10, "LV": 11, "RG": 12, "CL": 13, "CON": 13, "RL": 14, "RT": 16,
-          "BL": 0, "FC": 0, "T": None, "SR": None}
-ROOTS = {"B", "BR", "BG", "BL", "FC", "SF", "NFR", "TB", "CON", "T", "SR"}
+# Ruling 1 on increment 7: T- is a task (phase 7) and SR- a shared resource (phase 4), as
+# built; threats are TH- and store-release items STR-; TASK- is dropped. A shared resource
+# and a threat cite an architecture item, story or trust boundary; a SEC-ID cites its threat
+# or trust boundary (TB 4 < TH/SR 4.2 < SEC 4.5).
+LEVELS = {"B": 0, "BR": 0, "BG": 0, "R": 1, "P": 2, "US": 2, "NFR": 2, "H": 3, "ADR": 3, "TB": 4, "TH": 4.2,
+          "SR": 4.2, "SEC": 4.5, "L": 5, "U": 6, "V": 7, "T": 8, "TS": 9, "SF": 10, "LV": 11, "RG": 12, "CL": 13,
+          "CON": 13, "RL": 14, "STR": 15, "RT": 16, "BL": 0, "FC": 0}
+ROOTS = {"B", "BR", "BG", "BL", "FC", "SF", "NFR", "TB", "CON"}
 PREFIXES = sorted(LEVELS, key=len, reverse=True)
 TRACE_ID = re.compile(r"(?<![\w/-])(%s)-(\d{1,4})\b(?!-\w)" % "|".join(PREFIXES))
 DEF_HEAD = re.compile(r"^#{1,6}\s+\**(%s)-(\d{1,4})\b" % "|".join(PREFIXES))
@@ -1322,8 +1321,8 @@ def coverage_doc():
          "`## Sources` (each with a URL and a date, YYYY-MM-DD). A superseding record says `Supersedes: ADR-nnn`.",
          "",
          "**Trace IDs.** Every downstream ID cites an existing upstream ID in its own section or item (trace-lint): "
-         "B-/BR-/BG- -> R- -> P-/US-(/AC-) -> H-/ADR- -> SEC- -> L- -> U- -> V- -> TASK- -> TS- -> LV-/RG-/CL- -> "
-         "RL- -> RT-. An ID is defined once (a heading or a bold list item; a row of a table whose first column is "
+         "B-/BR-/BG- -> R- -> P-/US-(/AC-) -> H-/ADR- -> TH-/SR- -> SEC- -> L- -> U- -> V- -> T- (task) -> TS- -> "
+         "LV-/RG-/CL- -> RL- -> STR- -> RT-. An ID is defined once (a heading or a bold list item; a row of a table whose first column is "
          "`ID` is a register entry), never reused, and never deleted once a phase was approved: mark it withdrawn.",
          "",
          "**Phase 2** (ears-lint): each acceptance criterion is EARS (`The <system> shall ...`, `When <trigger>, the "

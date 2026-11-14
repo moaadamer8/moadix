@@ -133,7 +133,7 @@ def check_bmad(ad, product):
         else:
             bad("artifact root %s for %s is NOT writable in phase %s: %s" % (out, e.get("skill"), lab, d.reason))
     cfg = bmadcore.CONFIG % {"product": pid or "-"}
-    for key, lab in (("implementation_artifacts", pathmap.RELEASE),):
+    for key, lab in (("implementation_artifacts", pathmap.RETRO),):  # the retro runs in its own phase (7b)
         m = re.search(r"^%s = \"([^\"]+)\"" % key, cfg, re.M)
         if not m:
             bad("config.toml has no %s" % key)

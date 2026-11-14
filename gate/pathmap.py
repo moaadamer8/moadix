@@ -79,8 +79,11 @@ PHASES = [
     (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**", "sdlc/10a/**"]),
     (12, "10b", "Regression Suites", ["sdlc/10b-*.md", "e2e/**", "e2e-mobile/**", ".maestro/**", ".github/workflows/**", "sdlc/10b/**"]),
     (13, "10c", "Concurrency and Load", ["sdlc/10c-*.md", "evidence/concurrency/**", "load/**", "sdlc/10c/**"]),
-    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/12-*.md", "sdlc/12-retro/**", "sdlc/11/**", "sdlc/12/**"]),
+    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/11/**"]),
     (15, "11b", "Store Release", ["sdlc/11b-*.md", "release/store/**", "release/assets/**", "sdlc/11b/**"]),
+    # Ruling 2 on increment 7: the retro is a gated phase with its own path map. APPROVE 11 still releases;
+    # 12 does not block the release, but a new FEATURE waits for it (opcmd._feature_precheck).
+    (16, "12", "Retro", ["sdlc/12-*.md", "sdlc/12-retro/**", "sdlc/12/**"]),
 ]
 LABELS = [p[1] for p in PHASES]
 # Increment 6 (item C): the BMAD skills' run folders (gate/config/bmad-adapter.yaml) are
@@ -97,6 +100,7 @@ BASELINE = [
                           "sdlc/02-prd/**", "sdlc/03-architecture/**", "sdlc/B/**"]),
 ]
 RELEASE = next(lab for _i, lab, name, _p in PHASES if name == "Release")  # the phase a feature's merge happens in
+RETRO = next(lab for _i, lab, name, _p in PHASES if name == "Retro")  # ruling 2 on increment 7: gated
 FEATURES_DIR = "sdlc/features"
 FEATURE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 

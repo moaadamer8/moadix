@@ -70,6 +70,15 @@ phases:
       - tool: redocly
         purpose: "OpenAPI and Arazzo lint of the LLD contracts; any error fails"
         validator: check-contracts
+      - tool: vacuum
+        purpose: "OWASP API rules only, on the OpenAPI contract; any error or warning fails (increment 7b)"
+        validator: check-api-tools-5
+      - tool: oasdiff
+        purpose: "breaking changes since the released spec; each ERR needs an accepted ADR (increment 7b)"
+        validator: check-api-tools-5
+      - tool: squawk
+        purpose: "Postgres migration safety; N/A for SQLite (increment 7b)"
+        validator: check-api-tools-5
   - label: "6"
     name: UX
     skills:
@@ -169,6 +178,12 @@ phases:
       - tool: github-mcp-server
         purpose: "the gate reads CI results and code-scanning alerts, --read-only"
         validator: check-release
+      - tool: zizmor
+        purpose: "CI workflow security, offline, no product config (increment 7b)"
+        validator: check-workflows-11
+      - tool: actionlint
+        purpose: "CI workflow lint, gate config, no shellcheck/pyflakes (increment 7b)"
+        validator: check-workflows-11
   - label: "11b"
     name: Store Release
     skills: []
@@ -176,7 +191,8 @@ phases:
     gate_run: []
   - label: "12"
     name: Retro
-    during: ["11", "done"]
+    # ruling 2 on increment 7: a gated phase (APPROVE 12); its skills also stay usable once all is done
+    during: ["done"]
     skills:
       - phase-retrospective
       - reflect-queue

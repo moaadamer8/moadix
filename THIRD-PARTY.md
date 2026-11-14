@@ -48,3 +48,18 @@ These are named in the phase manifest but no code from them is in this repo.
 ## Trademarks
 
 BMad is a trademark of BMad Code, LLC. Apple, Notion, Anthropic, Claude and the other names above belong to their owners. MOADIX is not affiliated with, endorsed by or sponsored by any of them.
+
+## Fetched unmodified, never vendored: MPL-2.0 (ruling 3 on increment 7)
+
+MPL-2.0 is accepted only for tools and product dependencies that are fetched unmodified from their registry and never copied into this repository. None of these files is in this repository; the installer (`managed/fetch_tools.py`) or the product's own package manager fetches them, checked against the pinned lockfile or version.
+
+| Component | Version | Licence | Reaches MOADIX through | Source (registry) |
+|---|---|---|---|---|
+| lightningcss (and its 11 platform packages) | 1.33.0 | MPL-2.0 | dependency of `likec4` 1.60.0 (`tools/npm/likec4/package-lock.json`) | https://registry.npmjs.org/lightningcss |
+| axe-core | 4.14.0 | MPL-2.0 | dependency of `@lhci/cli` 0.15.1 via lighthouse (`tools/npm/lhci/package-lock.json`) | https://registry.npmjs.org/axe-core |
+| hypothesis | 6.170.14 | MPL-2.0 | dependency of Schemathesis 4.32.7 (`tools/py/schemathesis/requirements.txt`) | https://pypi.org/project/hypothesis/ |
+| certifi | 2026.10.23 | MPL-2.0 | dependency of Schemathesis 4.32.7 (`tools/py/schemathesis/requirements.txt`) | https://pypi.org/project/certifi/ |
+| axe-core | 4.14.0 | MPL-2.0 | product dependency (phases 6, 8, 10a), pinned in `gate/config/tools.yaml` `product_dependencies` | https://registry.npmjs.org/axe-core |
+| @axe-core/playwright | 4.14.0 | MPL-2.0 | product dependency (phases 6, 8, 10a), pinned in `gate/config/tools.yaml` `product_dependencies` | https://registry.npmjs.org/@axe-core/playwright |
+
+The licences of hypothesis and certifi were taken from their PyPI metadata; the others were read from the LICENSE file in the published package (docs/evidence/increment-7-licences.md).

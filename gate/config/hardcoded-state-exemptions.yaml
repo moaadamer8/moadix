@@ -252,3 +252,28 @@ exemptions:
     token: "11b"
     reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
     owner: operator
+  - file: gate/v1/check_api_tools.py
+    axis: phase
+    token: 5
+    reason: "Increment 7b: vacuum, oasdiff and squawk are phase 5's tools (Amendment 3 phase 5); its evidence is filed under that phase"
+    owner: operator
+  - file: gate/v1/check_workflows.py
+    axis: phase
+    token: 11
+    reason: "Increment 7b: zizmor and actionlint are phase 11's tools (Amendment 3 RL2); its evidence is filed under that phase"
+    owner: operator
+  - file: gate/v1/check_ux_files.py
+    axis: phase
+    token: 2
+    reason: "Increment 7b: the screens to cover come from the PRD, phase 2's coverage file (P5)"
+    owner: operator
+  - file: gate/v1/check_sec_csv.py
+    axis: phase
+    token: 4
+    reason: "Increment 7b: SEC-CONTROLS.csv is phase 4's (threat model) artifact"
+    owner: operator
+  - file: gate/v1/check_sec_csv.py
+    axis: phase
+    token: 9
+    reason: "Increment 7b: SEC-VERIFICATION.csv is phase 9's (security verification) artifact"
+    owner: operator

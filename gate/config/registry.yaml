@@ -779,3 +779,67 @@ components:
     args:
       - --phase
       - 11b
+# increment 7b (ruling 2 on increment 7): phase 12 (Retro) is gated: the contract and its gap critic.
+  - id: check-contract-12
+    kind: validator
+    scope: both
+    phase: 12
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 12
+  - id: check-verifiers-12
+    kind: validator
+    scope: both
+    phase: 12
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 12
+# increment 7b: read-only tool gates (never execute product code; Amendment 3 phases 4, 5, 6, 9, 10a, 11).
+  - id: check-sec-controls-4
+    kind: validator
+    scope: both
+    phase: 4
+    status: active
+    module: check_sec_csv
+    args:
+      - --phase
+      - 4
+  - id: check-api-tools-5
+    kind: validator
+    scope: both
+    phase: 5
+    status: active
+    module: check_api_tools
+    timeout: 600
+  - id: check-ux-files-6
+    kind: validator
+    scope: both
+    phase: 6
+    status: active
+    module: check_ux_files
+  - id: check-sec-verification-9
+    kind: validator
+    scope: both
+    phase: 9
+    status: active
+    module: check_sec_csv
+    args:
+      - --phase
+      - 9
+  - id: check-lv-inventory-10a
+    kind: validator
+    scope: both
+    phase: 10a
+    status: active
+    module: check_lv_inventory
+  - id: check-workflows-11
+    kind: validator
+    scope: both
+    phase: 11
+    status: active
+    module: check_workflows
+    timeout: 600

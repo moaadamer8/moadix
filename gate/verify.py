@@ -1087,6 +1087,40 @@ def check_phase(root, st, label):
     return out
 
 
+def passed_findings(root, st, label):
+    """Increment 7b: the open gap-critic findings (BLOCKER, and MAJOR not waived) in the phase's
+    CRITIC.json at HEAD, for the PROCEED-PAST ledger line: PROCEED-PAST is the operator's only way
+    past a BLOCKER, and the ledger records what it passed. [] when there is no critic evidence."""
+    import hashlib as _h
+    out = []
+    try:
+        sch = scheduled(root, st, label)
+    except VerifyError:
+        return out
+    waived = active_waivers(st)
+    for name, (role, _base, hd, _req) in sorted(sch.items()):
+        if not role.get("critic"):
+            continue
+        ef = evidence_file(root, label, name)
+        try:
+            with open(ef, "rb") as f:
+                raw = f.read()
+            ev = json.loads(raw.decode("utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if ev.get("source_commit") != hd:
+            continue
+        for fd in ev.get("findings") or []:
+            if not isinstance(fd, dict):
+                continue
+            sev = fd.get("severity")
+            if sev == "BLOCKER" or (sev == "MAJOR" and "%s.%s" % (name, fd.get("topic")) not in waived):
+                out.append({"role": name, "id": str(fd.get("id")), "topic": str(fd.get("topic")), "severity": sev,
+                            "quote": str(fd.get("quote") or "")[:300], "citation": str(fd.get("citation") or ""),
+                            "evidence_sha256": _h.sha256(raw).hexdigest(), "source_commit": hd})
+    return out
+
+
 def evidence_digest(root, label):
     """sha256 over the phase's verify directory (part of the validator cache key):
     new evidence or a new launch makes a cached result stale."""

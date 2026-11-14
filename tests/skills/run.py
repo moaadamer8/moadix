@@ -124,13 +124,15 @@ def group_enforce():
         f.write(good)
     d, why = skill(p, "moadix:deep-recon")
     record(G, "control: ledger restored -> allowed again", d == "none", why or "(none)")
-    # retro: not a gated phase; its skills apply during 11 and after the last phase
+    # retro: a gated phase since increment 7b; its skills apply in 12 and after the last phase
     s11, _m, _n = manifest.allowed("11")
     sdone, _m, _n = manifest.allowed("done")
     s10c, _m, _n = manifest.allowed("10c")
-    record(G, "retro skills apply during phase 11 and after all phases, not before",
-           {"phase-retrospective", "reflect-queue"} <= s11 and {"phase-retrospective", "reflect-queue"} <= sdone and
-           "phase-retrospective" not in s10c, "11: %s; done: %s; 10c: %s" % (sorted(s11), sorted(sdone), sorted(s10c)))
+    s12, _m, _n = manifest.allowed("12")
+    record(G, "retro skills apply in phase 12 (gated since increment 7b) and after all phases, not in 11 or before",
+           {"phase-retrospective", "reflect-queue"} <= s12 and {"phase-retrospective", "reflect-queue"} <= sdone and
+           "phase-retrospective" not in s11 and "phase-retrospective" not in s10c,
+           "12: %s; 11: %s; done: %s" % (sorted(s12), sorted(s11), sorted(sdone)))
     why = manifest.check("Skill", {"skill": "moadix:test-driven-development"}, "8")
     record(G, "phase 8: a phase-7 skill (moadix:test-driven-development) -> denied, reason names phase 8 (Testing)",
            why and "phase 8 (Testing)" in why, short(why))
@@ -148,8 +150,9 @@ def group_manifest():
                len(vendored), len(listed)))
     labels = [str(ph["label"]) for ph in MAN["phases"]]
     from gate import pathmap
-    record(G, "the manifest covers all 16 gated phases plus 12 (Retro) and B (onboarding Baseline, increment 6)",
-           labels[:16] == pathmap.LABELS and labels[16:] == ["12", pathmap.BASELINE[0][1]], ", ".join(labels))
+    record(G, "the manifest covers all 17 gated phases (12, Retro, gated since increment 7b) and B (onboarding "
+              "Baseline, increment 6)",
+           labels[:17] == pathmap.LABELS and labels[17:] == [pathmap.BASELINE[0][1]], ", ".join(labels))
     bad = []
     for s in MAN["skills"]:
         d = os.path.join(SKILLS, s["name"])

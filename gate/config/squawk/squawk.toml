@@ -1,0 +1,2 @@
+# MOADIX: the gate runs squawk with this config; the product's .squawk.toml is never read.
+# Every rule stays on (the amendment asks for squawk-clean Postgres migrations).

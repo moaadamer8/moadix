@@ -8,7 +8,7 @@
 #   blockers                phase-specific BLOCKER rules for the gap critic (added to `severity`)
 #   gate                    the amendment's deterministic checks for the phase (what is built is
 #                           listed under `built`; the rest is reported in docs/increment-7-report.md)
-#   gated: false            phase 12 has no APPROVE in MOADIX (see the report: open conflict)
+#   gated: false            a phase with topics but no APPROVE (none since ruling 2 on increment 7 gated phase 12)
 #   feature_topics          FC1-FC11, each assigned to the feature-cycle phase whose COVERAGE.md
 #                           lists it
 #   sizes                   the size rule (Amendment 3 section 2): topics N/A by default with their
@@ -404,10 +404,10 @@ phases:
     name: "Implementation"
     role: "tech lead"
     blockers: "security or tenant defect; a test weakened or skipped to pass."
-    gate: "`tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a TASK; every closed TASK links its tests."
+    gate: "`tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a T- task; every closed T- task links its tests."
     topics:
       - id: I1
-        title: "task breakdown TASK → AC"
+        title: "task breakdown T- → AC"
       - id: I2
         title: "definition of done per task"
       - id: I3
@@ -672,7 +672,6 @@ phases:
   "12":
     name: "Retro"
     role: "engineering manager"
-    gated: false
     blockers: "a change to MOADIX rules without approval."
     topics:
       - id: RT1

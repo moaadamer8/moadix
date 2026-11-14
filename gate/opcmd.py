@@ -131,6 +131,12 @@ def _summary(st):
     parked = ""
     if st.get("parked"):
         parked = "; PARKED at ledger seq %s (counts: %s)" % (st["parked"]["seq"], json.dumps(st["parked"].get("counts")))
+    pend = retro_pending(st)
+    if st.get("feature") and st["current_phase"] == pathmap.RETRO:
+        pend = "phase %s (Retro) of feature %s is pending (no new FEATURE until it is approved)" % (
+            pathmap.RETRO, st["feature"])
+    if pend:
+        parked += "; PENDING: %s" % pend
     return "scope %s; current phase %s; ledger seq %d; waivers: %s%s; phases: %s" % (
         scope, st["current_phase"], st["ledger_seq"], w, parked, "; ".join(rows))
 
@@ -262,6 +268,21 @@ def baseline_approved(st):
     return bool(ph and ph["status"] in ("APPROVED", "PROCEED-PAST")), want
 
 
+def retro_pending(st):
+    """Ruling 2 on increment 7: a product released through its own cycle must have approved that
+    cycle's phase 12 (Retro) before a FEATURE starts. A sentence when it is pending, else None.
+    (An onboarded product's baseline has no retro; a feature's retro keeps the feature active.)"""
+    if st.get("feature") or st.get("mode") == "onboarding":
+        return None
+    ph = next((p for p in st.get("product_phases") or [] if p["label"] == pathmap.RETRO), None)
+    rel = next((p for p in st.get("product_phases") or [] if p["label"] == pathmap.RELEASE), None)
+    if ph and rel and rel["status"] in ("APPROVED", "PROCEED-PAST") and \
+            ph["status"] not in ("APPROVED", "PROCEED-PAST", "COLLAPSED"):
+        return ("phase %s (Retro) of the product's cycle is pending: the release is done, but a new FEATURE waits "
+                "until the retro is approved (APPROVE %s)" % (pathmap.RETRO, pathmap.RETRO))
+    return None
+
+
 def _feature_precheck(fid, st):
     if not pathmap.FEATURE_ID.match(fid) or ".." in fid:
         return "%r is not a usable feature id (letters, digits, '.', '_' and '-', starting with a letter or digit)" % fid
@@ -270,8 +291,14 @@ def _feature_precheck(fid, st):
         return ("the product has no approved baseline yet: a feature cycle starts once the product's phase %s is "
                 "approved (%s)" % (want, "onboarding: APPROVE B" if want == "B" else "released at phase 11"))
     if st.get("feature"):
+        if st["current_phase"] == pathmap.RETRO:
+            return ("phase %s (Retro) of feature %s is pending: its release is done, but a new FEATURE waits until the "
+                    "previous cycle's retro is approved (APPROVE %s)" % (pathmap.RETRO, st["feature"], pathmap.RETRO))
         return ("feature %s is active (its current phase is %s). One feature at a time: finish it (approving its "
                 "phase 11 merges it) before starting %s" % (st["feature"], st["current_phase"], fid))
+    pending = retro_pending(st)
+    if pending:
+        return pending
     if any(f["id"] == fid for f in st.get("features") or []):
         return "feature id %s was already used (ledger seq %s); every feature needs its own id" % (
             fid, next(f["seq"] for f in st["features"] if f["id"] == fid))
@@ -712,6 +739,10 @@ def handle(hook_input):
         ok, res, data = _proceed_gate(root, st, g["phase"])
         if ok:
             payload["failing"] = res
+            from . import verify
+            passed = verify.passed_findings(root, st, g["phase"])
+            if passed:  # increment 7b: the gap-critic findings this PROCEED-PAST passes, on the record
+                payload["passed_findings"] = passed
         else:
             why = res
     if not why and name == "WAIVE":
@@ -786,6 +817,10 @@ def handle(hook_input):
             nxt += " All phases are done. From here every change is a feature cycle (FEATURE <id> <code>)."
         else:
             nxt += " All phases are done."
+    if name == "PROCEED-PAST" and payload.get("passed_findings"):
+        nxt = " It passes these open gap-critic findings, recorded in the ledger: %s.%s" % (
+            "; ".join("%s %s (%s) at %s" % (f["severity"], f["id"], f["topic"], f["citation"])
+                      for f in payload["passed_findings"][:8]), nxt)
     if name == "COLLAPSE":
         nxt = " Phase %s collapsed by the size-%s profile (recorded ruling; checks not run: %s).%s" % (
             g["phase"], payload["size"], ", ".join(payload["checks_not_run"]) or "none", nxt)

@@ -2,6 +2,13 @@
 
 Overrides earlier sections of DESIGN.md where they differ. Decided by the operator after a research review. Figma is out of scope.
 
+**Rulings on increment 7 (2026-11-14), part of this amendment:**
+1. Trace-ID prefixes keep MOADIX's built meanings: **T-** is a task (phase 7) and **SR-** a shared resource (phase 4). Threats are **TH-** and store-release items **STR-**. The amendment's TASK- is dropped in favour of T-. trace-lint checks upstream for all four.
+2. Phase 12 (Retro) is a gated phase: APPROVE 12, its own path-map entry for `sdlc/12-*`, validators and a gap critic. APPROVE 11 still releases; phase 12 does not block the release. A new FEATURE on the same product is refused until phase 12 of the previous cycle is approved; STATUS shows it as pending.
+3. MPL-2.0 is accepted for tools and product dependencies fetched unmodified from their registry and never vendored into this repository; each is recorded in THIRD-PARTY.md with its source. Any other non-permissive licence still stops and is reported.
+4. Gate-run Node tools use a pinned Node 24 LTS fetched by the installer into the tools cache (checksum verified), never the system Node.
+5. In-flight products start the contract at their current phase; already approved phases are not re-linted.
+
 ## 1. Cross-phase contract (every phase, Baseline and feature cycles)
 
 | Element | Rule | Deterministic check (gate-run) |
@@ -10,7 +17,7 @@ Overrides earlier sections of DESIGN.md where they differ. Decided by the operat
 | Discovery | The phase skill asks the operator one question at a time, 2–4 options plus a recommendation; answers logged as `Q-n` | Log exists; every Q has a chosen option |
 | Decision records | MADR-style `ADR-nnn`: context, ≥2 alternatives, criteria, decision, consequences, sources with URL and date | Schema check |
 | Gap critic | Fresh-context verifier per phase (brief generated and enforced by the gate, as in increment 4) writes `CRITIC.json`: id, topic, severity, evidence quote, fix | JSON schema; any open BLOCKER refuses APPROVE; a MAJOR needs a WAIVE with reason |
-| Trace IDs | B-, BR-, R-, P-/US-/AC-, H-/ADR-, T-/SEC-, L-, U-, V-, TASK-, TS-, SF-, LV-, RG-, CL-, RL-, SR-, RT-, BL-, FC- | `trace-lint`: every downstream ID points to an existing upstream ID; no orphans; IDs never reused |
+| Trace IDs | B-, BR-, R-, P-/US-/AC-, H-/ADR-, TH-/SEC-, SR- (shared resource), L-, U-, V-, T- (task), TS-, SF-, LV-, RG-, CL-, RL-, STR-, RT-, BL-, FC- (ruling 1) | `trace-lint`: every downstream ID points to an existing upstream ID; no orphans; IDs never reused |
 
 Critic severity: BLOCKER = required topic missing or hollow, contradiction with an upstream or frozen document, missing security/privacy control, or a claim that needs a citation and has none. MAJOR = answered but not testable or measurable. MINOR = clarity. A critic never passes a phase; it only writes findings.
 
@@ -61,8 +68,8 @@ V1 accounts · V2 secrets and keys · V3 environments · V4 domains and email ·
 Gate: dotenvx check; .env.example lists every key the code reads; gitleaks clean; Trivy config scan. The agent never holds live credentials. Critic BLOCKER: a production credential reachable by the agent, or MFA missing.
 
 ### Phase 7 Implementation — role: tech lead
-I1 task breakdown TASK → AC · I2 definition of done per task · I3 slice order (walking skeleton, riskiest first) · I4 TypeScript strict, no unexplained any · I5 ESLint with type-aware rules · I6 dependency-cruiser rules pass · I7 knip clean · I8 complexity and file-size limits · I9 error handling and structured logging · I10 secure coding: validation, authz per handler, tenant scope · I11 no hard-coded user-facing strings · I12 squawk-clean migrations · I13 review findings resolved or waived · I14 ADR for every deviation from the LLD · I15 Conventional Commits.
-Gate: `tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a TASK; every closed TASK links its tests. Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
+I1 task breakdown T- → AC · I2 definition of done per task · I3 slice order (walking skeleton, riskiest first) · I4 TypeScript strict, no unexplained any · I5 ESLint with type-aware rules · I6 dependency-cruiser rules pass · I7 knip clean · I8 complexity and file-size limits · I9 error handling and structured logging · I10 secure coding: validation, authz per handler, tenant scope · I11 no hard-coded user-facing strings · I12 squawk-clean migrations · I13 review findings resolved or waived · I14 ADR for every deviation from the LLD · I15 Conventional Commits.
+Gate: `tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a T- task; every closed T- task links its tests. Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
 
 ### Phase 8 Testing — role: SDET / QA lead
 TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register.
@@ -127,7 +134,10 @@ Keep everything already in MOADIX. Add (pin exact versions, verify each LICENSE 
 | Lighthouse CI | 10a | Performance and web-vitals assertions |
 | zizmor, actionlint | 11 | CI workflow security and lint |
 | Playwright toHaveScreenshot | 10b | Visual regression LTR and RTL |
-| Anthropic code-simplifier | 7 | Authoring-time simplification, verdict text stripped |
+
+Anthropic code-simplifier was removed from this table (ruling 4 on increment 7): it is a plugin agent, not a skill, and the operator chose to skip it.
+
+Licences: MPL-2.0 is accepted for tools and product dependencies fetched unmodified from their registry and never vendored (ruling 3); axe-core and @axe-core/playwright are added on that basis.
 
 Rejected (do not add): Spectral, Atlas migrate lint, Threagile, Threat Dragon, STRIDE GPT, Syft/Grype, trufflehog, CodeQL, Snyk, Pact, Chromatic/Argos/Lost Pixel, Artillery/Locust, changesets, ralph-loop, commit-commands, Anthropic frontend-design, Figma plugin, Infracost/Doppler/Infisical/SOPS, Appium MCP.
 

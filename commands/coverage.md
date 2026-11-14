@@ -18,7 +18,7 @@ Every phase (Baseline and feature cycles too) leaves three things beside its doc
 2. **Coverage.** `COVERAGE.md` lists every topic ID of the phase (below), each as `- <ID>: [title](../NN-doc.md#section)` pointing at the section that covers it, or `- <ID>: N/A: <reason>`. coverage-lint refuses a missing or duplicated ID, an anchor that does not resolve, a hollow section, and an empty, boilerplate or copied reason. The gate keeps a pre-filled skeleton at `.sdlc/coverage/<scope>-<label>-COVERAGE.md`: copy it and fill it in.
 3. **Decision records.** Each decision is `adr/ADR-nnn-<slug>.md` (MADR): `# ADR-nnn: <decision>`, then `## Context`, `## Alternatives` (at least two), `## Criteria`, `## Decision`, `## Consequences`, `## Sources` (each with a URL and a date, YYYY-MM-DD). A superseding record says `Supersedes: ADR-nnn`.
 
-**Trace IDs.** Every downstream ID cites an existing upstream ID in its own section or item (trace-lint): B-/BR-/BG- -> R- -> P-/US-(/AC-) -> H-/ADR- -> SEC- -> L- -> U- -> V- -> TASK- -> TS- -> LV-/RG-/CL- -> RL- -> RT-. An ID is defined once (a heading or a bold list item; a row of a table whose first column is `ID` is a register entry), never reused, and never deleted once a phase was approved: mark it withdrawn.
+**Trace IDs.** Every downstream ID cites an existing upstream ID in its own section or item (trace-lint): B-/BR-/BG- -> R- -> P-/US-(/AC-) -> H-/ADR- -> TH-/SR- -> SEC- -> L- -> U- -> V- -> T- (task) -> TS- -> LV-/RG-/CL- -> RL- -> STR- -> RT-. An ID is defined once (a heading or a bold list item; a row of a table whose first column is `ID` is a register entry), never reused, and never deleted once a phase was approved: mark it withdrawn.
 
 **Phase 2** (ears-lint): each acceptance criterion is EARS (`The <system> shall ...`, `When <trigger>, the <system> shall ...`, `While <state>, ...`, `If <condition>, then the <system> shall ...`, `Where <feature>, ...`), one `shall`, no vague words (fast, user-friendly, appropriate, etc., TBD, should, ...); every story has an `If ..., then ...` AC; every NFR has a number and a unit; the role x action matrix (P3) marks every cell allow or deny and denies something. **Phase 1** (cite-lint): every URL carries a retrieval date on its line, every research claim has a source, and every link resolves.
 
@@ -82,7 +82,7 @@ Critic BLOCKER: a production credential reachable by the agent, or MFA missing.
 
 ### Phase 7 Implementation (role: tech lead)
 
-I1 task breakdown TASK → AC · I2 definition of done per task · I3 slice order (walking skeleton, riskiest first) · I4 TypeScript strict, no unexplained any · I5 ESLint with type-aware rules · I6 dependency-cruiser rules pass · I7 knip clean · I8 complexity and file-size limits · I9 error handling and structured logging · I10 secure coding: validation, authz per handler, tenant scope · I11 no hard-coded user-facing strings · I12 squawk-clean migrations · I13 review findings resolved or waived · I14 ADR for every deviation from the LLD · I15 Conventional Commits
+I1 task breakdown T- → AC · I2 definition of done per task · I3 slice order (walking skeleton, riskiest first) · I4 TypeScript strict, no unexplained any · I5 ESLint with type-aware rules · I6 dependency-cruiser rules pass · I7 knip clean · I8 complexity and file-size limits · I9 error handling and structured logging · I10 secure coding: validation, authz per handler, tenant scope · I11 no hard-coded user-facing strings · I12 squawk-clean migrations · I13 review findings resolved or waived · I14 ADR for every deviation from the LLD · I15 Conventional Commits
 
 Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
 
@@ -128,7 +128,7 @@ SR1 human-owned store accounts · SR2 signing-key custody · SR3 versioning · S
 
 Critic BLOCKER: privacy-label mismatch.
 
-### Phase 12 Retro (role: engineering manager), not gated in MOADIX (no APPROVE 12)
+### Phase 12 Retro (role: engineering manager)
 
 RT1 timeline · RT2 metrics (DORA four keys, phase cycle times, critic findings by severity, escaped defects) computed from git and the ledger · RT3 blameless went-well/went-poorly · RT4 contributing factors · RT5 MOADIX process changes · RT6 lessons queue, applied only after operator approval · RT7 actions with owner and date · RT8 cost (time, tokens, money) · RT9 tech-debt register · RT10 CLAUDE.md updates as approved diffs
 

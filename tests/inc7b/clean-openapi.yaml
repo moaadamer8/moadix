@@ -1,0 +1,67 @@
+openapi: 3.1.0
+info:
+  title: Notes
+  version: "1.0.0"
+  description: Notes API
+  contact: {name: Operator, url: "https://example.invalid"}
+  license: {name: MIT, identifier: MIT}
+servers:
+  - url: "https://api.example.invalid"
+security:
+  - bearer: []
+paths:
+  /notes:
+    get:
+      operationId: listNotes
+      summary: List notes
+      description: List the visitor's notes.
+      tags: [notes]
+      responses:
+        "200":
+          description: The notes.
+          headers:
+            RateLimit: {$ref: "#/components/headers/RateLimit"}
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items: {type: string, maxLength: 200, pattern: "^[^<>]*$"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooMany"}
+        "500": {$ref: "#/components/responses/Problem"}
+components:
+  headers:
+    RateLimit:
+      description: Rate limit state.
+      schema: {type: string, maxLength: 100, pattern: "^[a-z0-9=;, ]+$"}
+  responses:
+    Problem:
+      description: An RFC 9457 problem.
+      headers:
+        RateLimit: {$ref: "#/components/headers/RateLimit"}
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              title: {type: string, maxLength: 200, pattern: "^[^<>]*$"}
+              status: {type: integer, format: int32, minimum: 100, maximum: 599}
+    TooMany:
+      description: Too many requests.
+      headers:
+        RateLimit: {$ref: "#/components/headers/RateLimit"}
+        Retry-After:
+          description: Seconds to wait.
+          schema: {type: integer, format: int32, minimum: 1, maximum: 3600}
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              title: {type: string, maxLength: 200, pattern: "^[^<>]*$"}
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT, description: "JWT access tokens validated per RFC8725."}

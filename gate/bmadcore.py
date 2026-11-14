@@ -35,7 +35,7 @@ CONFIG = """# MOADIX-managed BMad core configuration (gate/bmadcore.py). Written
 # agents cannot write _bmad/. Team overrides go in _bmad/custom/config.toml.
 # Output folders point at sdlc/ paths the MOADIX phase path map owns:
 #   phase 0 sdlc/00-forge/   1 sdlc/01-research/   2 sdlc/02-prd/   3 sdlc/03-architecture/
-#   retro (during 11) sdlc/12-retro/
+#   retro (phase 12)  sdlc/12-retro/
 [core]
 user_name = "operator"
 project_name = "%(product)s"
