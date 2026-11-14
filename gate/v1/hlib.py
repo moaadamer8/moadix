@@ -419,6 +419,7 @@ PRODUCT_CONFIG = frozenset({
     "product-surface.yaml", "product-tests.yaml", "product-app.yaml", "concurrency.yaml",
     "mobile.yaml", "traceability-exemptions.yaml", "hardcoded-state-exemptions.yaml",
     "product-tools.yaml",  # increment 5: the gate-run tools' product settings (images, load, live, env, release)
+    "coverage-overrides.yaml",  # increment 7: the operator's overrides of the size rule (turn_on, na)
 })
 
 

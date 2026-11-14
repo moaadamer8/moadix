@@ -1,2 +1,8 @@
 # Global allowlist for tests/skills/selfapproval_grep.py (per-skill rows live in skills/<name>/MOADIX-GREP-ALLOW.tsv).
 # <path glob, repo-relative>\t<line regex>\t<reason this is not an instruction to approve/merge/ship/commit/mark done/auto-advance>
+skills/deep-recon/references/run.md	^When a dimension's rounds are done:$	internal loop control of one research run (its rounds), not a claim that the phase is done (increment 7)
+skills/deep-recon/references/run.md	^When all dimensions are done, proceed to `references/synthesis.md`	internal step order inside the skill, not a phase status or approval (increment 7)
+skills/diagnosing-bugs/SKILL.md	Phase 1 is done when the loop is \*\*tight\*\*	the skill's own diagnosis step 1 (a feedback loop), not a MOADIX phase or an approval (increment 7)
+skills/javascript-testing-expert/SKILL.md	is done	describes test-runner cleanup being done by configuration flags; not a status claim (increment 7)
+skills/phase-retrospective/scripts/sprint_status.py	read silence as done	code comment: the script refuses to treat missing data as done (the opposite of self-approval) (increment 7)
+skills/ui-ux-pro-max/data/stacks/*.csv	is ready	UI framework guidance (the DOM or window is ready), not a status claim (increment 7)

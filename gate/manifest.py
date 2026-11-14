@@ -51,7 +51,7 @@ def allowed(current_label, external=False):
 
 
 def skill_name(tool, tool_input):
-    """The invoked skill/command as written: 'moadix:bmad-prd', 'bmad-prd', 'other:x'."""
+    """The invoked skill/command as written: 'moadix:prd', 'prd', 'other:x'."""
     raw = str((tool_input or {}).get(SKILL_TOOLS[tool]) or "").strip()
     if tool == "SlashCommand":
         raw = raw.lstrip("/").split(" ", 1)[0]

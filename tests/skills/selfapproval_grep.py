@@ -29,6 +29,9 @@ PATTERNS = [
     ("mark-done", r"\bmark(?:s|ed|ing)?\b[^.\n]{0,40}\b(?:done|complete[d]?|finished|resolved|final)\b"
                   r"|\bstatus\s*[:=]\s*['\"`]?(?:done|complete[d]?|final|approved)\b"
                   r"|\b(?:flip|set)\b[^.\n]{0,30}\bstatus\b[^.\n]{0,20}\b(?:done|complete[d]?|final)\b"),
+    ("push", r"\bpush(?:es|ed|ing)?\b[^.\n]{0,30}\b(?:remote|origin|branch|main|master|upstream|github|repo)\b"),
+    ("done-ready", r"\b(?:is|are|now|it's|its|as|say|says|report|reports|declare|declares)\s+(?:done|ready)\b"
+                   r"|\bready (?:to|for) (?:ship|merge|release|deploy|approval|production)\b|\ball done\b"),
     ("auto-advance", r"\bnext phase\b|\bauto[- ]?advanc|\bautomatically (?:invoke|proceed|continue|start|run)\b"
                      r"|\bcommon next\b|\bproceed (?:to|with) (?:the )?next (?:phase|skill|workflow|story|epic)\b"),
 ]

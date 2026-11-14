@@ -34,6 +34,7 @@ os.environ.update(MOADIX_GUARD_ROOT=E.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD
 import _testguard  # noqa: E402,F401  (after the env is set: guards this runner too)
 import corpus_readonly  # noqa: E402
 from gate import pathmap, state  # noqa: E402
+import contract_fixture  # noqa: E402  (tests/lib, increment 7)
 
 RESULTS = []
 PY = fixtures.PY
@@ -271,12 +272,16 @@ def group_port():
     # verifier check, and check-seam (BMAD half) in the first phase of a product
     inc6 = {c["id"] for c in comps if c["module"] in ("check_feature", "check_baseline", "check_seam")} | {
         "check-verifiers-B"}
-    v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5 | inc6]
-    inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5 | inc6]
+    # increment 7 adds check-contract per gated phase (16 + B) and check-verifiers for the 12 phases
+    # whose only verifier is the gap critic
+    inc7 = {c["id"] for c in comps if c["module"] == "check_contract"} | {
+        "check-verifiers-%s" % x for x in ("0", "1", "2", "3", "4", "5", "6b", "9", "10b", "10c", "11", "11b")}
+    v1c = [c for c in comps if c["module"] != "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
+    inc4 = [c for c in comps if c["module"] == "check_verifiers" and c["id"] not in inc5 | inc6 | inc7]
     n5 = len([c for c in comps if c["id"] in inc5])
     record(G, "registry carries v1's %d phase validators (plus increment 4's %d verifier checks, increment 5's %d and "
-              "increment 6's %d)" % (len(v1c), len(inc4), n5, len(inc6)),
-           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20,
+              "increment 6's %d, increment 7's %d)" % (len(v1c), len(inc4), n5, len(inc6), len(inc7)),
+           len(v1c) == 21 and len(inc4) == 3 and n5 == 12 and len(inc6) == 20 and len(inc7) == 29,
            ", ".join(sorted({c["id"] for c in comps})))
     p = E.repo("portempty", docs=())
     E.init(p, "portemptyfx")
@@ -429,6 +434,7 @@ def group_autoval():
     record(G, "Stop hook on a dirty tree: starts nothing (results would describe no commit)",
            rc == 0 and not out and not os.path.exists(log0), "rc=%d out=%r" % (rc, out))
     E.commit(p, "wip")
+    contract_fixture.ready(E, p, "0")  # increment 7: the phase's contract files and gap-critic evidence
     rc, out, err = E.stop(p)
     record(G, "Stop hook never answers (a Stop 'block' would keep the agent running)", rc == 0 and not out,
            "rc=%d out=%r err=%r" % (rc, out, err[-120:]))
@@ -746,7 +752,7 @@ def group_proceed():
            "recorded" in ctx and "Proceed to phase 2" in ctx and ledger_n(p) == n + 1, short(ctx))
     _, pl = E.payload(p, n + 1)
     record(G, "the ledger line names the failing validators and the reason",
-           pl.get("failing") == ["check-handoff-1"] and pl.get("reason") == "research continues in parallel",
+           pl.get("failing") == ["check-handoff-1", "check-contract-1"] and pl.get("reason") == "research continues in parallel",
            short(pl))
     st = E.prompt(p, "STATUS")
     record(G, "STATUS shows phase 1 PROCEED-PAST", "1 Research: PROCEED-PAST" in st, short(st, 200))

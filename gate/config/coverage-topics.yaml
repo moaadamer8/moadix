@@ -1,0 +1,895 @@
+# MOADIX coverage topics (increment 7; docs/AMENDMENT-3.md sections 1-3). Installed root-owned with
+# the gate. Read by gate/contract.py (coverage-lint, the size rule, the gap critic's brief) and by
+# commands/coverage.md (generated from this file; tests/inc7 checks they agree).
+#
+#   phases.<label>.topics   every topic ID of the phase with its title. sdlc/<label>/COVERAGE.md
+#                           lists each one with a section anchor or `N/A: <reason>`.
+#   role                    the expertise the phase skill and the gap critic take on
+#   blockers                phase-specific BLOCKER rules for the gap critic (added to `severity`)
+#   gate                    the amendment's deterministic checks for the phase (what is built is
+#                           listed under `built`; the rest is reported in docs/increment-7-report.md)
+#   gated: false            phase 12 has no APPROVE in MOADIX (see the report: open conflict)
+#   feature_topics          FC1-FC11, each assigned to the feature-cycle phase whose COVERAGE.md
+#                           lists it
+#   sizes                   the size rule (Amendment 3 section 2): topics N/A by default with their
+#                           canned reason (`partial` names the part that is N/A; the topic itself
+#                           still needs a section), and what each size turns on
+version: 1
+severity:
+  BLOCKER: "a required topic missing or hollow; a contradiction with an upstream or frozen document; a missing security or privacy control; a claim that needs a citation and has none. An open BLOCKER refuses APPROVE and cannot be waived."
+  MAJOR: "the topic is answered but not testable or not measurable. A MAJOR refuses APPROVE until the operator WAIVEs it with a reason."
+  MINOR: "clarity. Written to a file for the operator; never shown in the APPROVE or REVIEW summary and never blocking."
+phases:
+  "0":
+    name: "BRD"
+    role: "senior business analyst / product strategist"
+    blockers: "missing money flow or legal regime; attacks generic personas, invented statistics, everything rated Must."
+    topics:
+      - id: B1
+        title: "problem and vision"
+      - id: B2
+        title: "stakeholders and personas"
+      - id: B3
+        title: "business model"
+      - id: B4
+        title: "feature discovery (run a domain checklist; record every feature the operator did not name as accepted or rejected with a reason)"
+      - id: B5
+        title: "feature necessity (MoSCoW + Kano class, with reason)"
+      - id: B6
+        title: "entity lifecycles"
+      - id: B7
+        title: "user journeys"
+      - id: B8
+        title: "operations/back office"
+      - id: B9
+        title: "notifications"
+      - id: B10
+        title: "markets, language, RTL, currency"
+      - id: B11
+        title: "legal and compliance (named regimes)"
+      - id: B12
+        title: "data and retention"
+      - id: B13
+        title: "competitors"
+      - id: B14
+        title: "success metrics (baseline, target, data source, review date)"
+      - id: B15
+        title: "constraints"
+      - id: B16
+        title: "risks and assumptions"
+      - id: B17
+        title: "growth path 10x/100x"
+      - id: B18
+        title: "out of scope"
+      - id: B19
+        title: "platform ruling and size"
+      - id: B20
+        title: "jobs-to-be-done"
+      - id: B21
+        title: "riskiest-assumption tests"
+      - id: B22
+        title: "money flows (payments, refunds, chargebacks, payouts, VAT)"
+      - id: B23
+        title: "business-rules catalogue (BR-n)"
+      - id: B24
+        title: "tenancy model"
+      - id: B25
+        title: "customer support and SLAs"
+      - id: B26
+        title: "accessibility obligation per market"
+      - id: B27
+        title: "top three ISO 25010 qualities from the business view"
+  "1":
+    name: "Research"
+    role: "research analyst / technical due diligence"
+    blockers: "uncited legal or cost claim."
+    gate: "`cite-lint` (every claim has URL and date; links resolve)."
+    topics:
+      - id: R1
+        title: "open questions"
+      - id: R2
+        title: "competitor teardown (3–5 real products)"
+      - id: R3
+        title: "user expectations"
+      - id: R4
+        title: "legal with dated authoritative sources"
+      - id: R5
+        title: "technical options compared"
+      - id: R6
+        title: "third-party providers"
+      - id: R7
+        title: "cost model at launch/10x/100x"
+      - id: R8
+        title: "prior art and reuse"
+      - id: R9
+        title: "decision log (ADRs)"
+      - id: R10
+        title: "BRD changes"
+      - id: R11
+        title: "source quality (URL + retrieval date, primary over secondary)"
+      - id: R12
+        title: "build vs buy, lock-in, exit cost"
+      - id: R13
+        title: "licence compatibility"
+      - id: R14
+        title: "provider SLAs, quotas, data residency"
+      - id: R15
+        title: "feasibility spikes"
+      - id: R16
+        title: "new risks fed back to B16"
+  "2":
+    name: "PRD"
+    role: "senior PM / requirements engineer"
+    blockers: "untestable AC or missing authorization rule."
+    gate: "`ears-lint` (each AC matches an EARS template; no vague terms such as fast, user-friendly, appropriate, etc., TBD; no compound requirements; every NFR has number and unit; role × action matrix complete)."
+    notes: "Evidence: PRD, AC.json."
+    topics:
+      - id: P1
+        title: "stories traced to goals"
+      - id: P2
+        title: "EARS acceptance criteria"
+      - id: P3
+        title: "role × action matrix incl. who must not"
+      - id: P4
+        title: "entity rules"
+      - id: P5
+        title: "every screen state"
+      - id: P6
+        title: "validation rules"
+      - id: P7
+        title: "notifications"
+      - id: P8
+        title: "admin and audit"
+      - id: P9
+        title: "search/filter/sort/pagination"
+      - id: P10
+        title: "measurable NFRs"
+      - id: P11
+        title: "analytics events"
+      - id: P12
+        title: "migration and seed data"
+      - id: P13
+        title: "release slicing"
+      - id: P14
+        title: "open questions"
+      - id: P15
+        title: "traceability"
+      - id: P16
+        title: "≥1 unwanted-behaviour AC per story"
+      - id: P17
+        title: "limits and quotas"
+      - id: P18
+        title: "privacy ACs (consent, export, deletion)"
+      - id: P19
+        title: "audit log"
+      - id: P20
+        title: "accessibility ACs"
+      - id: P21
+        title: "i18n/RTL ACs"
+      - id: P22
+        title: "glossary"
+      - id: P23
+        title: "story map with walking skeleton"
+  "3":
+    name: "HLD"
+    role: "staff architect"
+    blockers: "no tenant-isolation design, or an unaddressed H1 trade-off."
+    gate: "LikeC4 build exits 0; `.dependency-cruiser.cjs` rules name the H4 modules; every container appears in H4/H13; every H1 attribute has a measurable scenario."
+    topics:
+      - id: H1
+        title: "quality attributes ranked with trade-offs"
+      - id: H2
+        title: "C4 context and containers as LikeC4 source"
+      - id: H3
+        title: "architecture style with alternatives"
+      - id: H4
+        title: "module boundaries"
+      - id: H5
+        title: "data architecture"
+      - id: H6
+        title: "performance design and budgets"
+      - id: H7
+        title: "scalability"
+      - id: H8
+        title: "concurrency and integrity"
+      - id: H9
+        title: "integrations and failure behaviour"
+      - id: H10
+        title: "security architecture"
+      - id: H11
+        title: "reliability, backups, RTO/RPO"
+      - id: H12
+        title: "observability"
+      - id: H13
+        title: "deployment and rollback"
+      - id: H14
+        title: "cost"
+      - id: H15
+        title: "technology choices as ADRs"
+      - id: H16
+        title: "future-proofing"
+      - id: H17
+        title: "multi-tenancy isolation"
+      - id: H18
+        title: "privacy and data residency"
+      - id: H19
+        title: "i18n/RTL architecture"
+      - id: H20
+        title: "fitness functions as dependency-cruiser rules"
+      - id: H21
+        title: "operability for a solo operator"
+      - id: H22
+        title: "ATAM risks, sensitivity and trade-off points"
+      - id: H23
+        title: "readiness for native clients"
+  "4":
+    name: "Threat Model"
+    role: "security architect"
+    blockers: "unmitigated high-impact authz or tenant threat."
+    gate: "pytm model (`tm/model.py`) runs and exits 0; every T-ID has a SEC-ID or accepted-risk record; SEC-CONTROLS.csv maps SEC-ID → T-ID → ASVS ID → verification method; ASVS IDs exist in 5.0.0."
+    topics:
+      - id: T1
+        title: "assets"
+      - id: T2
+        title: "data flows and trust boundaries"
+      - id: T3
+        title: "STRIDE per element"
+      - id: T4
+        title: "abuse cases"
+      - id: T5
+        title: "authorization/IDOR"
+      - id: T6
+        title: "authentication attacks"
+      - id: T7
+        title: "injection and input"
+      - id: T8
+        title: "privacy threats (LINDDUN categories)"
+      - id: T9
+        title: "supply chain"
+      - id: T10
+        title: "business-logic races"
+      - id: T11
+        title: "controls mapped to OWASP ASVS 5.0.0 IDs (V1–V17)"
+      - id: T12
+        title: "residual risk"
+      - id: T13
+        title: "cross-tenant threats (queries, caches, files, jobs)"
+      - id: T14
+        title: "feature abuse"
+      - id: T15
+        title: "detection and alerting (Top 10:2025 A09)"
+      - id: T16
+        title: "exceptional conditions and fail-open paths (A10)"
+      - id: T17
+        title: "secrets and key management"
+      - id: T18
+        title: "third-party trust (webhook signatures, SSRF, OAuth redirects)"
+      - id: T19
+        title: "AI/LLM features or N/A"
+      - id: T20
+        title: "ASVS level with reason"
+  "5":
+    name: "LLD"
+    role: "staff engineer / API designer"
+    blockers: "missing authz or tenant scope; unapproved breaking change."
+    gate: "Redocly exits 0; vacuum OWASP ruleset clean; oasdiff against the last released spec shows no ERR without an approving ADR; squawk clean on Postgres migrations (N/A for SQLite); every operation has security, operationId, problem+json errors and an L15 row."
+    topics:
+      - id: L1
+        title: "OpenAPI contract"
+      - id: L2
+        title: "error model (RFC 9457 problem details)"
+      - id: L3
+        title: "API conventions"
+      - id: L4
+        title: "schema, indexes, migrations"
+      - id: L5
+        title: "state machines"
+      - id: L6
+        title: "key sequences"
+      - id: L7
+        title: "concurrency details"
+      - id: L8
+        title: "module design"
+      - id: L9
+        title: "background jobs"
+      - id: L10
+        title: "configuration"
+      - id: L11
+        title: "test strategy"
+      - id: L12
+        title: "traceability"
+      - id: L13
+        title: "idempotency and retries"
+      - id: L14
+        title: "pagination/filter/sort contract"
+      - id: L15
+        title: "endpoint authorization map (operation → permission → tenant rule)"
+      - id: L16
+        title: "versioning and deprecation"
+      - id: L17
+        title: "zero-downtime expand/contract migrations"
+      - id: L18
+        title: "caching and ETags"
+      - id: L19
+        title: "rate limits per endpoint"
+      - id: L20
+        title: "events and webhooks"
+      - id: L21
+        title: "tenant scoping in data access"
+      - id: L22
+        title: "critical invariants and how each is proven"
+  "6":
+    name: "UX"
+    role: "design lead"
+    blockers: "WCAG AA failure on a core journey or a missing state on a P1 screen."
+    gate: "tokens.json schema; own contrast script (body text ≥ 4.5:1); screen × state matrix CSV complete and covering every PRD screen; stylelint logical-properties rule in the product."
+    topics:
+      - id: U1
+        title: "information architecture"
+      - id: U2
+        title: "flows"
+      - id: U3
+        title: "design system"
+      - id: U4
+        title: "every screen, every state"
+      - id: U5
+        title: "responsive"
+      - id: U6
+        title: "accessibility WCAG 2.2 AA"
+      - id: U7
+        title: "languages and RTL"
+      - id: U8
+        title: "content and microcopy"
+      - id: U9
+        title: "motion"
+      - id: U10
+        title: "brand"
+      - id: U11
+        title: "usability check"
+      - id: U12
+        title: "tokens in W3C DTCG format with computed contrast"
+      - id: U13
+        title: "component × state inventory"
+      - id: U14
+        title: "forms and error recovery"
+      - id: U15
+        title: "system states per screen"
+      - id: U16
+        title: "LCP/INP/CLS budgets"
+      - id: U17
+        title: "themes"
+      - id: U18
+        title: "RTL rules (mirroring, non-mirrored icons, numerals, bidi)"
+      - id: U19
+        title: "email and notification templates"
+      - id: U20
+        title: "touch targets and gesture alternatives"
+  "6b":
+    name: "Provisioning"
+    role: "platform engineer"
+    blockers: "a production credential reachable by the agent, or MFA missing."
+    gate: "dotenvx check; .env.example lists every key the code reads; gitleaks clean; Trivy config scan. The agent never holds live credentials."
+    topics:
+      - id: V1
+        title: "accounts"
+      - id: V2
+        title: "secrets and keys"
+      - id: V3
+        title: "environments"
+      - id: V4
+        title: "domains and email"
+      - id: V5
+        title: "quotas and costs"
+      - id: V6
+        title: "test data"
+      - id: V7
+        title: "readiness check"
+      - id: V8
+        title: "least-privilege IAM and MFA"
+      - id: V9
+        title: "spend caps"
+      - id: V10
+        title: "account recovery / break-glass"
+      - id: V11
+        title: "SPF, DKIM, DMARC"
+      - id: V12
+        title: "environment parity, no production data elsewhere"
+      - id: V13
+        title: "infrastructure record"
+      - id: V14
+        title: "secret rotation"
+      - id: V15
+        title: "sandbox vs live keys"
+  "7":
+    name: "Implementation"
+    role: "tech lead"
+    blockers: "security or tenant defect; a test weakened or skipped to pass."
+    gate: "`tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a TASK; every closed TASK links its tests."
+    topics:
+      - id: I1
+        title: "task breakdown TASK → AC"
+      - id: I2
+        title: "definition of done per task"
+      - id: I3
+        title: "slice order (walking skeleton, riskiest first)"
+      - id: I4
+        title: "TypeScript strict, no unexplained any"
+      - id: I5
+        title: "ESLint with type-aware rules"
+      - id: I6
+        title: "dependency-cruiser rules pass"
+      - id: I7
+        title: "knip clean"
+      - id: I8
+        title: "complexity and file-size limits"
+      - id: I9
+        title: "error handling and structured logging"
+      - id: I10
+        title: "secure coding: validation, authz per handler, tenant scope"
+      - id: I11
+        title: "no hard-coded user-facing strings"
+      - id: I12
+        title: "squawk-clean migrations"
+      - id: I13
+        title: "review findings resolved or waived"
+      - id: I14
+        title: "ADR for every deviation from the LLD"
+      - id: I15
+        title: "Conventional Commits"
+  "8":
+    name: "Testing"
+    role: "SDET / QA lead"
+    blockers: "untested P1 AC, missing cross-tenant deny test, lowered threshold."
+    gate: "JUnit, coverage JSON, ac-trace.json (no AC without a passing test), Stryker mutation.json threshold by size, Schemathesis report, axe JSON, no skipped test without waiver."
+    topics:
+      - id: TS1
+        title: "strategy incl. what is not tested and why"
+      - id: TS2
+        title: "AC traceability (`@AC-id` tags)"
+      - id: TS3
+        title: "partitions, boundaries, decision tables, state transitions"
+      - id: TS4
+        title: "a test per unwanted-behaviour AC"
+      - id: TS5
+        title: "authz matrix allow and deny incl. cross-tenant"
+      - id: TS6
+        title: "real-database integration (Testcontainers)"
+      - id: TS7
+        title: "HTTP doubles (MSW), no live third-party calls"
+      - id: TS8
+        title: "contract tests (Schemathesis, ephemeral environment only)"
+      - id: TS9
+        title: "property tests for L22 invariants (fast-check)"
+      - id: TS10
+        title: "mutation score (Stryker)"
+      - id: TS11
+        title: "line/branch coverage"
+      - id: TS12
+        title: "test-data builders"
+      - id: TS13
+        title: "zero retries in the gate, quarantine list with expiry"
+      - id: TS14
+        title: "axe checks"
+      - id: TS15
+        title: "i18n missing-key and pseudo-locale/RTL checks"
+      - id: TS16
+        title: "defect register"
+  "9":
+    name: "Security Verification"
+    role: "AppSec engineer"
+    blockers: "unresolved Critical/High; unverified authz or tenant control."
+    gate: "SARIF from Semgrep, gitleaks, Trivy, ZAP, Claude Security; OSV JSON; sbom.cdx.json; SEC-VERIFICATION.csv; tool versions recorded; no open High/Critical without recorded acceptance. ZAP: passive baseline via Docker CLI against a disposable environment only."
+    topics:
+      - id: SV1
+        title: "scope and ASVS level"
+      - id: SV2
+        title: "SAST"
+      - id: SV3
+        title: "SCA"
+      - id: SV4
+        title: "secrets in full history"
+      - id: SV5
+        title: "container images"
+      - id: SV6
+        title: "config/IaC"
+      - id: SV7
+        title: "DAST passive baseline (ZAP)"
+      - id: SV8
+        title: "API negative and fuzz tests"
+      - id: SV9
+        title: "authz/IDOR evidence"
+      - id: SV10
+        title: "authentication, sessions, tokens"
+      - id: SV11
+        title: "CycloneDX SBOM (Trivy)"
+      - id: SV12
+        title: "licence allow-list"
+      - id: SV13
+        title: "headers, TLS, cookies"
+      - id: SV14
+        title: "evidence for every SEC-ID"
+      - id: SV15
+        title: "triage of SF-n findings"
+      - id: SV16
+        title: "human residual-risk acceptance"
+      - id: SV17
+        title: "MASVS or N/A"
+  "10a":
+    name: "Live Verification"
+    role: "QA lead / exploratory tester"
+    blockers: "unexercised P1 AC or element; \"verified\" by reading code."
+    gate: "LV-INVENTORY.csv covers 100% of U13; every P1 AC has a trace; LHCI JSON; axe JSON."
+    topics:
+      - id: LV1
+        title: "element inventory from U13"
+      - id: LV2
+        title: "trace or video per P1 AC"
+      - id: LV3
+        title: "every role incl. forbidden attempts by UI and URL"
+      - id: LV4
+        title: "every state observed"
+      - id: LV5
+        title: "every locale incl. RTL"
+      - id: LV6
+        title: "all breakpoints + one mobile device or emulation"
+      - id: LV7
+        title: "axe + keyboard pass"
+      - id: LV8
+        title: "Lighthouse CI assertions"
+      - id: LV9
+        title: "no console errors or failed requests"
+      - id: LV10
+        title: "notifications received"
+      - id: LV11
+        title: "sandbox payments (success, failure, refund)"
+      - id: LV12
+        title: "browsers by size"
+      - id: LV13
+        title: "defects with repro and trace"
+  "10b":
+    name: "Regression"
+    role: "SDET"
+    blockers: "uncovered critical journey; flaky gate test."
+    topics:
+      - id: RG1
+        title: "scope (all P1 ACs, critical journeys)"
+      - id: RG2
+        title: "Playwright E2E tagged by AC"
+      - id: RG3
+        title: "API regression (Schemathesis + oasdiff)"
+      - id: RG4
+        title: "visual baselines LTR and RTL (Playwright toHaveScreenshot, baselines in repo)"
+      - id: RG5
+        title: "Maestro mobile flows or N/A"
+      - id: RG6
+        title: "flakiness check (repeat-each, zero retries)"
+      - id: RG7
+        title: "runtime budget"
+      - id: RG8
+        title: "data reset"
+      - id: RG9
+        title: "ownership"
+      - id: RG10
+        title: "runs on every PR"
+  "10c":
+    name: "Concurrency and Load"
+    role: "SRE / performance engineer"
+    blockers: "invariant violation; SLO miss without ADR; thresholds set after seeing results."
+    gate: "k6 JUnit and summary; thresholds in the script equal CL2; invariant output shows 0 violations. k6 is AGPL: run the unmodified binary, never vendor or patch it."
+    topics:
+      - id: CL1
+        title: "workload model"
+      - id: CL2
+        title: "p95/p99 and error-rate thresholds from SLOs"
+      - id: CL3
+        title: "load, stress, spike (+ soak for M/L)"
+      - id: CL4
+        title: "race tests with SQL invariant checks"
+      - id: CL5
+        title: "slow queries, EXPLAIN, locks, deadlocks"
+      - id: CL6
+        title: "fault injection (M/L)"
+      - id: CL7
+        title: "backpressure and rate limits"
+      - id: CL8
+        title: "capacity headroom"
+      - id: CL9
+        title: "results vs H6 budgets"
+      - id: CL10
+        title: "stated differences from production"
+  "11":
+    name: "Release"
+    role: "release manager / SRE"
+    blockers: "no rehearsed rollback or restore; unpinned or injectable workflow."
+    topics:
+      - id: RL1
+        title: "CI re-runs every gate tool at pinned versions"
+      - id: RL2
+        title: "actions pinned by 40-char SHA, least-privilege permissions, zizmor and actionlint clean"
+      - id: RL3
+        title: "SBOM attached (+ provenance for L)"
+      - id: RL4
+        title: "production environment with required human reviewer"
+      - id: RL5
+        title: "migration order and pre-deploy backup"
+      - id: RL6
+        title: "rehearsed, timed rollback"
+      - id: RL7
+        title: "kill switches"
+      - id: RL8
+        title: "canary/blue-green (L)"
+      - id: RL9
+        title: "smoke tests"
+      - id: RL10
+        title: "logs, metrics, traces, error tracking"
+      - id: RL11
+        title: "SLOs and alerts"
+      - id: RL12
+        title: "uptime check"
+      - id: RL13
+        title: "timed restore drill vs RTO/RPO"
+      - id: RL14
+        title: "runbooks"
+      - id: RL15
+        title: "changelog (release-please)"
+      - id: RL16
+        title: "docs"
+      - id: RL17
+        title: "privacy policy, terms, cookie consent, accessibility statement"
+      - id: RL18
+        title: "human go/no-go record"
+  "11b":
+    name: "Store Release"
+    role: "mobile release manager"
+    blockers: "privacy-label mismatch."
+    topics:
+      - id: SR1
+        title: "human-owned store accounts"
+      - id: SR2
+        title: "signing-key custody"
+      - id: SR3
+        title: "versioning"
+      - id: SR4
+        title: "privacy labels / data-safety form mapped from the SBOM and SDK list"
+      - id: SR5
+        title: "review pre-check (demo account, in-app account deletion, purchase rules, UGC moderation)"
+      - id: SR6
+        title: "localized metadata and screenshots incl. RTL"
+      - id: SR7
+        title: "age rating"
+      - id: SR8
+        title: "permission purpose strings"
+      - id: SR9
+        title: "TestFlight/internal tracks"
+      - id: SR10
+        title: "phased rollout and halt criteria"
+      - id: SR11
+        title: "crash-free threshold"
+      - id: SR12
+        title: "OTA policy or N/A"
+      - id: SR13
+        title: "export compliance"
+  "12":
+    name: "Retro"
+    role: "engineering manager"
+    gated: false
+    blockers: "a change to MOADIX rules without approval."
+    topics:
+      - id: RT1
+        title: "timeline"
+      - id: RT2
+        title: "metrics (DORA four keys, phase cycle times, critic findings by severity, escaped defects) computed from git and the ledger"
+      - id: RT3
+        title: "blameless went-well/went-poorly"
+      - id: RT4
+        title: "contributing factors"
+      - id: RT5
+        title: "MOADIX process changes"
+      - id: RT6
+        title: "lessons queue, applied only after operator approval"
+      - id: RT7
+        title: "actions with owner and date"
+      - id: RT8
+        title: "cost (time, tokens, money)"
+      - id: RT9
+        title: "tech-debt register"
+      - id: RT10
+        title: "CLAUDE.md updates as approved diffs"
+  "B":
+    name: "Baseline"
+    role: "staff engineer doing technical due diligence on an existing codebase"
+    blockers: "inferred behaviour presented as fact."
+    topics:
+      - id: BL1
+        title: "system inventory"
+      - id: BL2
+        title: "as-is C4 (LikeC4)"
+      - id: BL3
+        title: "dependency graph and cycles"
+      - id: BL4
+        title: "dead code"
+      - id: BL5
+        title: "as-is schema"
+      - id: BL6
+        title: "API inventory and drift"
+      - id: BL7
+        title: "as-is BRD/PRD, each item tagged observed / inferred / unknown"
+      - id: BL8
+        title: "test inventory (+ mutation on hotspots)"
+      - id: BL9
+        title: "hotspots (churn × complexity from `git log --numstat`)"
+      - id: BL10
+        title: "security baseline (phase 9 scanners)"
+      - id: BL11
+        title: "as-is threat model (pytm)"
+      - id: BL12
+        title: "ops baseline"
+      - id: BL13
+        title: "known gaps and risks"
+      - id: BL14
+        title: "characterization tests for top hotspots"
+      - id: BL15
+        title: "frozen baseline tag. Also: the gate runs the product's existing test suite in the declared non-production environment"
+feature_topics:
+  blockers: "frozen-document change without a superseding ADR."
+  topics:
+    - id: FC1
+      title: "feature brief vs frozen BRD"
+      phase: "0"
+    - id: FC2
+      title: "impacted documents"
+      phase: "0"
+    - id: FC3
+      title: "new AC IDs, never reused"
+      phase: "2"
+    - id: FC4
+      title: "superseding ADRs for conflicts"
+      phase: "3"
+    - id: FC5
+      title: "oasdiff result (breaking change needs ADR + deprecation plan)"
+      phase: "5"
+    - id: FC6
+      title: "expand/contract migration"
+      phase: "5"
+    - id: FC7
+      title: "threat-model delta"
+      phase: "4"
+    - id: FC8
+      title: "regression impact"
+      phase: "10b"
+    - id: FC9
+      title: "flag and rollout"
+      phase: "11"
+    - id: FC10
+      title: "merge-back after release"
+      phase: "11"
+    - id: FC11
+      title: "feature size class. Feature additions get the full product-document validators, not a lighter check"
+      phase: "0"
+sizes:
+  S:
+    profile: "at most about five entities, no payments, one locale, low risk"
+    na:
+      - topic: B17
+        partial: "the 100x growth path"
+        reason: "Size S default: only the 10x growth path is needed; a 100x path is not planned for a product of at most about five entities, no payments and one locale."
+      - topic: B24
+        reason: "Size S default: a small, low-risk product has a single tenant, so there is no tenancy model to choose."
+      - topic: H17
+        reason: "Size S default: single tenant (B24 is N/A at size S), so there is no multi-tenancy isolation to design."
+      - topic: H22
+        reason: "Size S default: a formal ATAM pass is not repaid at size S; the H1 trade-offs are still recorded."
+      - topic: H23
+        reason: "Size S default: no native client is planned for a small product, so native-client readiness is not designed."
+      - topic: T19
+        reason: "Size S default: a small, low-risk product has no AI/LLM feature; if it has one, the operator turns T19 on."
+      - topic: L20
+        reason: "Size S default: a small product publishes no events or webhooks to third parties."
+      - topic: L22
+        partial: "the formal proof of each invariant"
+        reason: "Size S default: critical invariants are still listed and tested; only formal proofs are N/A."
+      - topic: U17
+        reason: "Size S default: one theme; alternative themes are not repaid at size S."
+      - topic: V13
+        reason: "Size S default: the environment is small enough that the readiness check (V7) records it; a separate infrastructure record is not kept."
+      - topic: TS10
+        reason: "Size S default: mutation testing (Stryker) is not required at size S; line and branch coverage (TS11) still apply."
+      - topic: CL3
+        partial: "the soak test"
+        reason: "Size S default: load, stress and spike tests still run; the soak test is N/A at size S."
+      - topic: CL6
+        reason: "Size S default: fault injection is required only at sizes M and L."
+      - topic: RL3
+        reason: "Size S default: an SBOM attachment and provenance are not required at size S; the phase-9 SBOM (SV11) still exists."
+      - topic: RL7
+        reason: "Size S default: a small product is rolled back as a whole (RL6); per-feature kill switches are not required."
+      - topic: RL8
+        reason: "Size S default: canary and blue-green releases are required only at size L."
+      - phase: "11b"
+        when: no-mobile
+        reason: "Size S default with no mobile client in the platform ruling: there is no store release, so every phase-11b topic is N/A."
+  M:
+    profile: "multi-tenant or payments, RTL, public users"
+    na:
+      - topic: H23
+        when: no-mobile
+        reason: "Size M default with no mobile client in the platform ruling: native-client readiness is not designed."
+      - topic: T19
+        when: no-ai
+        reason: "Size M default: no AI/LLM feature is declared; if the product has one, the operator turns T19 on."
+      - topic: L22
+        partial: "the formal proof of each invariant"
+        reason: "Size M default: critical invariants are still listed and tested; only formal proofs are N/A."
+      - topic: RL3
+        partial: "the provenance attestation"
+        reason: "Size M default: the SBOM is attached; SLSA provenance is required only at size L."
+      - topic: RL8
+        reason: "Size M default: canary and blue-green releases are required only at size L."
+  L:
+    profile: "regulated data, high scale, native apps"
+    na: []
+turned_on:
+  S:
+    - what: "ASVS L1"
+      topic: T20
+      check: mention
+      arg: "(?i)\bL(?:evel\s*)?[123]\b"
+    - what: "ZAP passive baseline"
+      topic: SV7
+      check: not_na
+    - what: "timed restore drill"
+      topic: RL13
+      check: not_na
+  M:
+    - what: "ASVS L2"
+      topic: T20
+      check: mention
+      arg: "(?i)\b(?:L|level\s*)[23]\b"
+    - what: "pytm threat model as code"
+      topic: T3
+      check: mention
+      arg: "(?i)\bpytm\b"
+    - what: "Stryker mutation score of at least 70% on critical modules"
+      topic: TS10
+      check: min_percent
+      arg: "70"
+    - what: "Schemathesis contract tests"
+      topic: TS8
+      check: not_na
+    - what: "soak test"
+      topic: CL3
+      check: mention
+      arg: "(?i)\bsoak\b"
+    - what: "Lighthouse CI assertions"
+      topic: LV8
+      check: not_na
+  L:
+    - what: "ASVS L2 or L3"
+      topic: T20
+      check: mention
+      arg: "(?i)\b(?:L|level\s*)[23]\b"
+    - what: "PASTA threat analysis"
+      topic: T3
+      check: mention
+      arg: "(?i)\bPASTA\b"
+    - what: "one or two formal invariants"
+      topic: L22
+      check: mention
+      arg: "(?i)\bformal\b"
+    - what: "Stryker mutation score of at least 80%"
+      topic: TS10
+      check: min_percent
+      arg: "80"
+    - what: "fault injection"
+      topic: CL6
+      check: not_na
+    - what: "canary or blue-green release"
+      topic: RL8
+      check: not_na
+    - what: "SLSA provenance"
+      topic: RL3
+      check: mention
+      arg: "(?i)\b(SLSA|provenance)\b"
+    - what: "full phase 11b"
+      topic: SR1
+      check: not_na

@@ -154,6 +154,7 @@ def main():
                 env.update({k: os.environ[k] for k in GUARD_KEYS + ("MOADIX_TEST_GITHUB_TOKEN",) if k in os.environ})
             ruling, na = profile_na(root)
             results = []
+            minor = []  # increment 7 (Amendment 3 section 5): MINOR findings go to a file, not the summary
             for c in validators_for(label, "feature" if st.get("feature") else "product"):
                 vid = str(c.get("id"))
                 cmd = " ".join([str(c.get("module"))] + [str(a) for a in (c.get("args") or [])])
@@ -162,14 +163,24 @@ def main():
                                     "first_line": ("ruling %s: %s" % (ruling, na[vid][0]))[:200], "output": ""})
                     continue
                 rc, out = run_one(root, c, env)
-                first = next((ln for ln in out.splitlines() if ln.strip()), "")
+                minor += ["%s: %s" % (vid, ln.strip()[len("MINOR "):]) for ln in out.splitlines()
+                          if ln.strip().startswith("MINOR ")]
+                first = next((ln for ln in out.splitlines() if ln.strip() and not ln.strip().startswith("MINOR ")),
+                             "")
                 results.append({"validator": vid, "command": cmd, "exit_code": rc, "result": result_of(rc),
                                 "first_line": first[:200], "output": out[-6000:]})
         verdict = "pass" if all(r["result"] in ("pass", "n/a-by-profile") for r in results) else (
             "unknown" if any(r["result"] == "unknown" for r in results) and
             not any(r["result"] == "fail" for r in results) else "fail")
+        mf = validation.minor_file(root, label, st)
+        os.makedirs(os.path.dirname(mf), exist_ok=True)
+        with open(mf + ".tmp", "w") as f:
+            f.write("# MINOR findings, phase %s (%s), commit %s. Never blocking; not shown in APPROVE or REVIEW.\n" % (
+                label, validation.scope_of(st), k.get("commit") if isinstance(k, dict) else ""))
+            f.write("".join("- %s\n" % m for m in minor) or "(none)\n")
+        os.replace(mf + ".tmp", mf)
         data = {"version": 1, "phase": label, "scope": validation.scope_of(st), "key": k, "started_at": started,
-                "finished_at": now(),
+                "finished_at": now(), "minor": len(minor), "minor_file": os.path.relpath(mf, root),
                 "verdict": verdict, "results": results}
         tmpf = validation.cache_file(root, label) + ".tmp"
         with open(tmpf, "w") as f:

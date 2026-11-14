@@ -57,29 +57,30 @@ PROTECTED_EXTERNAL = [
     ("~/.profile", "shell-rc", "sets launch-time environment for Claude Code"),
 ]
 
-# v1 phases (id, label, name, allow globs relative to the repo root).
+# v1 phases (id, label, name, allow globs relative to the repo root). Increment 7 (Amendment 3): each
+# phase also owns sdlc/<label>/ (COVERAGE.md, DISCOVERY.md, adr/), and phase 4 owns tm/ (pytm).
 PHASES = [
-    (0, "0", "BRD", ["sdlc/00-*.md", "sdlc/00-forge/**"]),
-    (1, "1", "Research", ["sdlc/01-*.md", "sdlc/01-research/**", "sdlc/decisions/**"]),
-    (2, "2", "PRD", ["sdlc/02-*.md", "sdlc/02-prd/**"]),
-    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/03-architecture/**", "sdlc/adr/**"]),
-    (4, "4", "Threat Model", ["sdlc/04-*.md"]),
-    (5, "5", "LLD", ["sdlc/05-*.md", "sdlc/05-lld/**", "api/**", "openapi/**"]),
-    (6, "6", "UX", ["sdlc/06-*.md", "design/**"]),
-    (7, "6b", "Provisioning", ["sdlc/06b-*.md", ".env.example"]),
+    (0, "0", "BRD", ["sdlc/00-*.md", "sdlc/00-forge/**", "sdlc/0/**"]),
+    (1, "1", "Research", ["sdlc/01-*.md", "sdlc/01-research/**", "sdlc/decisions/**", "sdlc/1/**"]),
+    (2, "2", "PRD", ["sdlc/02-*.md", "sdlc/02-prd/**", "sdlc/2/**"]),
+    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/03-architecture/**", "sdlc/adr/**", "sdlc/3/**"]),
+    (4, "4", "Threat Model", ["sdlc/04-*.md", "sdlc/4/**", "tm/**"]),
+    (5, "5", "LLD", ["sdlc/05-*.md", "sdlc/05-lld/**", "api/**", "openapi/**", "sdlc/5/**"]),
+    (6, "6", "UX", ["sdlc/06-*.md", "design/**", "sdlc/6/**"]),
+    (7, "6b", "Provisioning", ["sdlc/06b-*.md", ".env.example", "sdlc/6b/**"]),
     (8, "7", "Tasks and Implementation", [
         "sdlc/07-*.md", "src/**", "public/**", "package.json", "index.html", "mobile/**",
         "docker-compose.yml", "compose/**", "Dockerfile", ".dockerignore", "scripts/**",
         "package-lock.json", "tsconfig.json", "next.config.*", "next-env.d.ts", "drizzle.config.*",
         "vitest.config.*", "playwright.config.*", "eslint.config.*", ".prettierrc*", "prettier.config.*",
-        ".prettierignore", ".github/workflows/**", "tests/**"]),
-    (9, "8", "Testing", ["sdlc/08-*.md", "tests/**", "ui-tests/**", "test-results/**", "pytest.ini"]),
-    (10, "9", "Security Verification", ["sdlc/09-*.md", "security/**"]),
-    (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**"]),
-    (12, "10b", "Regression Suites", ["sdlc/10b-*.md", "e2e/**", "e2e-mobile/**", ".maestro/**", ".github/workflows/**"]),
-    (13, "10c", "Concurrency and Load", ["sdlc/10c-*.md", "evidence/concurrency/**", "load/**"]),
-    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/12-*.md", "sdlc/12-retro/**"]),
-    (15, "11b", "Store Release", ["sdlc/11b-*.md", "release/store/**", "release/assets/**"]),
+        ".prettierignore", ".github/workflows/**", "tests/**", "sdlc/7/**"]),
+    (9, "8", "Testing", ["sdlc/08-*.md", "tests/**", "ui-tests/**", "test-results/**", "pytest.ini", "sdlc/8/**"]),
+    (10, "9", "Security Verification", ["sdlc/09-*.md", "security/**", "sdlc/9/**"]),
+    (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**", "sdlc/10a/**"]),
+    (12, "10b", "Regression Suites", ["sdlc/10b-*.md", "e2e/**", "e2e-mobile/**", ".maestro/**", ".github/workflows/**", "sdlc/10b/**"]),
+    (13, "10c", "Concurrency and Load", ["sdlc/10c-*.md", "evidence/concurrency/**", "load/**", "sdlc/10c/**"]),
+    (14, "11", "Release", ["sdlc/11-*.md", "release/**", "sdlc/12-*.md", "sdlc/12-retro/**", "sdlc/11/**", "sdlc/12/**"]),
+    (15, "11b", "Store Release", ["sdlc/11b-*.md", "release/store/**", "release/assets/**", "sdlc/11b/**"]),
 ]
 LABELS = [p[1] for p in PHASES]
 # Increment 6 (item C): the BMAD skills' run folders (gate/config/bmad-adapter.yaml) are
@@ -93,7 +94,7 @@ LABELS = [p[1] for p in PHASES]
 # and services. After APPROVE B every change is a feature cycle.
 BASELINE = [
     (0, "B", "Baseline", ["sdlc/00-*.md", "sdlc/02-*.md", "sdlc/03-*.md", "sdlc/04-*.md", "sdlc/B-*.md",
-                          "sdlc/02-prd/**", "sdlc/03-architecture/**"]),
+                          "sdlc/02-prd/**", "sdlc/03-architecture/**", "sdlc/B/**"]),
 ]
 RELEASE = next(lab for _i, lab, name, _p in PHASES if name == "Release")  # the phase a feature's merge happens in
 FEATURES_DIR = "sdlc/features"

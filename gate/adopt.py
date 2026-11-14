@@ -154,6 +154,8 @@ def plan(root):
             raise ProposalError("%s/%s must be a non-empty YAML mapping" % (DIR, rel))
         parts = rel.split(os.sep)
         if len(parts) == 2 and parts[0] == "config" and parts[1] in hlib.PRODUCT_CONFIG:
+            if parts[1] == "coverage-overrides.yaml":
+                _validate_overrides(doc)
             target = os.path.join(root, state.SDLC, "config", parts[1])
             out.append((rel, target, raw, {"kind": "config"}))
         elif rel == "product.yaml":
@@ -182,6 +184,27 @@ def plan(root):
             raise ProposalError("%s/%s is not adoptable. Allowed: product.yaml (keys %s) and config/<name> for %s" % (
                 DIR, rel, ", ".join(PRODUCT_KEYS), ", ".join(sorted(hlib.PRODUCT_CONFIG))))
     return out
+
+
+def _validate_overrides(doc):
+    """Increment 7 (Amendment 3 section 2): the operator overrides the size rule. `turn_on` lists
+    topics whose size default N/A no longer applies; `na` rules topics N/A with a reason."""
+    from . import contract
+    bad = sorted(k for k in doc if k not in ("turn_on", "na"))
+    if bad:
+        raise ProposalError("coverage-overrides.yaml may only set turn_on and na; refused key(s): %s" % ", ".join(bad))
+    known = contract.all_topic_ids()
+    for t in doc.get("turn_on") or []:
+        if str(t) not in known:
+            raise ProposalError("coverage-overrides.yaml: turn_on names %r, which is not a coverage topic" % t)
+    for e in doc.get("na") or []:
+        if not isinstance(e, dict) or str(e.get("topic")) not in known:
+            raise ProposalError("coverage-overrides.yaml: each na entry names a coverage topic (topic: <id>)")
+        r = str(e.get("reason") or "").strip()
+        if contract._norm(r) in contract.BOILERPLATE or len(r.split()) < 4:
+            raise ProposalError("coverage-overrides.yaml: the N/A ruling for %s needs a real reason" % e["topic"])
+        if str(e["topic"]) in {str(t) for t in doc.get("turn_on") or []}:
+            raise ProposalError("coverage-overrides.yaml: %s is both turned on and ruled N/A" % e["topic"])
 
 
 def payload(root, items):

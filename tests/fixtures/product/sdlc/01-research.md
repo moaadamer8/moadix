@@ -5,4 +5,4 @@
 - **Status:** DECIDED
 - **Decision:** Store notes in SQLite.
 - **Alternatives considered:** a JSON file; Postgres.
-- **Primary source:** https://sqlite.org/whentouse.html
+- **Primary source:** https://sqlite.org/whentouse.html (retrieved 2026-11-01)

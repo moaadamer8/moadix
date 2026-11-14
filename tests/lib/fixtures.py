@@ -140,9 +140,13 @@ class Env(object):
         rc, out, err = self.hook("stop", {"hook_event_name": "Stop", "session_id": "g2", "cwd": cwd})
         return rc, out, err
 
-    def review_until_fresh(self, path, label, tries=60):
+    def review_until_fresh(self, path, label, tries=60, contract=True):
         """Increment 3 (ruling 2): the agent's turn ends (Stop hook), the gate runs the
-        validators, and the read-only REVIEW is polled until it shows a result."""
+        validators, and the read-only REVIEW is polled until it shows a result. Increment 7: the
+        phase first gets its contract files and clean gap-critic evidence (tests/lib/contract_fixture)."""
+        if contract:
+            import contract_fixture
+            contract_fixture.ready(self, path, label)
         self.stop(path)
         ctx = ""
         for _ in range(tries):

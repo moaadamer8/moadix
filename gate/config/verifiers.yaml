@@ -24,6 +24,16 @@ roles:
     phase: "7"
     method: code-review
     when: always
+    # increment 7 (operator instruction): the phase-7 implementation rules. A finding tagged with
+    # one of these `rule` ids is a MAJOR: it blocks APPROVE 7 unless the operator WAIVEs
+    # code-reviewer.<finding id> with a reason (a high or critical one stays unwaivable).
+    major_rules:
+      - id: R7-1
+        text: "Make the smallest change that meets the requirement."
+      - id: R7-2
+        text: "Do not touch code the task does not need."
+      - id: R7-3
+        text: "Do not add anything nobody asked for."
     scope:
       - "src/**"
       - "public/**"
@@ -90,3 +100,17 @@ roles:
     baseline: true
     when: always
     scope: ["sdlc/00-*.md", "sdlc/02-*.md", "sdlc/03-*.md", "sdlc/04-*.md", "sdlc/B-*.md"]
+# increment 7 (Amendment 3 section 1): one fresh-context gap critic per gated phase (product,
+# baseline and feature scope). `phase: "*"` schedules it in every phase that has coverage
+# topics and an APPROVE (gate/config/coverage-topics.yaml; not 12). Its brief comes from the
+# gate's topic catalogue; its evidence is CRITIC.json (gate/config/critic.schema.json),
+# checked by gate/contract.py critic_check: an open BLOCKER refuses APPROVE and cannot be
+# waived; a MAJOR refuses APPROVE until the operator WAIVEs gap-critic.<topic> with a reason;
+# MINORs go to the operator's file. A critic never passes a phase. Its required paths are
+# every file of the phase's documents at HEAD, not only the changed ones.
+  - agent: gap-critic
+    phase: "*"
+    method: null
+    critic: true
+    when: always
+    scope: []

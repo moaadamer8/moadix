@@ -514,3 +514,268 @@ components:
     phase: B
     status: active
     module: check_seam
+# increment 7 (Amendment 3 section 1): the cross-phase contract's linters (gate/contract.py) in
+# every gated phase, product and feature scope; phase B below. Phase 12 has no APPROVE (see the
+# increment-7 report), so it has no entry.
+  - id: check-contract-0
+    kind: validator
+    scope: both
+    phase: 0
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 0
+  - id: check-contract-1
+    kind: validator
+    scope: both
+    phase: 1
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 1
+  - id: check-contract-2
+    kind: validator
+    scope: both
+    phase: 2
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 2
+  - id: check-contract-3
+    kind: validator
+    scope: both
+    phase: 3
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 3
+  - id: check-contract-4
+    kind: validator
+    scope: both
+    phase: 4
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 4
+  - id: check-contract-5
+    kind: validator
+    scope: both
+    phase: 5
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 5
+  - id: check-contract-6
+    kind: validator
+    scope: both
+    phase: 6
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 6
+  - id: check-contract-6b
+    kind: validator
+    scope: both
+    phase: 6b
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 6b
+  - id: check-contract-7
+    kind: validator
+    scope: both
+    phase: 7
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 7
+  - id: check-contract-8
+    kind: validator
+    scope: both
+    phase: 8
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 8
+  - id: check-contract-9
+    kind: validator
+    scope: both
+    phase: 9
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 9
+  - id: check-contract-10a
+    kind: validator
+    scope: both
+    phase: 10a
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 10a
+  - id: check-contract-10b
+    kind: validator
+    scope: both
+    phase: 10b
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 10b
+  - id: check-contract-10c
+    kind: validator
+    scope: both
+    phase: 10c
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 10c
+  - id: check-contract-11
+    kind: validator
+    scope: both
+    phase: 11
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 11
+  - id: check-contract-11b
+    kind: validator
+    scope: both
+    phase: 11b
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - 11b
+  - id: check-contract-B
+    kind: validator
+    phase: B
+    status: active
+    module: check_contract
+    args:
+      - --phase
+      - B
+# increment 7: the gap critic (moadix:gap-critic) is a verifier in every gated phase, so every phase
+# checks its verifiers' evidence (6, 7, 8, 10a and B already did).
+  - id: check-verifiers-0
+    kind: validator
+    scope: both
+    phase: 0
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 0
+  - id: check-verifiers-1
+    kind: validator
+    scope: both
+    phase: 1
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 1
+  - id: check-verifiers-2
+    kind: validator
+    scope: both
+    phase: 2
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 2
+  - id: check-verifiers-3
+    kind: validator
+    scope: both
+    phase: 3
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 3
+  - id: check-verifiers-4
+    kind: validator
+    scope: both
+    phase: 4
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 4
+  - id: check-verifiers-5
+    kind: validator
+    scope: both
+    phase: 5
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 5
+  - id: check-verifiers-6b
+    kind: validator
+    scope: both
+    phase: 6b
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 6b
+  - id: check-verifiers-9
+    kind: validator
+    scope: both
+    phase: 9
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 9
+  - id: check-verifiers-10b
+    kind: validator
+    scope: both
+    phase: 10b
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 10b
+  - id: check-verifiers-10c
+    kind: validator
+    scope: both
+    phase: 10c
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 10c
+  - id: check-verifiers-11
+    kind: validator
+    scope: both
+    phase: 11
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 11
+  - id: check-verifiers-11b
+    kind: validator
+    scope: both
+    phase: 11b
+    status: active
+    module: check_verifiers
+    args:
+      - --phase
+      - 11b

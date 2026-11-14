@@ -7,19 +7,19 @@ bmad_version: "6.12.4"
 commit: bab9082c3e884e0d72c759bcd1a6d90bcc01be84
 scripts: [memlog.py, resolve_config.py, resolve_customization.py, config_utils.py]
 skills:
-  - skill: bmad-forge-idea
+  - skill: forge-idea
     phase: "0"
     key: forge_output_path
     output: "{project-root}/sdlc/00-forge"
-  - skill: bmad-deep-recon
+  - skill: deep-recon
     phase: "1"
     key: research_output_path
     output: "{project-root}/sdlc/01-research"
-  - skill: bmad-prd
+  - skill: prd
     phase: "2"
     key: prd_output_path
     output: "{project-root}/sdlc/02-prd"
-  - skill: bmad-architecture
+  - skill: architecture
     phase: "3"
     key: spine_output_path
     output: "{project-root}/sdlc/03-architecture"

@@ -29,6 +29,8 @@ def trigger(cwd):
             return False, "gate state failed its integrity check"
         from . import bmadcore
         bmadcore.ensure(root)  # increment 6: BMad core's scripts in _bmad/ (gitignored: never dirties the tree)
+        from . import contract
+        contract.write_skeleton(root, st)  # increment 7: the pre-filled COVERAGE.md skeleton in .sdlc/coverage/
         started, status, detail = validation.ensure(root, st)
         return started, "%s: %s" % (status, detail)
     except Exception as e:  # never block the agent's turn from ending

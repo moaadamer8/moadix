@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.join(E.home, "gate", "v1"))
 os.environ.update(MOADIX_GUARD_ROOT=E.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD_SHIM=E.shim)
 import _testguard  # noqa: E402,F401
 from gate import pathmap, state  # noqa: E402
+import contract_fixture  # noqa: E402  (tests/lib, increment 7)
 import hlib  # noqa: E402
 import mcpclient  # noqa: E402
 
@@ -701,6 +702,7 @@ def test_live():
                          {"ac": "US-001/AC-2", "observed": "refused", "artifacts": ["playwright/save.png"]}],
             "buttons": [{"id": "BTN-%d" % i, "exercised": True, "observed": "ok",
                          "artifacts": ["playwright/trace-1.zip"]} for i in (1, 2, 3)]}
+    contract_fixture.critic(E, p, "10a")  # increment 7: the phase's gap critic needs clean evidence too
     rc, out = evidence(base)
     record("live", "clean: every AC and every button backed by trace/video artifacts passes", rc == 0,
            " ".join(out.split())[:300])

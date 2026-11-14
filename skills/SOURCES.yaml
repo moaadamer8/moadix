@@ -1,10 +1,12 @@
 # Vendored skills: where each one comes from (DESIGN.md §6, increment 3).
-# Pinned at the commit below; fetched 2026-11-11. Every change MOADIX made is in
+# Pinned at the commit below; each entry's `retrieved` is the date it was fetched (increment 7 records it per entry). Every change MOADIX made is in
 # skills/<name>/MOADIX-CHANGES.md (removed self-approve / mark-done / auto-advance /
 # commit / merge / ship steps, and adaptations). Policy: skills/VENDORING.md.
 # Licence obligations from Amendment 1 §6 are marked `obligation:`.
 skills:
-  - name: bmad-forge-idea
+  - name: forge-idea
+    retrieved: 2026-11-11
+    upstream_name: bmad-forge-idea   # renamed in increment 7: no MOADIX name carries the BMad mark (Amendment 3 section 1)
     phases: ["0"]
     source: https://github.com/bmad-code-org/BMAD-METHOD
     ref: v6.12.4
@@ -14,7 +16,9 @@ skills:
     copyright: Copyright (c) 2025 BMad Code, LLC
     attribution: BMad Method by BMad Code, LLC. BMad is a trademark of BMad Code, LLC; MOADIX is not affiliated with it.
     licence_files: [LICENSE]
-  - name: bmad-deep-recon
+  - name: deep-recon
+    retrieved: 2026-11-11
+    upstream_name: bmad-deep-recon   # renamed in increment 7: no MOADIX name carries the BMad mark (Amendment 3 section 1)
     phases: ["1"]
     source: https://github.com/bmad-code-org/BMAD-METHOD
     ref: v6.12.4
@@ -24,7 +28,9 @@ skills:
     copyright: Copyright (c) 2025 BMad Code, LLC
     attribution: BMad Method by BMad Code, LLC.
     licence_files: [LICENSE]
-  - name: bmad-prd
+  - name: prd
+    retrieved: 2026-11-11
+    upstream_name: bmad-prd   # renamed in increment 7: no MOADIX name carries the BMad mark (Amendment 3 section 1)
     phases: ["2"]
     source: https://github.com/bmad-code-org/BMAD-METHOD
     ref: v6.12.4
@@ -41,7 +47,9 @@ skills:
         path: tools/cc-sdd/templates/shared/settings/rules/ears-format.md
         licence: MIT
         copyright: Copyright (c) 2025 gotalab
-  - name: bmad-architecture
+  - name: architecture
+    retrieved: 2026-11-11
+    upstream_name: bmad-architecture   # renamed in increment 7: no MOADIX name carries the BMad mark (Amendment 3 section 1)
     phases: ["3"]
     source: https://github.com/bmad-code-org/BMAD-METHOD
     ref: v6.12.4
@@ -59,6 +67,7 @@ skills:
         licence: MIT
         copyright: Copyright GitHub, Inc.
   - name: threat-model
+    retrieved: 2026-11-11
     phases: ["4"]
     source: https://github.com/anthropics/defending-code-reference-harness
     commit: d3bea6b5793b5f3d59a75ebe69a58efa88383145
@@ -68,6 +77,7 @@ skills:
     licence_files: [LICENSE]
     obligation: sourced from defending-code-reference-harness (Amendment 1); change notice in each modified file (SKILL.md)
   - name: threat-mitigation-mapping
+    retrieved: 2026-11-11
     phases: ["4"]
     source: https://github.com/wshobson/agents
     commit: 9c61ab243def98f72da12abd41cfcf5bcd91af9d
@@ -76,6 +86,7 @@ skills:
     copyright: Copyright (c) 2024 Seth Hobson
     licence_files: [LICENSE]
   - name: ui-ux-pro-max
+    retrieved: 2026-11-11
     phases: ["6"]
     source: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
     commit: 6ae86f61f520d6ca229d2f40e070410638c908c5
@@ -85,6 +96,7 @@ skills:
     licence_files: [LICENSE]
     note: the repo's Apache-2.0 ui-styling sub-skill is NOT included. MOADIX runs it with --persist --output-dir design and --rtl=full.
   - name: impeccable
+    retrieved: 2026-11-11
     phases: ["6"]
     source: https://github.com/pbakaus/impeccable
     commit: c1e0e5492fbb524f5df84d635ecfae7dc438ec45
@@ -94,6 +106,7 @@ skills:
     licence_files: [LICENSE, NOTICE.md]
     obligation: ship NOTICE.md (Amendment 1); change notice in each modified file (SKILL.md, critique.md, audit.md, audit.native.md); reference/ios.md and android.md derive from ehmo/platform-design-skills (MIT), credited in NOTICE.md
   - name: apple-design
+    retrieved: 2026-11-11
     phases: ["6"]
     source: https://github.com/emilkowalski/skills
     commit: 715c1807e08c497cfd1dc4feb450a2a3300ef2a9
@@ -103,6 +116,7 @@ skills:
     licence_files: [LICENSE]
     note: not affiliated with Apple Inc.
   - name: code-review
+    retrieved: 2026-11-11
     phases: ["7"]
     source: https://github.com/mattpocock/skills
     commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
@@ -111,6 +125,7 @@ skills:
     copyright: Copyright (c) 2026 Matt Pocock
     licence_files: [LICENSE]
   - name: diagnosing-bugs
+    retrieved: 2026-11-11
     phases: ["7"]
     source: https://github.com/mattpocock/skills
     commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
@@ -119,6 +134,7 @@ skills:
     copyright: Copyright (c) 2026 Matt Pocock
     licence_files: [LICENSE]
   - name: test-driven-development
+    retrieved: 2026-11-11
     phases: ["7"]
     source: https://github.com/obra/superpowers
     commit: 22f0b463e7a5e579904dd6211a520321035526f7
@@ -127,6 +143,7 @@ skills:
     copyright: Copyright (c) 2025 Jesse Vincent
     licence_files: [LICENSE]
   - name: verification-before-completion
+    retrieved: 2026-11-11
     phases: ["7"]
     source: https://github.com/obra/superpowers
     commit: 22f0b463e7a5e579904dd6211a520321035526f7
@@ -135,6 +152,7 @@ skills:
     copyright: Copyright (c) 2025 Jesse Vincent
     licence_files: [LICENSE]
   - name: typescript-reviewer
+    retrieved: 2026-11-11
     phases: ["7"]
     source: https://github.com/affaan-m/ECC
     commit: d2ef2680594f9a17526a6e1a2e18b3d242c5d17b
@@ -143,6 +161,7 @@ skills:
     copyright: Copyright (c) 2026 Affaan Mustafa
     licence_files: [LICENSE]
   - name: pr-test-analyzer
+    retrieved: 2026-11-11
     phases: ["8"]
     source: https://github.com/anthropics/claude-plugins-official
     commit: 43fd1f9db0941b2b83cb62268e35970d4a67c202
@@ -152,6 +171,7 @@ skills:
     licence_files: [LICENSE]
     obligation: taken from claude-plugins-official only, not anthropics/claude-code (Amendment 1); change notice in SKILL.md
   - name: javascript-testing-expert
+    retrieved: 2026-11-11
     phases: ["8"]
     source: https://github.com/dubzzz/fast-check
     commit: 7c69eca58443340f2a37045b9cf5cb7e09973eac
@@ -161,6 +181,7 @@ skills:
     licence_files: [LICENSE]
     note: the "fast-check guidance" of the Final selection
   - name: phase-retrospective
+    retrieved: 2026-11-11
     phases: ["12"]
     source: https://github.com/bmad-code-org/BMAD-METHOD
     ref: v6.12.4
@@ -172,6 +193,7 @@ skills:
     licence_files: [LICENSE]
     obligation: renamed from bmad-retrospective (BMad trademark; Amendment 1)
   - name: reflect-queue
+    retrieved: 2026-11-11
     phases: ["12"]
     source: https://github.com/BayramAnnakov/claude-reflect
     commit: b6c42326903af3dd2bf3772b979730a44d8548ca
@@ -182,6 +204,7 @@ skills:
 
 templates:
   - name: DESIGN.md
+    retrieved: 2026-11-11
     phases: ["6"]
     source: https://github.com/VoltAgent/awesome-design-md
     commit: fcc70284932276d085f01ef9f83edde90b1258cb
@@ -193,6 +216,7 @@ templates:
 
 mcp_servers:
   - name: context7
+    retrieved: 2026-11-11
     phases: ["1"]
     source: https://github.com/upstash/context7
     commit: 681554c5d3a688c67879d02d4f01d79ffd15df13
@@ -201,6 +225,7 @@ mcp_servers:
 
 gate_run_tools:
   - name: redocly-cli
+    retrieved: 2026-11-11
     phases: ["5"]
     source: https://github.com/Redocly/redocly-cli
     vendored: false

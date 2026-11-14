@@ -37,5 +37,9 @@ Files copied: `SKILL.md`, `writing-good-tests.md`. No test suite in the skill di
 
 Kept verbatim: "catches bugs before commit" in the Common Rationalizations table (a rebuttal, not an instruction to commit; not a grep hit). Upstream SKILL.md has no "commit after green" step and no REQUIRED SUB-SKILL reference.
 
+## Increment 7
+
+- SKILL.md, after "Core principle": added the section "MOADIX phase 7 rules (always apply)" with three rules the operator set (smallest change that meets the requirement; do not touch code the task does not need; do not add anything nobody asked for), and that moadix:code-reviewer reports a violation as a MAJOR finding. Category: adaptation. Marked in the file with an HTML change-notice comment.
+
 ## Grep allowlist
-None needed.
+One row (increment 7): the phase-7 rule text that says a violation blocks APPROVE 7.

@@ -236,8 +236,14 @@ def wait(root, label, st, budget):
         time.sleep(0.25)
 
 
+def minor_file(root, label, st=None):
+    """Increment 7 (Amendment 3 section 5): the phase's MINOR findings, outside the summary."""
+    return os.path.join(cache_dir(root), "minor", "%s-%s.md" % ((scope_of(st) if st else "product").replace(":", "-"), label))
+
+
 def summary(data, limit=8):
-    """Operator-facing lines for a result set."""
+    """Operator-facing lines for a result set. Increment 7: only BLOCKER and MAJOR findings are
+    shown; MINOR findings are counted and left in their file."""
     rows = []
     for r in (data or {}).get("results") or []:
         line = "%s: %s" % (r.get("validator"), r.get("result").upper())
@@ -246,7 +252,10 @@ def summary(data, limit=8):
         rows.append(line)
     if not rows:
         rows.append("no validators are registered for this phase")
-    return rows[:limit] + (["... and %d more" % (len(rows) - limit)] if len(rows) > limit else [])
+    out = rows[:limit] + (["... and %d more" % (len(rows) - limit)] if len(rows) > limit else [])
+    if (data or {}).get("minor"):
+        out.append("%d MINOR finding(s), not shown: %s" % (data["minor"], data.get("minor_file")))
+    return out
 
 
 def findings(data, limit=6):
@@ -255,7 +264,9 @@ def findings(data, limit=6):
     for r in (data or {}).get("results") or []:
         if r.get("result") in ("fail", "unknown"):
             lines = [ln.strip() for ln in (r.get("output") or "").splitlines()
-                     if ln.strip().startswith(("FAIL", "ERR", "MISSING", "UNKNOWN")) or "FAIL" in ln[:12]]
+                     if not ln.strip().startswith("MINOR") and (
+                         ln.strip().startswith(("FAIL", "ERR", "MISSING", "UNKNOWN", "BLOCKER", "MAJOR"))
+                         or "FAIL" in ln[:12])]
             out.append("%s %s: %s" % (r.get("validator"), r.get("result").upper(),
                                        "; ".join(lines[:limit]) or (r.get("first_line") or "")[:200]))
     return out

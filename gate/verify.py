@@ -204,7 +204,30 @@ def evidence_dir(root, label, name):
 
 
 def evidence_file(root, label, name):
-    return os.path.join(evidence_dir(root, label, name), EVIDENCE_NAME)
+    from . import contract
+    return os.path.join(evidence_dir(root, label, name), contract.CRITIC_FILE if name == contract.CRITIC
+                        else EVIDENCE_NAME)
+
+
+def role_for(name, label):
+    """The role as it applies to phase `label`. Increment 7: the gap critic's role names every
+    gated phase (`phase: "*"`); its copy carries the phase it is scheduled for."""
+    r = dict(roles()[name])
+    if str(r.get("phase")) == "*":
+        r["phase"] = str(label)
+    return r
+
+
+def critic_paths(root, st, label, hd):
+    """Increment 7: the files a phase's gap critic must review: every file at HEAD the phase's
+    path map gives the scope's documents (sdlc/..., the feature's folder in a cycle), its
+    contract folder included."""
+    pats = []
+    for _pid, lab, _name, globs in pathmap.scope_phases(st.get("mode"), st.get("feature")):
+        if lab == str(label):
+            pats = [g for g in globs if g.startswith("sdlc/")]
+    files = _git(root, "ls-tree", "-r", "--name-only", hd, "--", "sdlc").splitlines()
+    return sorted(p for p in files if pathmap.any_glob(pats, p))
 
 
 def scheduled(root, st, label=None):
@@ -218,6 +241,11 @@ def scheduled(root, st, label=None):
     changed = changed_files(root, base, hd)
     out = {}
     for name, r in roles().items():
+        if r.get("critic"):
+            from . import contract
+            if str(r.get("phase")) == "*" and contract.gated(label) and contract.topics(label):
+                out[name] = (role_for(name, label), base, hd, critic_paths(root, st, label, hd))
+            continue
         if str(r.get("phase")) != str(label):
             continue
         if str(r.get("when") or "always") == "unconfirmed":
@@ -276,7 +304,9 @@ def triage_of(root, st):
 
 
 def phase_has_verifiers(label):
-    return any(str(r.get("phase")) == str(label) for r in roles().values())
+    from . import contract
+    return any(str(r.get("phase")) == str(label) or (str(r.get("phase")) == "*" and contract.gated(label))
+               for r in roles().values())
 
 
 # ---------------------------------------------------------------- brief
@@ -410,6 +440,8 @@ def build_brief(root, st, name, role, base, hd, required):
     elif role.get("baseline"):
         method = ("method: you have no skill to load. Read the baseline documents listed below and check every "
                   "claim they make against the code at source_commit (Read, Grep, Glob, read-only git)")
+    elif role.get("critic"):
+        return critic_brief(root, st, name, role, base, hd, required)
     else:
         method = ("method: drive the running app yourself with the Playwright MCP tools (mcp__%s__*); you have no "
                   "skill to load. Network-reading tools (network requests, evaluate, run_code) are withheld: judge "
@@ -470,6 +502,12 @@ def build_brief(root, st, name, role, base, hd, required):
               "source_commit does what the claim says. A claim the code does not support is a finding: high when "
               "it says something is implemented, mitigated or tested and it is not; medium when it is only "
               "imprecise. Cite the code lines that show the mismatch."]
+    if role.get("major_rules"):
+        L += ["", "## Implementation rules (report every violation)",
+              "The builder had to follow these rules. Report each change in the range that breaks one as a finding "
+              "with \"rule\": \"<rule id>\" (severity medium unless it is also a defect of higher severity); the gate "
+              "treats it as MAJOR, which blocks the phase until it is fixed or the operator waives it."]
+        L += ["- %s: %s" % (r["id"], r["text"]) for r in role["major_rules"]]
     L += ["", "## knowledge.md entries"]
     L += kn or ["(none relevant)"]
     L += ["", "## Evidence",
@@ -481,7 +519,9 @@ def build_brief(root, st, name, role, base, hd, required):
           "- receipt: the receipt given at the end of this prompt",
           "- reviewed: [repo-relative paths you reviewed]",
           "- findings: [{\"id\": \"F1\", \"severity\": one of %s, \"summary\": \"...\", "
-          "\"citations\": [\"path:line\" or \"path:start-end\", ...]}]" % "/".join(SEVERITIES)]
+          "\"citations\": [\"path:line\" or \"path:start-end\", ...]%s}]" % (
+              "/".join(SEVERITIES), ", \"rule\": optional, one of %s" % "/".join(r["id"] for r in role["major_rules"])
+              if role.get("major_rules") else "")]
     if role.get("coverage") and live:
         L += ["- coverage: [{\"ac\": \"US-001/AC-1\", \"observed\": \"what you did and saw\", \"artifacts\": "
               "[\"playwright/<file>\", ...]}] with one entry per acceptance criterion listed above; artifacts are "
@@ -502,6 +542,88 @@ def build_brief(root, st, name, role, base, hd, required):
     L += ["- notes: optional free text",
           "Every citation must point at a line that exists in source_commit. Do not include a verdict, a pass/fail "
           "field or a recommendation to proceed. Do not write anywhere else; you cannot start other agents.",
+          "In your final reply, do not repeat the receipt."]
+    return "\n".join(L) + "\n"
+
+
+def critic_brief(root, st, name, role, base, hd, required):
+    """Increment 7 (Amendment 3 section 1): the gap critic's brief, from the gate's topic
+    catalogue and the scope's files only. Deterministic for the same artifacts."""
+    from . import contract
+    label = str(role["phase"])
+    ph = next(p for p in st["phases"] if p["label"] == label)
+    entry = contract.phase_entry(label) or {}
+    feature = bool(st.get("feature"))
+    size, ruling = contract.size_and_ruling(root, st)
+    ov = contract.overrides(root)
+    dfl = contract.defaults(label, size, ruling, ov, feature)
+    cat = contract.catalogue()
+    ev = os.path.relpath(evidence_file(root, label, name), root)
+    upstream = sorted(p for p in _git(root, "ls-tree", "-r", "--name-only", hd, "--", "sdlc").splitlines()
+                      if p not in required and p.endswith(".md") and (not p.startswith("sdlc/features/") or
+                                                                       (feature and p.startswith(contract.doc_dir(st)))))
+    L = ["# MOADIX gap critic brief",
+         "",
+         "Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder "
+         "wrote reaches you. You are a critic: you look for gaps and write findings. You never pass a phase, "
+         "never write a verdict, and never say 'approve', 'ready' or 'done'. The operator decides.",
+         "",
+         "role: %s" % name,
+         "method: you have no skill to load. Read the phase's documents at source_commit (Read, Grep, Glob, "
+         "read-only git) as a %s would, and check every topic below for gaps." % (entry.get("role") or "reviewer"),
+         "product: %s" % st["product"],
+         "phase: %s (%s)%s" % (label, ph["name"], " in feature %s" % st["feature"] if feature else ""),
+         "source_commit: %s" % hd,
+         "size: %s; platform ruling: %s (B19)" % (size or "not declared", ruling or "not declared"),
+         "",
+         "## Required evidence paths",
+         "Your evidence must list each of these under \"reviewed\" (the phase's documents at source_commit):"]
+    L += ["- %s" % p for p in required] or ["- (none: the phase has no documents at this commit; that is itself a "
+                                            "BLOCKER for every required topic)"]
+    L += ["", "## Upstream and frozen documents (read them for contradictions; do not review them)"]
+    L += ["- %s" % p for p in upstream[:60]] or ["- (none)"]
+    L += ["", "## Topics of phase %s (check every one; list each under topics_checked)" % label,
+          "The phase's coverage file is %s: each topic links the section that covers it, or says N/A with a reason. "
+          "Judge the linked section itself, not the coverage line." % contract.coverage_rel(st, label)]
+    for tid, title in contract.topics(label, feature):
+        d = dfl.get(tid)
+        note = ""
+        if tid in ov["na"]:
+            note = " [N/A by operator ruling: %s]" % ov["na"][tid]
+        elif d and d.get("partial"):
+            note = " [size %s: only %s is N/A by default]" % (size, d["partial"])
+        elif d:
+            note = " [size %s default: N/A, %s]" % (size, d["reason"])
+        elif tid in ov["turn_on"]:
+            note = " [turned on by the operator]"
+        L.append("- %s %s%s" % (tid, title, note))
+    sev = cat.get("severity") or {}
+    L += ["", "## Severity (use exactly these)",
+          "- BLOCKER: %s" % sev.get("BLOCKER", ""),
+          "- MAJOR: %s" % sev.get("MAJOR", ""),
+          "- MINOR: %s" % sev.get("MINOR", ""),
+          "Phase %s BLOCKERs also include: %s" % (label, entry.get("blockers") or "(none beyond the above)")]
+    if feature:
+        L.append("Feature-cycle BLOCKERs also include: %s" % ((cat.get("feature_topics") or {}).get("blockers") or ""))
+    L += ["An N/A whose reason does not hold for this product is a finding on that topic. A size default the "
+          "operator has not overridden is not a finding by itself.",
+          "", "## Evidence",
+          "Write exactly one file with the Write tool: %s" % ev,
+          "It is JSON with these keys and no others (gate/config/critic.schema.json):",
+          "- role: \"%s\"" % name,
+          "- phase: \"%s\"" % label,
+          "- source_commit: \"%s\"" % hd,
+          "- brief_sha256: the brief_sha256 given at the end of this prompt",
+          "- receipt: the receipt given at the end of this prompt",
+          "- reviewed: [repo-relative paths you reviewed]",
+          "- topics_checked: [every topic ID listed above]",
+          "- findings: [{\"id\": \"C1\", \"topic\": \"<topic ID>\", \"severity\": \"BLOCKER\" | \"MAJOR\" | "
+          "\"MINOR\", \"quote\": \"<the exact words of the document you object to>\", \"citation\": "
+          "\"path:line\" or \"path:start-end\", \"fix\": \"<what would close the gap>\"}]; findings may be []",
+          "- notes: optional free text",
+          "The quote must appear at the cited lines in source_commit (for a missing topic, quote the coverage line or "
+          "the heading where it should be). Do not include a verdict, a pass/fail field or a recommendation to "
+          "proceed. Do not write anywhere else; you cannot start other agents.",
           "In your final reply, do not repeat the receipt."]
     return "\n".join(L) + "\n"
 
@@ -742,10 +864,10 @@ def check_role(root, st, name, role, base, hd, required):
     if not isinstance(ev, dict):
         return "failing", ["the evidence is not a JSON object"], info
     probs = []
-    extra = sorted(set(ev) - TOP_KEYS)
+    extra = [] if role.get("critic") else sorted(set(ev) - TOP_KEYS)
     if extra:
         probs.append("unexpected keys %s (findings only, no verdict)" % ", ".join(extra))
-    vk = _verdict_keys({k: v for k, v in ev.items() if k in TOP_KEYS})
+    vk = _verdict_keys({k: v for k, v in ev.items() if k in TOP_KEYS or role.get("critic")})
     if vk:
         probs.append("verdict-like fields %s: a verifier reports findings, never a verdict" % ", ".join(vk[:5]))
     if ev.get("role") != name:
@@ -760,6 +882,8 @@ def check_role(root, st, name, role, base, hd, required):
                      "not written by the verifier the gate briefed)")
     if probs and any("receipt" in p or "brief_sha256" in p or "source_commit" in p for p in probs):
         return "failing", probs, info
+    if role.get("critic"):
+        return _check_critic(root, st, label, required, ev, info)
     reviewed = ev.get("reviewed")
     if not isinstance(reviewed, list) or not all(isinstance(x, str) for x in reviewed):
         probs.append("reviewed is not a list of paths")
@@ -793,6 +917,13 @@ def check_role(root, st, name, role, base, hd, required):
                 probs.append("finding %s: %s" % (fid, why))
         if f.get("severity") in fail_sev:
             blocking.append("%s (%s): %s" % (fid, f.get("severity"), str(f.get("summary"))[:120]))
+        elif f.get("rule") is not None and role.get("major_rules"):
+            ids = [r["id"] for r in role["major_rules"]]
+            if f.get("rule") not in ids:
+                probs.append("finding %s: rule %r is not one of %s" % (fid, f.get("rule"), "/".join(ids)))
+            elif "%s.%s" % (name, fid) not in active_waivers(st):
+                blocking.append("MAJOR %s (%s, %s): %s (WAIVE %s.%s with a reason, or fix it)" % (
+                    fid, f.get("rule"), f.get("severity"), str(f.get("summary"))[:120], name, fid))
     if role.get("triage"):
         _check_triage(root, hd, ev, probs, info, memo)
     if role.get("live"):
@@ -824,6 +955,37 @@ def check_role(root, st, name, role, base, hd, required):
         return "failing", probs, info
     if blocking:
         return "failing", ["finding at a failing severity: %s" % b for b in blocking], info
+    return "ok", [], info
+
+
+def active_waivers(st):
+    """Waiver ids in force today (expiry not passed)."""
+    import datetime
+    out = set()
+    today = datetime.date.today().isoformat()
+    for w in (st or {}).get("waivers") or []:
+        if str(w.get("expiry") or "9999-12-31") >= today:
+            out.add(str(w.get("id")))
+    return out
+
+
+def _check_critic(root, st, label, required, ev, info):
+    """Increment 7: the gap critic's CRITIC.json (gate/contract.py critic_check). A critic never
+    passes a phase: its evidence can only block it (an open BLOCKER, an unwaived MAJOR)."""
+    from . import contract
+    hd = ev.get("source_commit")
+    memo = {}
+    reviewed = ev.get("reviewed") if isinstance(ev.get("reviewed"), list) else []
+    probs, blocking, cinfo = contract.critic_check(
+        root, st, label, ev, hd, lambda c: _citation_problem(root, hd, c, memo), active_waivers(st))
+    miss = [p for p in required if p not in reviewed]
+    if miss:
+        probs.append("required paths not reviewed: %s" % ", ".join(miss[:8]))
+    info.update(cinfo)
+    if probs:
+        return "failing", probs, info
+    if blocking:
+        return "failing", ["open finding: %s" % b for b in blocking], info
     return "ok", [], info
 
 
@@ -918,6 +1080,8 @@ def check_phase(root, st, label):
     """[(role, status, problems, info)] for every verifier the phase requires."""
     out = []
     for name, (role, base, hd, req) in sorted(scheduled(root, st, label).items()):
+        if role.get("triage"):
+            continue  # the triager's evidence is consumed by check-claude-security (ruling 1), not required here
         status, probs, info = check_role(root, st, name, role, base, hd, req)
         out.append((name, status, probs, info))
     return out

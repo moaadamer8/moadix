@@ -23,17 +23,18 @@ always:
     - request-review
     - feature      # increment 6: commands/feature.md (how a feature cycle works)
     - baseline     # increment 6: commands/baseline.md (onboarding phase B)
+    - coverage     # increment 7: commands/coverage.md (the cross-phase contract, every phase)
 phases:
   - label: "0"
     name: BRD
     skills:
-      - bmad-forge-idea
+      - forge-idea
     mcp: []
     gate_run: []
   - label: "1"
     name: Research
     skills:
-      - bmad-deep-recon
+      - deep-recon
     mcp:
       - context7
     gate_run: []
@@ -41,15 +42,16 @@ phases:
     name: PRD
     during: ["B"]   # increment 6: the as-is PRD in onboarding phase B
     skills:
-      - bmad-prd
+      - prd
     mcp: []
     gate_run: []
   - label: "3"
     name: HLD
-    during: ["B"]   # increment 6: bmad-architecture derives a spine from an existing codebase
+    during: ["B"]   # increment 6: architecture derives a spine from an existing codebase
     skills:
-      - bmad-architecture
-    mcp: []
+      - architecture
+    mcp:
+      - context7   # increment 7 (Amendment 3 section 4): Context7 in phases 1, 3, 5 and 7
     gate_run: []
   - label: "4"
     name: Threat Model
@@ -62,7 +64,8 @@ phases:
   - label: "5"
     name: LLD
     skills: []
-    mcp: []
+    mcp:
+      - context7   # increment 7 (Amendment 3 section 4): Context7 in phases 1, 3, 5 and 7
     gate_run:
       - tool: redocly
         purpose: "OpenAPI and Arazzo lint of the LLD contracts; any error fails"
@@ -93,7 +96,8 @@ phases:
       - test-driven-development
       - verification-before-completion
       - typescript-reviewer
-    mcp: []
+    mcp:
+      - context7   # increment 7 (Amendment 3 section 4): Context7 in phases 1, 3, 5 and 7
     gate_run: []
   - label: "8"
     name: Testing
@@ -142,7 +146,8 @@ phases:
   - label: "10b"
     name: Regression Suites
     skills: []
-    mcp: []
+    mcp:
+      - "moadix:playwright"   # increment 7: Playwright MCP in 10a and 10b
     gate_run: []
   - label: "10c"
     name: Concurrency and Load
@@ -186,18 +191,18 @@ phases:
     templates:
       - templates/baseline/
 skills:
-  - name: bmad-forge-idea
-    skill_md_bytes: 10380
-    total_bytes: 29250
-  - name: bmad-deep-recon
-    skill_md_bytes: 9298
-    total_bytes: 79774
-  - name: bmad-prd
-    skill_md_bytes: 14047
-    total_bytes: 74368
-  - name: bmad-architecture
-    skill_md_bytes: 13869
-    total_bytes: 53739
+  - name: forge-idea
+    skill_md_bytes: 10370
+    total_bytes: 29728
+  - name: deep-recon
+    skill_md_bytes: 9288
+    total_bytes: 80217
+  - name: prd
+    skill_md_bytes: 14037
+    total_bytes: 75024
+  - name: architecture
+    skill_md_bytes: 13859
+    total_bytes: 54236
   - name: threat-model
     skill_md_bytes: 7750
     total_bytes: 66973
@@ -220,8 +225,8 @@ skills:
     skill_md_bytes: 8815
     total_bytes: 13730
   - name: test-driven-development
-    skill_md_bytes: 9572
-    total_bytes: 21206
+    skill_md_bytes: 10052
+    total_bytes: 22398
   - name: verification-before-completion
     skill_md_bytes: 3836
     total_bytes: 6858

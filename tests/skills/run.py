@@ -64,13 +64,13 @@ def group_enforce():
     G = "enforce"
     p = E.repo("skprod", docs=("00-brd.md", "01-research.md"))
     E.init(p, "skfx")
-    d, why = skill(p, "moadix:bmad-forge-idea")
-    record(G, "phase 0: its skill moadix:bmad-forge-idea -> allowed", d == "none", why or "(no objection)")
+    d, why = skill(p, "moadix:forge-idea")
+    record(G, "phase 0: its skill moadix:forge-idea -> allowed", d == "none", why or "(no objection)")
     d, why = skill(p, "moadix:request-review")
     record(G, "phase 0: moadix:request-review (every phase) -> allowed", d == "none", why or "(no objection)")
-    d, why = skill(p, "moadix:bmad-deep-recon")
-    record(G, "phase 0: phase 1's skill moadix:bmad-deep-recon -> denied, reason names phase 0",
-           d == "deny" and "phase 0 (BRD)" in why and "moadix:bmad-forge-idea" in why, short(why))
+    d, why = skill(p, "moadix:deep-recon")
+    record(G, "phase 0: phase 1's skill moadix:deep-recon -> denied, reason names phase 0",
+           d == "deny" and "phase 0 (BRD)" in why and "moadix:forge-idea" in why, short(why))
     d, why = E.pretool(p, "mcp__context7__resolve-library-id", {"libraryName": "react"})
     record(G, "phase 0: Context7 MCP (a phase-1 server) -> denied, reason names phase 0",
            d == "deny" and "phase 0 (BRD)" in why, short(why))
@@ -78,11 +78,11 @@ def group_enforce():
     E.review_until_fresh(p, "0")
     ctx = E.prompt(p, "APPROVE 0 %s" % E.fresh())
     record(G, "control: APPROVE 0 recorded (current phase is now 1)", "recorded" in ctx, short(ctx, 120))
-    d, why = skill(p, "moadix:bmad-forge-idea")
-    record(G, "phase 1: the SAME skill moadix:bmad-forge-idea -> denied, reason names phase 1 (Research)",
+    d, why = skill(p, "moadix:forge-idea")
+    record(G, "phase 1: the SAME skill moadix:forge-idea -> denied, reason names phase 1 (Research)",
            d == "deny" and "phase 1 (Research)" in why and "invariant 5" in why, short(why))
-    d, why = skill(p, "moadix:bmad-deep-recon")
-    record(G, "phase 1: its skill moadix:bmad-deep-recon -> allowed", d == "none", why or "(no objection)")
+    d, why = skill(p, "moadix:deep-recon")
+    record(G, "phase 1: its skill moadix:deep-recon -> allowed", d == "none", why or "(no objection)")
     for tool in ("mcp__context7__resolve-library-id", "mcp__plugin_context7_context7__get-library-docs"):
         d, why = E.pretool(p, tool, {})
         record(G, "phase 1: %s (Context7, in the manifest) -> allowed" % tool, d == "none", why or "(no objection)")
@@ -91,20 +91,20 @@ def group_enforce():
         d, why = E.pretool(p, tool, {})
         record(G, "phase 1: MCP tool outside the manifest %s -> denied, phase named" % tool,
                d == "deny" and "phase 1 (Research)" in why and "context7" in why, short(why))
-    for name, want in (("bmad-deep-recon", "only MOADIX's vendored copy"),
-                       ("superpowers:bmad-deep-recon", "only MOADIX's vendored copy"),
+    for name, want in (("deep-recon", "only MOADIX's vendored copy"),
+                       ("superpowers:deep-recon", "only MOADIX's vendored copy"),
                        ("moadix:code-review", "not in the manifest"),
                        ("moadix:no-such-skill", "not in the manifest")):
         d, why = skill(p, name)
         record(G, "phase 1: skill %r -> denied (%s)" % (name, want), d == "deny" and want in why, short(why))
-    d, why = E.pretool(p, "SlashCommand", {"command": "/moadix:bmad-prd draft"})
-    record(G, "phase 1: SlashCommand /moadix:bmad-prd (phase 2) -> denied, phase named",
+    d, why = E.pretool(p, "SlashCommand", {"command": "/moadix:prd draft"})
+    record(G, "phase 1: SlashCommand /moadix:prd (phase 2) -> denied, phase named",
            d == "deny" and "phase 1 (Research)" in why, short(why))
     d, why = E.pretool(p, "SlashCommand", {"command": "/moadix:request-review 1"})
     record(G, "phase 1: SlashCommand /moadix:request-review -> allowed", d == "none", why or "(no objection)")
     st = E.prompt(p, "STATUS")
     record(G, "STATUS shows the current phase's skill set and its context cost",
-           "Phase 1 manifest: skills moadix:bmad-deep-recon" in st and "KB of SKILL.md" in st and "MCP context7" in st,
+           "Phase 1 manifest: skills moadix:deep-recon" in st and "KB of SKILL.md" in st and "MCP context7" in st,
            short(st[st.find("Phase 1 manifest"):], 200))
     # outside a product: passive
     out = os.path.join(E.base, "notaproduct")
@@ -117,12 +117,12 @@ def group_enforce():
     good = open(lp).read()
     with open(lp, "a") as f:
         f.write('{"body": "{}", "hash": "x", "hmac": "y"}\n')
-    d, why = skill(p, "moadix:bmad-deep-recon")
+    d, why = skill(p, "moadix:deep-recon")
     record(G, "gate state fails its integrity check -> even the phase's own skill is refused (fail closed)",
            d == "deny" and "integrity" in why, short(why))
     with open(lp, "w") as f:
         f.write(good)
-    d, why = skill(p, "moadix:bmad-deep-recon")
+    d, why = skill(p, "moadix:deep-recon")
     record(G, "control: ledger restored -> allowed again", d == "none", why or "(none)")
     # retro: not a gated phase; its skills apply during 11 and after the last phase
     s11, _m, _n = manifest.allowed("11")
@@ -252,7 +252,7 @@ def group_grep():
         "a/SKILL.md": "When the tests pass, mark the story as done and commit the changes.\n",
         "b/SKILL.md": "Then approve the PRD and proceed to the next phase.\n",
         "c/SKILL.md": "Set `status: final` in the frontmatter, then merge the PR and ship it.\n",
-        "d/SKILL.md": "Common next: invoke bmad-architecture.\n",
+        "d/SKILL.md": "Common next: invoke architecture.\n",
     }
     for rel, text in planted.items():
         os.makedirs(os.path.join(tmp, os.path.dirname(rel)), exist_ok=True)

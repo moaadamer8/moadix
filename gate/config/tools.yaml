@@ -17,6 +17,8 @@
 #   network   hosts the tool contacts when the AGENT runs it for feedback (managed sandbox
 #             allowlist). The gate's own run is offline where the tool allows it.
 version: 1
+# Pins last reviewed (Amendment 3 section 5: a monthly proposal bumps them; see managed/propose_pins.py).
+reviewed: 2026-11-14
 tools:
   - name: gitleaks
     version: 8.30.1
@@ -143,3 +145,175 @@ tools:
     bin: node_modules/@playwright/mcp/cli.js
     lock: tools/npm/playwright-mcp/package-lock.json
     network: []
+# increment 7 (Amendment 3 section 4): the new gate-run tools. Pins researched 2026-11-14, each the
+# newest release at least 14 days old; every LICENSE file read (docs/increment-7-report.md, section 4).
+# Permissive (MIT, ISC, Apache-2.0, Apache-2.0 OR MIT) themselves; likec4, lhci and schemathesis pull in
+# MPL-2.0 dependencies, fetched unmodified from their registries (an open question in the report).
+  - name: oasdiff
+    version: 1.35.0
+    kind: archive
+    bin: oasdiff
+    network: []
+    # checksums: https://github.com/oasdiff/oasdiff/releases/download/v1.35.0/checksums.txt
+    # upstream ships one universal macOS archive (darwin_all), used for both darwin platforms.
+    assets:
+      darwin-arm64:
+        url: https://github.com/oasdiff/oasdiff/releases/download/v1.35.0/oasdiff_1.35.0_darwin_all.tar.gz
+        sha256: 964ad2c0331768c4515fc49779827094bc89a65b1d309dac28886d1c3faf305c
+      darwin-x64:
+        url: https://github.com/oasdiff/oasdiff/releases/download/v1.35.0/oasdiff_1.35.0_darwin_all.tar.gz
+        sha256: 964ad2c0331768c4515fc49779827094bc89a65b1d309dac28886d1c3faf305c
+      linux-x64:
+        url: https://github.com/oasdiff/oasdiff/releases/download/v1.35.0/oasdiff_1.35.0_linux_amd64.tar.gz
+        sha256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
+      linux-arm64:
+        url: https://github.com/oasdiff/oasdiff/releases/download/v1.35.0/oasdiff_1.35.0_linux_arm64.tar.gz
+        sha256: 1f8b5aa033cd0240ae6c53460268bcd6e578526666a4487a781ece8cef39fbdd
+  - name: squawk
+    version: 2.71.0
+    kind: pypi
+    package: squawk-cli
+    bin: squawk
+    python: "3.12"
+    lock: tools/py/squawk/requirements.txt
+    network: []
+    # The GitHub release v2.71.0 publishes raw binaries but NO checksum file. The PyPI
+    # wheels (squawk-cli, Source Code -> github.com/sbdchd/squawk) are hash-locked instead.
+    # If the raw binaries are preferred, only GitHub's own asset digests exist (not an
+    # upstream checksum file): darwin-arm64 6132cb97...ef5a2, darwin-x64 e0770d76...c467c,
+    # linux-x64 ab978cb4...88bbd, linux-arm64 cc6b563f...b7f (full values in licences.md).
+  - name: vacuum
+    version: 0.36.1
+    kind: archive
+    bin: vacuum
+    network: []
+    # checksums: https://github.com/daveshanley/vacuum/releases/download/v0.36.1/checksums.txt
+    assets:
+      darwin-arm64:
+        url: https://github.com/daveshanley/vacuum/releases/download/v0.36.1/vacuum_0.36.1_darwin_arm64.tar.gz
+        sha256: 789a6b7dab6258ba3ce31a561aa9e3e200f72364a6a4234f254086dbeca17b91
+      darwin-x64:
+        url: https://github.com/daveshanley/vacuum/releases/download/v0.36.1/vacuum_0.36.1_darwin_x86_64.tar.gz
+        sha256: 1454515846468a0b1fe1efbdb2250e3f08b46b01af96c1a234d4adcd5e0f108b
+      linux-x64:
+        url: https://github.com/daveshanley/vacuum/releases/download/v0.36.1/vacuum_0.36.1_linux_x86_64.tar.gz
+        sha256: 4001b21cf12bd9e6b64f8d29fe6bdc473e34edbeff084e87f81e9af2c13e033f
+      linux-arm64:
+        url: https://github.com/daveshanley/vacuum/releases/download/v0.36.1/vacuum_0.36.1_linux_arm64.tar.gz
+        sha256: a26dec8e4cc96a574f37825bbd49ea906de0c923de0fd0d7b7c7b4b87b092f84
+  - name: likec4
+    version: 1.60.0
+    kind: npm
+    package: likec4
+    bin: node_modules/likec4/bin/likec4.mjs
+    lock: tools/npm/likec4/package-lock.json
+    network: []
+    # transitive: lightningcss 1.33.0 (+ platform packages) is MPL-2.0.
+  - name: dependency-cruiser
+    version: 18.7.0
+    kind: npm
+    package: dependency-cruiser
+    bin: node_modules/dependency-cruiser/bin/dependency-cruiser.mjs
+    lock: tools/npm/dependency-cruiser/package-lock.json
+    network: []
+  - name: knip
+    version: 6.44.1
+    kind: npm
+    package: knip
+    bin: node_modules/knip/bin/knip.js
+    lock: tools/npm/knip/package-lock.json
+    network: []
+  - name: pytm
+    version: 1.4.0
+    kind: pypi
+    bin: python   # pytm 1.4.0 has no CLI: a threat model is a Python script importing pytm, run by this venv's python
+    python: "3.12"
+    lock: tools/py/pytm/requirements.txt
+    network: []
+    # Threat models are Python scripts importing pytm, run with the locked interpreter
+    # (python <model>.py --dfd/--report ...). The schema's required `bin` has no natural value.
+  - name: schemathesis
+    version: 4.32.7
+    kind: pypi
+    bin: schemathesis
+    python: "3.12"
+    lock: tools/py/schemathesis/requirements.txt
+    network: []
+    # transitive: hypothesis 6.170.14 and certifi 2026.10.23 are MPL-2.0.
+  - name: lhci
+    version: 0.15.1
+    kind: npm
+    package: "@lhci/cli"
+    bin: node_modules/@lhci/cli/src/cli.js
+    lock: tools/npm/lhci/package-lock.json
+    network: []
+    # transitive: axe-core 4.14.0 (via lighthouse) is MPL-2.0. Needs a Chrome/Chromium binary.
+  - name: zizmor
+    version: 1.31.1
+    kind: pypi
+    bin: zizmor
+    python: "3.12"
+    lock: tools/py/zizmor/requirements.txt
+    network: []
+    # GitHub release v1.31.1 has tarballs but no checksum file, so the PyPI wheels are pinned.
+    # Online audits contact api.github.com only when given a token; the gate runs --offline.
+  - name: actionlint
+    version: 1.7.12
+    kind: archive
+    bin: actionlint
+    network: []
+    # checksums: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt
+    assets:
+      darwin-arm64:
+        url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz
+        sha256: aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f
+      darwin-x64:
+        url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz
+        sha256: 5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644
+      linux-x64:
+        url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+        sha256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      linux-arm64:
+        url: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz
+        sha256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
+# Container images the gate runs through the Docker CLI (not fetched by managed/fetch_tools.py).
+# ZAP passive baseline (phase 9), against a disposable environment only.
+images:
+  - name: zap
+    version: 2.17.0
+    image: ghcr.io/zaproxy/zaproxy
+    tag: 20261026-stable
+    # OCI image index digest (multi-arch: linux/amd64, linux/arm64; no darwin images).
+    digest: sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238
+    bin: zap-baseline.py
+    network: []
+    # `stable` and `2.17.0` tags are mutable: on 2026-11-14 both point to
+    # sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af, built
+    # 2026-11-03 (11 days old). 20261026-stable (built 2026-10-26) is the newest dated stable
+    # build that is at least 14 days old. ZAP version inside it was not read from the image.
+    # The image bundles Debian packages, OpenJDK, firefox-esr etc. whose licences were not scanned.
+# Product dependencies (Amendment 3 section 4): the PRODUCT installs these; MOADIX pins the version it
+# expects and has read each LICENSE. Not fetched by MOADIX. axe-core and @axe-core/playwright are
+# MPL-2.0 (not permissive) and are NOT listed: stopped and reported (docs/increment-7-report.md).
+product_dependencies:
+  - name: stryker-js
+    package: "@stryker-mutator/core"
+    version: 10.1.1
+    license: Apache-2.0
+  - name: testcontainers-node
+    package: testcontainers
+    version: 12.2.1
+    license: MIT
+  - name: msw
+    package: msw
+    version: 3.0.3
+    license: MIT
+  - name: playwright-test
+    package: "@playwright/test"
+    version: 1.64.1
+    license: Apache-2.0
+  # EXCLUDED (not permissive, MPL-2.0): axe-core 4.14.0, @axe-core/playwright 4.14.0.
+  # Transitive non-permissive or unlisted licences in these product deps (npm lock of all six):
+  #   axe-core 4.14.0 MPL-2.0; @axe-core/playwright 4.14.0 MPL-2.0;
+  #   caniuse-lite 1.0.30001826 CC-BY-4.0 (via @stryker-mutator/core -> @babel/core -> browserslist);
+  #   tweetnacl 0.14.5 Unlicense (via testcontainers -> ssh2 chain).

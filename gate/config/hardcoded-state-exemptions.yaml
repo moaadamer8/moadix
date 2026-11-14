@@ -197,3 +197,58 @@ exemptions:
     token: 9
     reason: "Increment 6 ruling 1: the SF triager belongs to phase 9 (Security Verification), where Claude Security's findings are judged"
     owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 0
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 2
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 3
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 4
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 5
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: "6b"
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: "10a"
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: "10b"
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: "10c"
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 11
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: "11b"
+    reason: "Increment 7: the coverage-topic catalogue IS the declaring source of each phase's topics (Amendment 3 section 3) and of the phase each FC topic belongs to"
+    owner: operator

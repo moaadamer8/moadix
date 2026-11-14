@@ -45,6 +45,7 @@ sys.path.insert(0, E.home)
 os.environ.update(MOADIX_GUARD_ROOT=E.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD_SHIM=E.shim)
 import _testguard  # noqa: E402,F401
 from gate import bmadcore, pathmap, state  # noqa: E402
+import contract_fixture  # noqa: E402  (tests/lib, increment 7)
 
 RESULTS = []
 TOK = "ghp_fixture"
@@ -190,9 +191,12 @@ def feature_docs(fid, n=2, prd_extra="", sec_id="SEC-002"):
     return {
         pre + "00-brd.md": "# BRD additions: %s\n\n- **Size:** M\n\n## Business Goals\n\n| ID | Goal | Metric | Priority |\n"
                            "|---|---|---|---|\n| BG-%d | Let a visitor remove a note | removals | must |\n" % (fid, n),
-        pre + "02-prd.md": "# PRD additions: %s\n\n### %s — Delete a note\n\n- **BRD goal:** BG-%d\n- **Priority:** must\n"
-                           "- **AC-1:** When the visitor deletes a note, the system shall remove it from the list.\n%s" % (
-                               fid, us, n, prd_extra),
+        pre + "02-prd.md": "# PRD additions: %s\n\n## Roles and actions\n\n| Role | Delete own note | Delete another's "
+                           "note |\n|---|---|---|\n| Visitor | ✓ | ✗ |\n\n### %s — Delete a note\n\n- **BRD goal:** BG-%d\n"
+                           "- **Priority:** must\n"
+                           "- **AC-1:** When the visitor deletes a note, the system shall remove it from the list.\n"
+                           "- **AC-2:** If the note belongs to another visitor, then the system shall refuse the "
+                           "deletion.\n%s" % (fid, us, n, prd_extra),
         pre + "03-hld.md": "# HLD changes\n\nA DELETE route next to POST /notes.\n",
         pre + "04-threat-model.md": "# Threat model additions\n\n### %s - Deleting another visitor's note\n\n"
                                     "- **Trust boundary:** TB-1\n- **STRIDE:** Tampering\n- **Threat:** delete by id guess\n"
@@ -203,7 +207,7 @@ def feature_docs(fid, n=2, prd_extra="", sec_id="SEC-002"):
         pre + "06b-provisioning.md": "# Provisioning\n\nNothing new.\n",
         pre + "07-tasks.md": "# Tasks\n\n### T-%03d — Delete route\n\n- **Story:** %s\n- **Satisfies SEC-IDs:** %s\n" % (
             n, us, sec_id),
-        pre + "08-test-report.md": "# Test report\n\n| AC | Test | Result |\n|---|---|---|\n| %s/AC-1 | tests/x.test.js:1 | pass |\n" % us,
+        pre + "08-test-report.md": "# Test report\n\n| AC | Test | Result |\n|---|---|---|\n| %s/AC-1 | tests/x.test.js:1 | pass |\n| %s/AC-2 | tests/x.test.js:1 | pass |\n" % (us, us),
         pre + "09-security-report.md": "# Security report\n\n%s: ownership checked.\n" % sec_id,
         pre + "10a-live.md": "# Live\n", pre + "10b-regression.md": "# Regression\n", pre + "10c-load.md": "# Load\n",
         pre + "11-release.md": "# Release\n\nShips the delete feature.\n",
@@ -269,7 +273,7 @@ def test_feature():
         if lab == "2":
             # first a contradicting addition: same trigger as the approved US-001/AC-1, negated response
             E.write(p, "sdlc/features/F1/02-prd.md", docs["sdlc/features/F1/02-prd.md"] +
-                    "- **AC-2:** When the visitor submits a note, the system shall not store it and show it in the list.\n")
+                    "- **AC-3:** When the visitor submits a note, the system shall not store it and show it in the list.\n")
             E.commit(p, "feature PRD (contradicting)")
             rv, ctx = approve(p, "2")
             record(G, "an addition that contradicts an approved requirement is refused: APPROVE 2 names the "
@@ -308,6 +312,7 @@ def test_feature():
     record(G, "after 10c the feature's current phase is 11 and STATUS is clean", "current phase 11" in st and
            "INTEGRITY OK" in st, short(st, 200))
     before_prd = open(os.path.join(p, "sdlc", "02-prd.md")).read()
+    contract_fixture.ready(E, p, "11")  # increment 7: commit the contract files before the release spec pins HEAD
     gh_spec(p)
     hd0 = head(p)
     rv, ctx = approve(p, "11")
@@ -493,7 +498,7 @@ def test_onboarding():
         rv, ctx = approve(p, lab)
         outs.append((lab, ok_rec(ctx), short(ctx, 120)))
     E.write(p, "sdlc/features/O1/02-prd.md", docs["sdlc/features/O1/02-prd.md"] +
-            "- **AC-2:** If the note is empty, then the system shall not refuse it.\n")
+            "- **AC-3:** If the note is empty, then the system shall not refuse it.\n")
     E.commit(p, "O1 PRD contradicting the baseline")
     rv, ctx = approve(p, "2")
     record(G, "on the onboarded product, an addition contradicting the BASELINE's requirement (US-001/AC-2) is refused",
@@ -503,6 +508,7 @@ def test_onboarding():
     rv, ctx = approve(p, "2")
     outs.append(("2", ok_rec(ctx), short(ctx, 120)))
     approve_direct(p, "legacyprod", pathmap.LABELS[pathmap.LABELS.index("3"):pathmap.LABELS.index("11")], feature="O1")
+    contract_fixture.ready(E, p, "11")  # increment 7: commit the contract files before the release spec pins HEAD
     gh_spec(p)
     rv, ctx = approve(p, "11")
     outs.append(("11", ok_rec(ctx) and "merged into the product documents" in ctx, short(ctx, 200)))
@@ -540,7 +546,7 @@ def test_bmad():
            not git(p, "status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude).sdlc"),
            git(p, "status", "--porcelain"))
     d1, _w1, _ = pretool(p, "Write", {"file_path": os.path.join(p, "_bmad", "scripts", "memlog.py"), "content": "x"})
-    d2, _w2, _ = pretool(p, "Write", {"file_path": os.path.join(p, "_bmad", "custom", "bmad-prd.toml"), "content": "x"})
+    d2, _w2, _ = pretool(p, "Write", {"file_path": os.path.join(p, "_bmad", "custom", "prd.toml"), "content": "x"})
     record(G, "the agent cannot write BMad core (_bmad/scripts) and _bmad/custom/ is not BMad-protected",
            d1 == "deny" and "BMAD installer-owned" in _w1 and "BMAD installer-owned" not in _w2, "%s / %s" % (d1, d2))
     py = py311()
@@ -562,8 +568,8 @@ def test_bmad():
         record(G, "a Python 3.11+ is available to run BMad core's scripts (managed/fetch_tools.py installs one)", False,
                "no python under %s/python" % TOOLS)
     rows = []
-    for skill, lab, key in (("bmad-forge-idea", "0", "forge_output_path"), ("bmad-deep-recon", "1", "research_output_path"),
-                            ("bmad-prd", "2", "prd_output_path"), ("bmad-architecture", "3", "spine_output_path")):
+    for skill, lab, key in (("forge-idea", "0", "forge_output_path"), ("deep-recon", "1", "research_output_path"),
+                            ("prd", "2", "prd_output_path"), ("architecture", "3", "spine_output_path")):
         txt = open(os.path.join(REPO, "skills", skill, "customize.toml")).read()
         m = re.search(r'^%s = "([^"]+)"' % key, txt, re.M)
         out = m.group(1).replace("{project-root}/", "") if m else ""

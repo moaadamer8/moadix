@@ -207,7 +207,11 @@ def status(fx, product):
 def review(fx, product, label):
     """Until the phase's validators have a fresh result. Increment 3 (ruling 2): the
     agent's turn ends (Stop hook), the gate runs them, and the read-only REVIEW is
-    polled. (Increment 2 sent REVIEW, which started the run itself.)"""
+    polled. (Increment 2 sent REVIEW, which started the run itself.) Increment 7: the phase
+    first gets its contract files and clean gap-critic evidence (tests/lib/contract_fixture)."""
+    sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
+    import contract_fixture
+    contract_fixture.ready(fx, product, label)
     fx.hook("stop", {"hook_event_name": "Stop", "session_id": "corpus", "cwd": product})
     ctx = ""
     for _ in range(60):

@@ -137,6 +137,8 @@ def ensure(root):
         if not problems(root, pid):
             return None
         written = install(root, pid)
-        return "BMad core %s (re)installed into _bmad/ by the gate: %s." % (VERSION, ", ".join(written[:6]))
+        # increment 7 (toy-notes finding F-1): name every file written, with the count
+        return "BMad core %s (re)installed into _bmad/ by the gate (%d files): %s." % (
+            VERSION, len(written), ", ".join(written))
     except Exception as e:
         return "BMad core could not be installed into _bmad/ (%s: %s)" % (type(e).__name__, e)

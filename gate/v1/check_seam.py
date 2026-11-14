@@ -149,7 +149,7 @@ def check_bmad(ad, product):
             bad("%s is not protected from the agent (%s)" % (rel, d.klass))
         else:
             ok("%s is protected (the agent cannot write BMad core)" % rel)
-    d = pathmap.classify(os.path.join(product, "_bmad", "custom", "bmad-prd.toml"), product, 0)
+    d = pathmap.classify(os.path.join(product, "_bmad", "custom", "prd.toml"), product, 0)
     if d.klass == "bmad":
         bad("_bmad/custom/ (the customisation surface) is protected; it must be excepted")
     else:

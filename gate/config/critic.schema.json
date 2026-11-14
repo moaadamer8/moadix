@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/moaadamer8/moadix/gate/config/critic.schema.json",
+  "title": "MOADIX gap critic evidence (CRITIC.json)",
+  "description": "Increment 7 (docs/AMENDMENT-3.md section 1). Written by moadix:gap-critic into .sdlc/cache/verify/<phase>/gap-critic/evidence/CRITIC.json; checked by the gate (gate/contract.py critic_check). Findings only: there is no verdict, pass or approval field, and none may be added.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "phase", "source_commit", "brief_sha256", "receipt", "reviewed", "topics_checked", "findings"],
+  "properties": {
+    "role": {"type": "string", "enum": ["gap-critic"]},
+    "phase": {"type": "string", "pattern": "^(?:[0-9]{1,2}[a-c]?|B)$"},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "brief_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receipt": {"type": "string", "minLength": 1},
+    "reviewed": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "topics_checked": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{1,2}$"},
+                       "uniqueItems": true},
+    "findings": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "topic", "severity", "quote", "citation", "fix"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^C[0-9]{1,4}$"},
+          "topic": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{1,2}$"},
+          "severity": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR"]},
+          "quote": {"type": "string", "minLength": 1, "maxLength": 600},
+          "citation": {"type": "string", "pattern": "^[^:\\s][^:]*:[0-9]+(?:-[0-9]+)?$"},
+          "fix": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    },
+    "notes": {"type": "string", "maxLength": 4000}
+  }
+}

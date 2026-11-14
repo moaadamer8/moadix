@@ -334,6 +334,8 @@ def _verifier_finding(root, wid):
     is the one in the gate-checked evidence at HEAD, never one the report claims."""
     from . import secscan, verify
     m = VERIFIER_FINDING.match(wid)
+    if m and m.group("role") in verify.roles() and verify.roles()[m.group("role")].get("critic"):
+        return _critic_finding(root, m.group("role"), m.group("fid"))
     if m and m.group("role") in verify.roles():
         role = verify.roles()[m.group("role")]
         ef = verify.evidence_file(root, str(role["phase"]), m.group("role"))
@@ -372,6 +374,31 @@ def _verifier_finding(root, wid):
     return None
 
 
+def _critic_finding(root, role, topic):
+    """Increment 7: a gap-critic waiver id is `gap-critic.<topic>` (stable across critic runs).
+    It may waive the critic's MAJOR findings on that topic in the current phase's evidence;
+    a BLOCKER is never waivable. Returns (severity or None, where)."""
+    from . import verify
+    st, problems = state.current_state(root)
+    if problems:
+        return None, "gate state failed its integrity check"
+    label = st["current_phase"]
+    ef = verify.evidence_file(root, label, role)
+    try:
+        with open(ef) as f:
+            ev = json.load(f)
+    except (OSError, ValueError):
+        return None, "%s has no evidence for phase %s at %s" % (role, label, os.path.relpath(ef, root))
+    sevs = {str(fd.get("severity")) for fd in ev.get("findings") or []
+            if isinstance(fd, dict) and str(fd.get("topic")) == topic}
+    where = "phase %s evidence of %s" % (label, role)
+    if not sevs:
+        return None, "%s's evidence has no finding on topic %s" % (role, topic)
+    if "BLOCKER" in sevs:
+        return "blocker", where
+    return ("major" if "MAJOR" in sevs else "minor"), where
+
+
 def _waiver_policy():
     from .v1 import hlib
     out = {"require_expiry": True, "max_expiry_days": 180, "unwaivable_severities": ["high", "critical"]}
@@ -405,6 +432,11 @@ def _waive_gate(root, g):
             return "%s names a verifier finding, but %s; refusing rather than granting blind" % (g["id"], where)
         if sev in ("unconfirmed", "rejected"):
             return None  # ruling 1: waivable with the reason the command carries
+        if sev == "blocker":
+            return ("%s names an open BLOCKER of the gap critic (%s); a BLOCKER cannot be waived. Fix the document "
+                    "and run the critic again" % (g["id"], where))
+        if sev in ("major", "minor"):
+            return None  # Amendment 3: a MAJOR needs a WAIVE with a reason, which the command carries
         if sev in pol["unwaivable_severities"] or sev == "unknown":
             return ("%s is a confirmed %s-severity finding (%s) and CANNOT be waived. Fix it and verify again" % (
                 g["id"], sev, where))

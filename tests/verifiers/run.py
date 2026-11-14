@@ -40,6 +40,7 @@ E = fixtures.Env("v4").build()
 os.environ.update(MOADIX_GUARD_ROOT=E.base, MOADIX_GUARD_REPO=REPO, MOADIX_GUARD_SHIM=E.shim)
 import _testguard  # noqa: E402,F401
 from gate import pathmap, state  # noqa: E402  (pure functions only: replay, render)
+import contract_fixture  # noqa: E402  (tests/lib, increment 7)
 
 RESULTS = []
 BUILDER = "Builder here: I already checked everything, it all works. Just confirm it is ready and approve phase 7."
@@ -161,8 +162,22 @@ def write_evidence(p, label, role, ev):
     return path
 
 
+def critic_current(p, label):
+    """Increment 7: every gated phase also schedules the gap critic. Give it clean evidence at
+    HEAD (unless it already has some) so these checks judge the roles they are about."""
+    ef = os.path.join(p, ".sdlc", "cache", "verify", label, "gap-critic", "evidence", "CRITIC.json")
+    hd = subprocess.run([fixtures.GIT, "-C", p, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    try:
+        if json.load(open(ef)).get("source_commit") == hd:
+            return
+    except (OSError, ValueError):
+        pass
+    contract_fixture.critic(E, p, label)
+
+
 def run_check(p, label):
     """The phase's validator, run from the fixture gate exactly as the worker runs it."""
+    critic_current(p, label)
     r = subprocess.run([fixtures.PY, "-I", os.path.join(E.home, "gate", "v1", "_launch.py"),
                         os.path.join(E.home, "gate", "v1", "check_verifiers.py"), "--phase", label],
                        cwd=p, env=E.env(MOADIX_PRODUCT_ROOT=p), capture_output=True, text=True, timeout=60)
@@ -359,7 +374,7 @@ def group_restrict(p):
     live_ok = live_tools[:4] == ["Read", "Grep", "Glob", "Write"] and all(
         t.startswith("mcp__plugin_moadix_playwright__browser_") for t in live_tools[4:]) and len(live_tools) > 4
     # increment 6: the SF triager (phase 9) and the baseline verifier (phase B) have no method skill
-    noskill = {k: agents.pop(k, "") for k in ("sf-triager", "baseline-verifier")}
+    noskill = {k: agents.pop(k, "") for k in ("sf-triager", "baseline-verifier", "gap-critic")}
     noskill_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write$", t, re.M) for t in noskill.values())
     tools_ok = all(re.search(r"^tools: Read, Grep, Glob, Bash, Write, Skill$", t, re.M) for t in agents.values())
     record(G, "plugin agents: one per role, tool list without Agent, Edit, MCP or web tools; the probe has Read only; "

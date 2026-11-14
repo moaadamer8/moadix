@@ -94,10 +94,35 @@ def handle(hook_input):
                 notes.append(note)
     except Exception as e:  # never block a session from starting
         notes.append("BMad core could not be checked (%s)" % type(e).__name__)
+    due = pins_due()
+    if due:
+        notes.append(due)
     if not notes:
         return None
     text = "MOADIX: " + " ".join(notes)
     out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
-    if extra:
+    if extra or due:
         out["systemMessage"] = text
     return out
+
+
+PIN_REVIEW_DAYS = 30
+
+
+def pins_due(today=None):
+    """Increment 7 (Amendment 3 section 5): a monthly proposal bumps the tool pins for the
+    operator's review. When gate/config/tools.yaml's `reviewed` date is more than 30 days old,
+    say so (never blocking). The proposal itself is managed/propose_pins.py in the MOADIX repo."""
+    import datetime
+    try:
+        from .v1 import hlib
+        doc = hlib.load_yaml(os.path.join(os.path.dirname(os.path.realpath(__file__)), "config", "tools.yaml")) or {}
+        reviewed = datetime.date.fromisoformat(str(doc.get("reviewed")))
+    except Exception:
+        return None
+    age = ((today or datetime.date.today()) - reviewed).days
+    if age <= PIN_REVIEW_DAYS:
+        return None
+    return ("The gate-run tool pins were last reviewed on %s (%d days ago): the monthly pin proposal is due. In the "
+            "MOADIX repo, run `/usr/bin/python3 managed/propose_pins.py` and review its proposal; nothing changes "
+            "until you accept it." % (reviewed.isoformat(), age))

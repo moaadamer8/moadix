@@ -11,6 +11,16 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
 
+## MOADIX phase 7 rules (always apply)
+
+<!-- MOADIX change notice: added in increment 7 (operator instruction). Not upstream text. -->
+
+1. **Make the smallest change that meets the requirement.**
+2. **Do not touch code the task does not need.**
+3. **Do not add anything nobody asked for.**
+
+The phase-7 code reviewer (moadix:code-reviewer) reports any violation of these rules as a MAJOR finding, which blocks APPROVE 7 until it is fixed or the operator waives it with a reason.
+
 **Violating the letter of the rules is violating the spirit of the rules.**
 
 ## When to Use

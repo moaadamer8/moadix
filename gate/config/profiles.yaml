@@ -19,7 +19,10 @@ profiles:
   WEB:
     description: "Browser-delivered only; no native client planned."
     status: implemented          # v0.3 implements this path end to end
-    active_phases: ["0","1","2","3","4","5","6","7","8","9","10a","10b","11"]
+    # increment 7 (toy-notes finding F-2): 6b and 10c were missing here although the gate runs
+    # them for every ruling (nothing reads this list to skip a phase) and Amendment 3 gives both
+    # phases coverage topics. Declared now, so the profile matches what the gate does.
+    active_phases: ["0","1","2","3","4","5","6","6b","7","8","9","10a","10b","10c","11"]
     extra_checks: []
     # The mirror of APP-FIRST's web entries. Before v0.4 these were missing, and
     # check-live-verification-mobile self-disabled internally under WEB by
@@ -53,7 +56,10 @@ profiles:
   "WEB→APP":
     description: "Ships web first; a native app is a committed future step."
     status: checks-implemented   # the GATES exist; mobile EXECUTION is deferred
-    active_phases: ["0","1","2","3","4","5","6","7","8","9","10a","10b","11"]
+    # increment 7 (toy-notes finding F-2): 6b and 10c were missing here although the gate runs
+    # them for every ruling (nothing reads this list to skip a phase) and Amendment 3 gives both
+    # phases coverage topics. Declared now, so the profile matches what the gate does.
+    active_phases: ["0","1","2","3","4","5","6","6b","7","8","9","10a","10b","10c","11"]
     extra_checks:
       - id: portability-scoring
         phase: "1"
