@@ -133,6 +133,18 @@ def docker_available(timeout=15):
 
 
 # ------------------------------------------------------------------ docker run
+KILLED = 137  # 128 + SIGKILL: what `docker run` returns when the kernel (or the engine) kills the run
+
+
+def _refuse_host_mounts(options):
+    """The engine options of a run (everything before the image) may not mount a host path or the Docker
+    socket. Only the options are checked: the command runs inside the container, where naming a path that
+    is not mounted reaches nothing, and checking it would refuse ordinary commands such as `node -v`."""
+    joined = " ".join(options)
+    if "docker.sock" in joined or "type=bind" in joined or re.search(r"(^| )(-v|--volume)( |=)", joined):
+        raise Refused("a confined run may not mount a host path or the Docker socket")
+
+
 def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env=None, deps_volume=None):
     """The exact `docker run` argv (section 3.2). Volumes are named volumes the gate created for this
     run; a host path is refused, and so is anything naming the Docker socket."""
@@ -159,11 +171,8 @@ def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env
         out += ["--mount", "type=volume,src=%s,dst=/deps,readonly" % deps_volume]
     for k in sorted(e):
         out += ["--env", "%s=%s" % (k, e[k])]
-    out += [img] + list(argv)
-    joined = " ".join(out)
-    if "docker.sock" in joined or re.search(r"(^| )(-v|--volume)( |=)", joined) or "type=bind" in joined:
-        raise Refused("a confined run may not mount a host path or the Docker socket")
-    return out
+    _refuse_host_mounts(out)
+    return out + [img] + list(argv)
 
 
 # ------------------------------------------------------------------ compose (section 3.8)
@@ -486,10 +495,8 @@ class Run(object):
         for k in sorted(e):
             args += ["--env", "%s=%s" % (k, e[k])]
         args += ["-d"] if detach else []
+        _refuse_host_mounts(args)
         args += [img] + list(argv)
-        joined = " ".join(args)
-        if "docker.sock" in joined or "type=bind" in joined or re.search(r"(^| )(-v|--volume)( |=)", joined):
-            raise Refused("a confined run may not mount a host path or the Docker socket")
         self.containers.append(name)
         if detach:
             self._d(args, timeout=120)
@@ -503,8 +510,12 @@ class Run(object):
         state = self._d(["inspect", "--format", "{{.State.OOMKilled}}"] + ids[:1], check=False).stdout.decode().strip() \
             if ids else ""
         self._rm_own(name)
-        if state == "true":
-            raise Refused("the run exceeded its memory limit (%d MiB) and was killed" % lim["memory_mb"])
+        # An OOM kill is never a result. The engine's OOMKilled flag is one signal; the exit status is the
+        # other, and it does not depend on inspect succeeding or on the engine setting the flag: a run killed
+        # by SIGKILL that was not the wall clock (handled above) is reported as past its memory limit.
+        if state == "true" or p.returncode in (KILLED, -9):
+            raise Refused("the run exceeded its memory limit (%d MiB) and was killed (exit %s%s)"
+                          % (lim["memory_mb"], p.returncode, ", OOMKilled" if state == "true" else ""))
         return p.returncode, p.stdout[-20000:], p.stderr[-20000:]
 
     def close(self):

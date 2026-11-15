@@ -251,9 +251,9 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>` | refused (protected) |
 | 12 | `firebase projects:list` | runs |
 
-## Updating from 0.4.0 to 0.6.1: the complete procedure
+## Updating from 0.4.0 to 0.6.2: the complete procedure
 
-This takes you from the installed 0.4.0 to 0.6.1 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+This takes you from the installed 0.4.0 to 0.6.2 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x, with the fixes from the first real-engine run in 0.6.2). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
 **1. Confirm the version you are about to install.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
@@ -261,7 +261,7 @@ This takes you from the installed 0.4.0 to 0.6.1 (main-branch guard and local ov
 cd ~/moadix && git log --oneline -1
 ```
 
-Expected last line: `<commit> 0.6.1: …` (the 0.6.1 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.1"`).
+Expected last line: `<commit> 0.6.2: …` (the 0.6.2 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.2"`).
 
 **2. Create the local overlay.** Docker Desktop: not needed. Claude Code sessions: may stay open. The format is in "Local overlay" above. Put in your production Firebase project id and the hosts your products need. Skip the file entirely if you want no protected project and no extra hosts (then every `firebase` command that names a project is refused).
 
@@ -317,11 +317,11 @@ Expected last line: `Now run the GitHub CLI checks in docs/INSTALL.md as separat
 
 ```
 cd ~/moadix && git push origin master
-git tag -a v0.6.1 -m "MOADIX 0.6.1"
-git push origin v0.6.1
+git tag -a v0.6.2 -m "MOADIX 0.6.2"
+git push origin v0.6.2
 ```
 
-Expected last line of the first command: `   451a03a..<0.6.1 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.1 -> v0.6.1`.
+Expected last line of the first command: `   451a03a..<0.6.2 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.2 -> v0.6.2`.
 
 ## 5. Uninstall
 

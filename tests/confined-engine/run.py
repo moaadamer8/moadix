@@ -29,6 +29,7 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
   output    a forged report (symlink to a host file, a FIFO, an oversized file) is refused
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
 """
+import json
 import os
 import re
 import secrets
@@ -219,14 +220,35 @@ NET_PROBE = ("const net=require('net'),dns=require('dns');let n=0;const done=(k,
              "t.on('error',()=>done('target','fail'));t.on('timeout',()=>{t.destroy();done('target','fail')});")
 
 
+IF_PROBE = ("const fs=require('fs'),os=require('os');const r={};"
+            "for(const n of fs.readdirSync('/sys/class/net')){const d='/sys/class/net/'+n;"
+            "if(!fs.statSync(d).isDirectory())continue;"  # bonding_masters is a file, not a device
+            "r[n]={flags:fs.readFileSync(d+'/flags','utf8').trim(),oper:fs.readFileSync(d+'/operstate','utf8').trim()}}"
+            "const rows=f=>fs.readFileSync(f,'utf8').trim().split('\\n').filter(Boolean);"
+            "console.log(JSON.stringify({ifs:r,addr:Object.keys(os.networkInterfaces()),"
+            "route4:rows('/proc/net/route').slice(1),"
+            "route6:rows('/proc/net/ipv6_route').map(l=>l.trim().split(/\\s+/).pop()),"
+            "if6:rows('/proc/net/if_inet6').map(l=>l.trim().split(/\\s+/).pop())}))")
+
+
 def test_network(node, py):
     G = "network"
     r = confined.Run(rid())
     try:
         rc, out, err = r.execute(node, ["node", "-e", NET_PROBE % ("1.0.0.1", 80)], "E-lint", [])
-        rc2, ifs, _ = sh(r, node, "ls /sys/class/net")
-        record(G, "product code runs with no network: no DNS, no connection to an address, no interface but lo",
-               "dns=fail" in out and "ip=fail" in out and "target=fail" in out and ifs.split() == ["lo"], (out, err, ifs))
+        rc2, ifs, ierr = r.execute(node, ["node", "-e", IF_PROBE], "E-lint", [])
+        try:
+            st = json.loads(ifs.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            st = None
+        # The kernel creates placeholder devices (gre0, sit0, tunl0, ...) in every network namespace; they are
+        # down and have no address. The property: nothing but lo is up or addressed, and no route leaves lo.
+        up = st and [n for n, v in st["ifs"].items() if n != "lo" and int(v["flags"], 16) & 1]
+        record(G, "product code runs with no network: no DNS, no connection to an address; no interface but lo is up "
+                  "or has an address, and no route exists except on lo",
+               "dns=fail" in out and "ip=fail" in out and "target=fail" in out and st is not None and not up and
+               st["addr"] == ["lo"] and st["if6"] in ([], ["lo"]) and st["route4"] == [] and
+               all(d == "lo" for d in st["route6"]), (out, err, ifs, ierr, up))
         live = r.network("live")
         app_vol = r.volume("app")
         r.own(app_vol, node)
@@ -276,14 +298,20 @@ def test_limits(node):
     lim = confined.limits("E-lint")
     r = confined.Run(rid())
     try:
-        # shell builtins only after the loop: with the pids limit full, nothing else can fork
-        rc, out, err = sh(r, node, "cat /sys/fs/cgroup/pids.max; i=0; while [ $i -lt %d ]; do sleep 20 & i=$((i+1)); done "
-                                   "2>/tmp/fork.err; n=0; for p in /proc/[0-9]*; do n=$((n+1)); done; echo $n; "
-                                   "e=0; while read l; do e=$((e+1)); done < /tmp/fork.err; echo $e; true" % (lim["pids"] * 3))
-        nums = [x for x in out.split() if x.isdigit()]
-        record(G, "fork bomb: %d processes asked, the pids limit (%d) holds and fork fails" % (lim["pids"] * 3, lim["pids"]),
-               len(nums) == 3 and nums[0] == str(lim["pids"]) and int(nums[1]) <= lim["pids"] and int(nums[2]) > 0,
-               (out, err))
+        # The bomb runs in a subshell: dash exits on "Cannot fork", so the shell that reports must not be the one
+        # that hits the limit. The report uses builtins only (with the pids limit full, nothing else can fork):
+        # the limit, the processes alive, the cgroup's own count of refused forks (pids.events max), the errors.
+        rc, out, err = sh(r, node, "read m < /sys/fs/cgroup/pids.max; echo max=$m; "
+                                   "( i=0; while [ $i -lt %d ]; do sleep 20 & i=$((i+1)); done ) 2>/tmp/fork.err; "
+                                   "n=0; for p in /proc/[0-9]*; do n=$((n+1)); done; echo procs=$n; "
+                                   "while read k v; do [ \"$k\" = max ] && echo events=$v; done < /sys/fs/cgroup/pids.events; "
+                                   "e=0; while read l; do e=$((e+1)); done < /tmp/fork.err; echo errors=$e; true"
+                          % (lim["pids"] * 3))
+        kv = dict(x.split("=", 1) for x in out.split() if "=" in x and x.split("=", 1)[1].isdigit())
+        record(G, "fork bomb: %d processes asked, the pids limit (%d) holds: at most %d alive, the cgroup refused "
+                  "forks (pids.events max > 0) and fork failed" % (lim["pids"] * 3, lim["pids"], lim["pids"]),
+               kv.get("max") == str(lim["pids"]) and 0 < int(kv.get("procs", "0")) <= lim["pids"] and
+               int(kv.get("events", "0")) > 0 and int(kv.get("errors", "0")) > 0, (out, err))
         try:
             r.execute(node, ["node", "--max-old-space-size=16384", "-e",
                              "const a=[];for(;;){a.push(Buffer.alloc(64<<20,1))}"], "E-lint", [])
@@ -291,7 +319,7 @@ def test_limits(node):
         except confined.Refused as e:
             why = str(e)
         record(G, "memory: allocating past %d MiB is killed (OOM) and refused, never a result" % lim["memory_mb"],
-               why and "memory limit" in why, why)
+               why and "memory limit (%d MiB)" % lim["memory_mb"] in why, why)
         out_vol = r.volume("out")
         r.own(out_vol, node)
         rc, out, err = sh(r, node, "dd if=/dev/zero of=/out/big bs=1M count=%d 2>&1; ls -ln /out/big; "
@@ -355,6 +383,29 @@ def test_output(node):
     record(G, "cleanup: nothing labelled is left", not r.leftovers(), r.leftovers())
 
 
+# The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
+# that never ran are reported as failed, not dropped).
+PLAN = {"test_secrets": ("secrets", 4), "test_host": ("host paths", 6), "test_network": ("network", 7),
+        "test_limits": ("limits", 6), "test_output": ("forged output", 5)}
+TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
+
+
+def run_group(t, a):
+    group, planned = PLAN[t.__name__]
+    start = len(RESULTS)
+    try:
+        t(*a)
+    except Exception as e:
+        import traceback
+        record(group, "the group crashed (%s); the rest of it did not run" % type(e).__name__, False,
+               "%s: %s\n%s" % (type(e).__name__, e, traceback.format_exc()[-1500:]))
+        done = len(RESULTS) - start
+        for i in range(done, planned):
+            record(group, "check %d of %d did not run (the group crashed)" % (i + 1, planned), False, "")
+    if len(RESULTS) - start != planned and not [x for x in RESULTS[start:] if not x[2]]:
+        record(group, "the group recorded %d checks, expected %d" % (len(RESULTS) - start, planned), False, "")
+
+
 def main():
     print("MOADIX confined-engine suite (Terminal only). It never touches anything not labelled moadix.run=%s*." % PREFIX)
     hits = no_prune.scan(REPO)
@@ -399,12 +450,7 @@ def main():
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,))):
-        try:
-            t(*a)
-        except Exception as e:
-            import traceback
-            record(t.__name__, "group ran to the end", False, "%s: %s\n%s" % (type(e).__name__, e,
-                                                                             traceback.format_exc()[-1500:]))
+        run_group(t, a)
     cs, vols, nets = inventory()
     mine = [c["name"] for c in cs if ours(c["run"])] + [v for v in vols if ours((v.split("\t") + [""])[1])] + \
            [n for n in nets if ours((n.split("\t") + ["", ""])[2])]

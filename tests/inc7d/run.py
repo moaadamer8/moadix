@@ -23,6 +23,8 @@ import shutil
 import sys
 import time
 
+sys.dont_write_bytecode = True  # the guard counts a .pyc written into the repository as a write outside the fixture
+
 HERE = os.path.dirname(os.path.realpath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
@@ -415,6 +417,70 @@ def test_zap_rules(p):
            rc == 0 and loaded and zrun and "-c zap-rules.tsv" in " ".join(zrun[0]), (out, loaded, zrun))
 
 
+def test_runner_kill_and_mounts():
+    """0.6.2 (the operator's engine run on 0.6.1): an OOM kill is always a refusal naming the memory limit, even
+    when the engine's OOMKilled flag is false or inspect fails; the host-mount check covers the engine options
+    only, so a command that merely names the socket (or `node -v`) is not refused, while a bind, -v or the
+    socket as a mount still is."""
+    G = "runner: OOM kill and mount check"
+    stub = os.path.join(E.base, "engine-stub")
+    with open(stub, "w") as f:
+        f.write("#!/bin/sh\necho \"$*\" >> \"$0.log\"\ncase \"$1\" in\n  version) echo stub-1 ;;\n"
+                "  run) exit \"${STUB_RC:-0}\" ;;\n  ps) echo 0123456789abcdef ;;\n"
+                "  inspect) [ -n \"$STUB_INSPECT_FAILS\" ] && exit 1; echo \"${STUB_OOM:-false}\" ;;\nesac\nexit 0\n")
+    os.chmod(stub, 0o755)
+    saved_engine = confined.engine
+    confined.engine = lambda: stub
+    lim = confined.limits("E-lint")
+    try:
+        r = confined.Run("kill-test")
+        for rc, oom, fails, what in ((137, "false", "", "exit 137 with OOMKilled false"),
+                                     (137, "", "yes", "exit 137 with inspect failing"),
+                                     (0, "true", "", "OOMKilled true with exit 0")):
+            os.environ.update(STUB_RC=str(rc), STUB_OOM=oom)
+            os.environ.pop("STUB_INSPECT_FAILS", None)
+            if fails:
+                os.environ["STUB_INSPECT_FAILS"] = fails
+            try:
+                res, why = r.execute("img@sha256:" + "0" * 64, ["node", "x.js"], "E-lint", []), None
+            except confined.Refused as e:
+                res, why = None, str(e)
+            record(G, "%s: refused, naming the limit (never a result, never None)" % what,
+                   res is None and why and "memory limit (%d MiB)" % lim["memory_mb"] in why, (res, why))
+        os.environ.update(STUB_RC="1", STUB_OOM="false")
+        os.environ.pop("STUB_INSPECT_FAILS", None)
+        res = r.execute("img@sha256:" + "0" * 64, ["node", "x.js"], "E-lint", [])
+        record(G, "control: an ordinary failing exit (1, not OOM-killed) is returned as a result", res[0] == 1, res)
+        os.environ["STUB_RC"] = "0"
+        ok = []
+        for argv in (["sh", "-c", "test -S /var/run/docker.sock && echo SOCKET"], ["node", "-v"], ["ls", "--volume"]):
+            try:
+                ok.append(r.execute("img@sha256:" + "0" * 64, argv, "E-lint", [])[0] == 0)
+            except confined.Refused as e:
+                ok.append(str(e))
+        record(G, "a command that only names the socket, `node -v` or `--volume` runs (the check covers the engine options)",
+               ok == [True, True, True], ok)
+        why = []
+        for opts in (["--mount", "type=bind,src=/,dst=/h"], ["-v", "/:/h"], ["--volume=/x:/y"],
+                     ["--mount", "type=volume,src=/var/run/docker.sock,dst=/s"]):
+            try:
+                confined._refuse_host_mounts(["run"] + opts)
+                why.append(None)
+            except confined.Refused as e:
+                why.append(str(e))
+        try:
+            r.execute("img@sha256:" + "0" * 64, ["true"], "E-lint", [("/var/run/docker.sock", "/s", True)])
+            why.append(None)
+        except confined.Refused as e:
+            why.append(str(e))
+        record(G, "a bind mount, -v, --volume= or the socket in the engine options is still refused",
+               all(why), why)
+    finally:
+        confined.engine = saved_engine
+        for k in ("STUB_RC", "STUB_OOM", "STUB_INSPECT_FAILS"):
+            os.environ.pop(k, None)
+
+
 def test_safeguards():
     G = "engine-suite safeguards (ruling 3)"
     import no_prune
@@ -483,6 +549,25 @@ def test_safeguards():
            '"images"' in src and "DIFFERENCE" in src and "not diff" in src, "")
     record(G, "it never starts, stops or inspects a foreign object: inspect only on its own pinned images and its own "
               "containers", '"start"' not in src and '"stop"' not in src and src.count('"inspect"') == 1, "")
+    # a crashing group is one failed check plus its unrun checks reported as failed: the total stays 31
+    saved_results = list(es.RESULTS)
+    del es.RESULTS[:]
+
+    def test_host(_n):
+        es.record("host paths", "first check", True)
+        raise es.confined.Refused("may not mount a host path or the Docker socket")
+    try:
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            es.run_group(test_host, (None,))
+        got = list(es.RESULTS)
+    finally:
+        es.RESULTS[:] = saved_results
+    record(G, "engine suite: a group that crashes after 1 of its 6 checks reports 6 (1 passed, the crash, 4 not run); "
+              "the suite's total is fixed at 31",
+           es.TOTAL == 31 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
+           got)
 
 
 def test_install_and_locks():
@@ -536,7 +621,8 @@ def main():
         p = product("execprod")
         fd = fail_set()
         for t, a in ((test_gates, (p, fd)), (test_argv, (p,)), (test_forged, (p,)), (test_applicability_and_inputs, ()),
-                     (test_fail_closed, (p,)), (test_axe_urls, ()), (test_zap_rules, (p,)), (test_safeguards, ()),
+                     (test_fail_closed, (p,)), (test_axe_urls, ()), (test_zap_rules, (p,)), (test_runner_kill_and_mounts, ()),
+                     (test_safeguards, ()),
                      (test_install_and_locks, ())):
             try:
                 t(*a)

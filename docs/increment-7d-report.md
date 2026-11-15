@@ -1,6 +1,6 @@
 # Increment 7d: rulings on 7c, the executing gates, the engine suites (0.6.0)
 
-Status: built and committed locally as 0.6.0; review rulings applied in 0.6.1 (section 8, which supersedes section 2's "stopped"). Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
+Status: built and committed locally as 0.6.0; review rulings applied in 0.6.1 (section 8, which supersedes section 2's "stopped"); the operator's first real-engine run fixed in 0.6.2 (section 9). Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
 
 ## 1. Rulings on increment 7c, as applied
 
@@ -237,4 +237,13 @@ I could not run it: the sandbox cannot reach the Docker socket from Python, and 
    - The paths reach the runner as a gate-written JSON file.
    - ZAP runs with the gate-owned `gate/exec/zap-rules.tsv` (`-c`). The gate applies the same file to the JSON report: High always fails, a rule set to FAIL fails at any risk, and IGNORE is counted.
 
-The complete operator procedure from 0.4.0 is in `docs/INSTALL.md`, "Updating from 0.4.0 to 0.6.1".
+## 9. The operator's real-engine run on 0.6.1, fixed in 0.6.2
+
+The run reported 26 checks: 22 passed, 4 failed, and 5 never ran. The foreign-object record matched before and after (22 containers, 455 volumes, 9 networks, 28 images). Reproduced with throwaway containers labelled `moadix.run=es…`, all removed afterwards:
+
+1. **test_host crashed (runner defect).** The runner refused any run whose whole argv mentioned `docker.sock`, `-v` or `--volume`, including the command run inside the container. The suite's probe `test -S /var/run/docker.sock` was refused, and so would `node -v` be. The check now covers the engine options only (`_refuse_host_mounts`). A bind mount, `-v`, `--volume=` or the socket as a mount is still refused (tests/inc7d). The suite also now reports a crashed group as one failed check, plus each of the group's checks that did not run as a failed check, so the total is always 31.
+2. **"no network" (test defect).** Every network namespace has the kernel's placeholder devices (gre0, sit0, tunl0, erspan0 and others), all down with no address. The check now proves the real property: no interface other than lo has IFF_UP set; `os.networkInterfaces()` lists only lo; there is no IPv4 route; and every IPv6 route and address is on lo. As a negative control, a container on the default bridge fails this check on all three counts (eth0 is up, addressed and routed).
+3. **Fork bomb (test defect).** The check expects the pids.max value (256), at most 256 processes alive, and at least one failed fork. The limit held, but dash exits with "Cannot fork" (status 2) at the first refused fork, so the counting lines never ran and only "256" was printed. The bomb now runs in a subshell, and the parent reports using builtins only. The check also requires the cgroup's own count of refused forks (`pids.events` max) to be above 0. Measured: max=256, procs=255, events=1, errors=1.
+4. **Memory (runner defect).** The limit is applied: inside a run, `memory.max` is 2147483648 and `memory.swap.max` is 0. The Docker Desktop VM has 8217448448 bytes (7.65 GiB) and 10 CPUs. When the allocation ran past the limit, the cgroup recorded `oom_kill 1` and node exited with 137. The runner treated a run as OOM-killed only when `inspect` reported `OOMKilled=true`; otherwise it returned the exit 137 as a result, and the test saw no refusal (None). From this sandbox, `docker inspect` is refused for every container, so the flag could not be read here; the runner no longer depends on it. Exit 137 not caused by the wall clock, or `OOMKilled=true`, is now always a refusal: "the run exceeded its memory limit (2048 MiB) and was killed". tests/inc7d covers exit 137 with the flag false, exit 137 with inspect failing, the flag true with exit 0, and the control of an ordinary exit 1.
+
+The complete operator procedure from 0.4.0 is in `docs/INSTALL.md`, "Updating from 0.4.0 to 0.6.2".
