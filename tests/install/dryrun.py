@@ -7,7 +7,8 @@ Everything lives under ~/moadix-scratch/install-dryrun:
   root/ClaudeCode     stands in for /Library/Application Support/ClaudeCode (absent at start, as on this Mac)
   kc/standin.keychain-db  stands in for the login keychain; holds one unrelated item that must survive
   products/toy        a throwaway product repo
-Checks: install works and the installed gate records a real approval; an update
+Checks: install works; the installed gate refuses APPROVE 0 without the increment 7 contract and
+records a real approval once the product meets it; an update
 keeps the secrets; uninstall leaves root/ and the keychain exactly as before;
 a second uninstall is harmless; the dry-run flag refuses system paths.
 """
@@ -29,6 +30,8 @@ CC = os.path.join(ROOT, "ClaudeCode")
 KC = os.path.join(BASE, "kc", "standin.keychain-db")  # not "login.*": that name was added to the user search list
 PROD = os.path.join(BASE, "products", "toy")
 RESULTS = []
+sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
+import contract_fixture  # noqa: E402  (the suites' increment 7 contract fixture: COVERAGE, DISCOVERY, gap critic)
 
 
 def sh(cmd, **kw):
@@ -87,6 +90,36 @@ def hook(mode, payload):
     return r.stdout
 
 
+def review(label):
+    """End the agent's turn (the gate starts the validators), then wait for REVIEW to show their result."""
+    hook("stop", {"hook_event_name": "Stop", "cwd": PROD})
+    o = ""
+    for _ in range(120):
+        o = hook("prompt", {"prompt": "REVIEW %s" % label, "cwd": PROD})
+        if "validators for phase %s: PASS" % label in o or "validators for phase %s: FAIL" % label in o:
+            break
+        time.sleep(0.5)
+    return o
+
+
+class Installed(object):
+    """The installed gate copy, in the shape tests/lib/contract_fixture.py expects of a fixture Env:
+    `home` holds gate/, env() is the environment, hook() returns (rc, decoded output, stderr)."""
+    home = os.path.join(CC, "moadix")
+
+    def env(self, **extra):
+        return dict(os.environ, **extra)
+
+    def hook(self, mode, payload, timeout=120):
+        r = sh(["/usr/bin/python3", "-I", os.path.join(CC, "moadix", "gate", "hook.py"), mode],
+               input=json.dumps(payload), timeout=timeout)
+        try:
+            out = json.loads(r.stdout) if r.stdout.strip() else {}
+        except ValueError:
+            out = {"_raw": r.stdout}
+        return r.returncode, out, r.stderr
+
+
 def main():
     if os.path.exists(KC):
         sh(["security", "delete-keychain", KC])
@@ -121,10 +154,17 @@ def main():
           "permissions.disableBypassPermissionsMode=%r, pin=%s..., strictKnownMarketplaces=%r" % (
               pol["permissions"].get("disableBypassPermissionsMode"), pol["env"]["MOADIX_PIN"][:6], pol["strictKnownMarketplaces"]))
     rels = [os.path.join(d, f) for d in ("", "v1", "config") for f in os.listdir(os.path.join(REPO, "gate", d))
-            if f.endswith((".py", ".yaml", ".toml", ".ini"))]
-    same = all(open(os.path.join(REPO, "gate", f)).read() == open(os.path.join(CC, "moadix", "gate", f)).read()
-               for f in rels) and not os.path.exists(os.path.join(CC, "moadix", "gate", "_testguard.py"))
-    check("installed gate copy matches the repo's gate/", same, "files: %s" % sorted(os.listdir(os.path.join(CC, "moadix", "gate"))))
+            if f.endswith((".py", ".yaml", ".toml", ".ini", ".json"))]
+    # increments 7b-7d: the tool configs, the confined runner's lockfiles and its scripts are installed too
+    for sub in ["config/" + x for x in ("semgrep", "redocly", "k6", "vacuum", "squawk", "actionlint")] + \
+            ["config/locks/" + x for x in sorted(os.listdir(os.path.join(REPO, "gate", "config", "locks")))] + ["exec"]:
+        rels += [os.path.join(sub, f) for f in sorted(os.listdir(os.path.join(REPO, "gate", sub)))
+                 if os.path.isfile(os.path.join(REPO, "gate", sub, f))]
+    missing = [f for f in rels if not os.path.isfile(os.path.join(CC, "moadix", "gate", f))]
+    same = not missing and all(open(os.path.join(REPO, "gate", f), "rb").read() ==
+                               open(os.path.join(CC, "moadix", "gate", f), "rb").read() for f in rels) and not os.path.exists(os.path.join(CC, "moadix", "gate", "_testguard.py"))
+    check("installed gate copy matches the repo's gate/ (%d files, with the 7b-7d configs, locks and exec scripts)" % len(rels),
+          same, "missing: %s; files: %s" % (missing, sorted(os.listdir(os.path.join(CC, "moadix", "gate")))))
 
     # The installed gate works end to end with the code the operator would scan.
     os.makedirs(PROD)
@@ -139,14 +179,23 @@ def main():
           stop["command"] == "/usr/bin/python3 -I '%s/moadix/gate/hook.py' stop" % CC and "onFailure" not in stop,
           json.dumps(stop))
     # increment 3 (ruling 2): the gate starts the validators when the agent's turn ends; REVIEW only reads.
-    hook("stop", {"hook_event_name": "Stop", "cwd": PROD})
-    for _ in range(40):
-        o = hook("prompt", {"prompt": "REVIEW 0", "cwd": PROD})
-        if "validators for phase 0: PASS" in o or "FAIL" in o:
+    # Increment 7: phase 0 also needs the cross-phase contract (COVERAGE.md, DISCOVERY.md, clean gap-critic
+    # evidence). First the refusal on the product without it, then the same product made ready through the
+    # suites' own contract fixture, approved with a real code.
+    o = review(0)
+    burned = totp(key)
+    o = hook("prompt", {"prompt": "APPROVE 0 %s" % burned, "cwd": PROD})
+    check("installed gate: without the increment 7 contract, 'APPROVE 0 <real code>' is NOT recorded and the reason "
+          "names check-contract-0", "APPROVE NOT recorded" in o and "check-contract-0" in o and "recorded (ledger" not in o,
+          o[:300])
+    contract_fixture.ready(Installed(), PROD, "0")
+    o = review(0)
+    check("installed gate: the Stop hook ran the ported validators; REVIEW 0 shows the result (handoff and contract pass)",
+          "validators for phase 0: PASS" in o and "check-handoff-0: PASS" in o and "check-contract-0: PASS" in o, o[:300])
+    for _ in range(35):  # the refused attempt spent its code (single use): wait for the next 30-second code
+        if totp(key) != burned:
             break
-        time.sleep(0.5)
-    check("installed gate: the Stop hook ran the ported validators; REVIEW 0 shows the result", "check-handoff-0: PASS" in o,
-          o[:200])
+        time.sleep(1)
     o = hook("prompt", {"prompt": "APPROVE 0 %s" % totp(key), "cwd": PROD})
     check("installed gate: 'APPROVE 0 <code from the shown key>' is recorded", "APPROVE 0 recorded (ledger seq 1)" in o, o[:200])
     o = hook("pretool", {"tool_name": "Edit", "tool_input": {"file_path": ".sdlc/phase.yaml", "old_string": "a", "new_string": "b"}, "cwd": PROD})

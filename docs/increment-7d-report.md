@@ -1,6 +1,6 @@
 # Increment 7d: rulings on 7c, the executing gates, the engine suites (0.6.0)
 
-Status: built and committed locally as 0.6.0; review rulings applied in 0.6.1 (section 8, which supersedes section 2's "stopped"); the operator's first real-engine run fixed in 0.6.2 (section 9). Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
+Status: built and committed locally as 0.6.0; review rulings applied in 0.6.1 (section 8, which supersedes section 2's "stopped"); the operator's first real-engine run fixed in 0.6.2 (section 9); the install dry run adapted in 0.6.3 (section 10). Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
 
 ## 1. Rulings on increment 7c, as applied
 
@@ -246,4 +246,21 @@ The run reported 26 checks: 22 passed, 4 failed, and 5 never ran. The foreign-ob
 3. **Fork bomb (test defect).** The check expects the pids.max value (256), at most 256 processes alive, and at least one failed fork. The limit held, but dash exits with "Cannot fork" (status 2) at the first refused fork, so the counting lines never ran and only "256" was printed. The bomb now runs in a subshell, and the parent reports using builtins only. The check also requires the cgroup's own count of refused forks (`pids.events` max) to be above 0. Measured: max=256, procs=255, events=1, errors=1.
 4. **Memory (runner defect).** The limit is applied: inside a run, `memory.max` is 2147483648 and `memory.swap.max` is 0. The Docker Desktop VM has 8217448448 bytes (7.65 GiB) and 10 CPUs. When the allocation ran past the limit, the cgroup recorded `oom_kill 1` and node exited with 137. The runner treated a run as OOM-killed only when `inspect` reported `OOMKilled=true`; otherwise it returned the exit 137 as a result, and the test saw no refusal (None). From this sandbox, `docker inspect` is refused for every container, so the flag could not be read here; the runner no longer depends on it. Exit 137 not caused by the wall clock, or `OOMKilled=true`, is now always a refusal: "the run exceeded its memory limit (2048 MiB) and was killed". tests/inc7d covers exit 137 with the flag false, exit 137 with inspect failing, the flag true with exit 0, and the control of an ordinary exit 1.
 
-The complete operator procedure from 0.4.0 is in `docs/INSTALL.md`, "Updating from 0.4.0 to 0.6.2".
+## 10. The Terminal-only suites on 0.6.2, and the dry run adapted in 0.6.3
+
+The operator's run: confined-engine 31/31 with foreign objects unchanged, corpus 128/128, and the install dry run 17/18. The dry run failed on "APPROVE 0 is recorded". The operator's reading is correct. Since increment 7, phase 0 is gated by check-contract-0 (docs/AMENDMENT-3.md section 1), which needs sdlc/0/COVERAGE.md, sdlc/0/DISCOVERY.md and clean gap-critic evidence. The dry run's product, last changed before increment 7, had only the BRD. The installed gate refused correctly ("validators did not pass … check-contract-0 FAIL: coverage-lint: sdlc/0/COVERAGE.md is missing").
+
+Changes:
+- The dry run now prepares the product through `tests/lib/contract_fixture.ready`, the fixture the other suites use, against the installed gate copy (a small adapter gives it the fixture's shape). APPROVE 0 is still recorded by the installed gate with a real code.
+- A new check runs first, on the product without the contract: APPROVE 0 with a real code is not recorded, and the reason names check-contract-0. A refused APPROVE spends its code (gate/opcmd.py), so the approval waits for the next 30-second code.
+- "Installed gate copy matches" now also compares the files the installer has copied since 7b–7d: gate/config/*.json, the vacuum, squawk and actionlint configs, the runner's lockfiles and gate/exec. The dry run never checked these before.
+- The dry run now has 19 checks. The sequence was rehearsed in the sandbox against a fixture gate copy: refused naming check-contract-0, then contract PASS, then recorded.
+
+Tests that need Terminal, the Keychain or Docker, and whether they are current with increments 7–7d:
+- tests/confined-engine/run.py: Docker. Written in 7d and fixed in 0.6.2; 31/31 on the operator's run.
+- tests/corpus/run.py and tests/corpus/isolation.py: Keychain and test-built checkers. Adapted in increment 7 (7ba7752: `contract_fixture.ready` before every approval). 7b–7d added nothing to the phases it approves; 128/128 on 0.6.2.
+- tests/probes/kc-probe.c: the corpus isolation guard's keychain probe. Untouched by 7–7d; nothing in it depends on them.
+- tests/install/dryrun.py: Keychain. It was not adapted until now; adapted in 0.6.3 as above.
+- tests/install/policy_live.sh: a live Claude Code session after install. It tests the 0.5.2 policy, and managed policy is unchanged since 0.5.2 (7b–7d changed only the files install.sh copies, which the dry run now checks); no adaptation needed.
+
+The complete operator procedure from 0.4.0 is in `docs/INSTALL.md`, "Updating from 0.4.0 to 0.6.3".
