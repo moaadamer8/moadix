@@ -64,15 +64,10 @@ class Env(object):
         with open(os.path.join(self.home, "gate", "config", "trusted-bin.yaml"), "w") as f:
             f.write("# test fixture: the docker shim only\ndirs:\n  - %s\n" % self.shim)
         # increment 7d: the confined runner talks to the engine double in fixture gate copies (never a real
-        # engine), with the images cleared in this copy only (the repository's confinement.yaml is unchanged)
+        # engine). The images are cleared in the repository's confinement.yaml (ruling 1 on increment 7d).
         dbl = os.path.join(self.shim, "engine-double")
         shutil.copy(os.path.join(LIB, "engine_double.py"), dbl)
         os.chmod(dbl, 0o755)
-        cy = os.path.join(self.home, "gate", "config", "confinement.yaml")
-        with open(cy) as f:
-            text = f.read()
-        with open(cy, "w") as f:
-            f.write(text.replace("status: blocked", "status: cleared"))
         self.engine = dbl
         return self
 

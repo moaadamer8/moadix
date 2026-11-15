@@ -2,7 +2,7 @@
 """check-lv-inventory -- phase 10a LV-INVENTORY.csv (increment 7b; Amendment 3 phase 10a, LV1).
 
 Reads committed files only. <scope>/10a/LV-INVENTORY.csv has columns lv_id, target, state,
-result, artifact:
+result, artifact (and an optional url, an app-relative path the axe gate visits; increment 7d):
 
   - it covers 100% of the designed rows of design/screen-states.csv and
     design/component-states.csv (U4/U13): every target / state pair;

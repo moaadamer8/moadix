@@ -221,13 +221,23 @@ def test_limits():
 # ------------------------------------------------------------------ fail closed (ruling 1, ruling 2)
 def test_fail_closed():
     G = "fail closed"
-    # the fixture gate copy clears the images for the engine double (increment 7d); the repository's
-    # configuration, which is what installs, keeps them blocked until the operator rules
+    # ruling 1 on increment 7d cleared all six images in the repository's configuration; a blocked image
+    # (a variant of that configuration) must still give UNKNOWN with its reason
+    repo_cfg = os.path.join(REPO, "gate", "config", "confinement.yaml")
+    text = open(repo_cfg).read()
+    names = ("node", "node-full", "python", "chromium", "zap", "postgres")
     saved_cfg = confined.CONFIG
-    confined.CONFIG = os.path.join(REPO, "gate", "config", "confinement.yaml")
-    for name in ("node", "node-full", "python", "chromium", "zap", "postgres"):
+    confined.CONFIG = repo_cfg
+    cleared = {n: unavailable(confined.image, n) for n in names}
+    record(G, "ruling 1 on increment 7d: all six images are cleared in the repository's configuration",
+           not any(cleared.values()), cleared)
+    blocked = os.path.join(E.base, "confinement-blocked.yaml")
+    with open(blocked, "w") as f:
+        f.write(re.sub(r"(?m)^    status: cleared$", "    status: blocked\n    reason: \"blocked for the fail-closed test\"", text))
+    confined.CONFIG = blocked
+    for name in names:
         why = unavailable(confined.image, name)
-        record(G, "image %s is blocked by the licence ruling: UNKNOWN with the reason" % name, why and "blocked" in why, why)
+        record(G, "a blocked image (%s): UNKNOWN with the reason" % name, why and "blocked" in why, why)
     confined.CONFIG = saved_cfg
     saved = confined.DOCKER_DIRS
     saved_env = os.environ.pop("MOADIX_TEST_ENGINE", None)

@@ -120,9 +120,11 @@ def main():
                 s["containers"].pop(c, None)
     elif cmd == "ps":
         lab = next((x.split("label=", 1)[1] for x in a if x.startswith("label=")), None)
-        print("\n".join(c for c, v in s["containers"].items() if v.get("label") == lab))
+        nm = next((x.split("name=", 1)[1] for x in a if x.startswith("name=")), None)
+        print("\n".join(c for c, v in s["containers"].items() if v.get("label") == lab and
+                        (nm is None or "^/%s$" % c == nm)))
     elif cmd == "inspect":
-        print("false")
+        print("false" if len(a) > 3 else "")
     elif cmd == "build":
         sys.stdin.buffer.read()
     elif cmd == "run":

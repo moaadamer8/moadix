@@ -14,7 +14,8 @@ Reads committed files only (no tool, no product code):
   design/screen-states.csv   screen,state,status,reference: every screen the PRD lists (P5)
                              appears; each screen has default, loading, empty and error
                              (U15), each designed (a reference that exists at HEAD) or n/a
-                             with a reason (U4)
+                             with a reason (U4). An optional `url` column (an app-relative path)
+                             tells the axe gate where the screen is (increment 7d, ruling 4)
   design/component-states.csv  component,state,status,reference: the component x state
                              inventory (U13), same rules; phase 10a's LV-INVENTORY.csv must
                              cover every designed row of both files

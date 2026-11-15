@@ -1,0 +1,38 @@
+PASS  [guard] the installed checker as a fixture checker
+      checker /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker is not a scratch build
+PASS  [guard] the login keychain as the test keychain
+      keychain /Users/moad/Library/Keychains/login.keychain-db is outside the scratch directory
+PASS  [guard] a keychain outside the scratch dir
+      keychain /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/x.keychain-db is outside the scratch directory
+PASS  [guard] a checker built without the test keychain (a production build)
+      checker /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/scratch/homeP/bin/moadix-checker is not pinned to the test keychain /private/tmp/claude-503/m
+PASS  [guard] control: a scratch test build passes the guard
+      accepted
+PASS  [guard] a gate copy whose checker resolves to the installed one
+      gate in /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/scratch/homeL would run /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker, no
+PASS  [guard] a fixture product outside the scratch dir (a real .sdlc/)
+      product /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/realproduct is outside the scratch directory
+PASS  [guard] a hook payload whose cwd is a real product
+      hook payload cwd /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/realproduct is outside the scratch directory
+PASS  [guard] a command running the installed checker
+      command names the installed MOADIX home: /Library/Application Support/ClaudeCode/moadix/bin/moadix-checker state
+PASS  [guard] security without a keychain argument (acts on the login keychain)
+      security find-generic-password must name exactly one scratch keychain as its last argument (otherwise it acts on the default keychain): security find-generic-pa
+PASS  [guard] security naming the login keychain
+      command names a real keychain: security unlock-keychain -p x /Users/moad/Library/Keychains/login.keychain-db
+PASS  [guard] security subcommand off the allowlist (dump-keychain)
+      security dump-keychain is not on the corpus allowlist
+PASS  [guard] a command whose cwd is a real product
+      command runs in /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/realproduct, outside the scratch directory and this repo
+PASS  [guard] a scratch dir inside a real product
+      scratch /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/realproduct/scratch is inside the real product /private/tmp/claude-503/moadix-isolation-selft
+PASS  [guard] an existing scratch dir the corpus did not make (would be deleted)
+      scratch /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/notours exists and was not made by the corpus (unexpected: thesis.tex); refusing to delete it
+PASS  [guard] audit hook: subprocess.run of a program in the installed MOADIX home, bypassing sh()
+      command names the installed MOADIX home: /Library/Application Support/ClaudeCode/moadix/bin/selftest-never-exists state
+PASS  [guard] audit hook: os.posix_spawn naming the login keychain, bypassing sh()
+      command names a real keychain: /usr/bin/true /Users/moad/Library/Keychains/login.keychain-db
+PASS  [guard] audit hook: opening a real product's ledger
+      open of a real product's gate state: /private/tmp/claude-503/moadix-isolation-selftest-frs02r64/realproduct/.sdlc/product.yaml
+
+guard self-test: 18/18 fired

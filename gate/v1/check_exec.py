@@ -20,11 +20,13 @@
                         /out/junit.xml; service containers the gate starts (tests.services: postgres)
                         on an internal network; failures, errors, skipped tests and zero tests fail
   schemathesis (8, 10b) against the app on the live network; JUnit, 0 failures
-  zap (9)               passive baseline against the app; any High alert fails
+  zap (9)               passive baseline against the app with the gate-owned rules file
+                        (gate/exec/zap-rules.tsv); any High alert, and any alert of a rule set to FAIL, fails
   lhci (10a)            Lighthouse in the pinned Chromium; the gate reads the LHR and checks LCP, CLS
                         and TBT against product-tools.yaml budgets (defaults 2500 ms, 0.1, 200 ms)
-  axe (6, 8, 10a)       the gate's own axe runner (gate/exec/axe-run.js) on live.paths; any critical or
-                        serious violation fails
+  axe (6, 8, 10a)       the gate's own axe runner (gate/exec/axe-run.js) on live.paths, every designed
+                        screen of design/screen-states.csv and (10a) every LV-INVENTORY.csv row that is
+                        not n/a, each by its `url` column; any critical or serious violation fails
 
 A gate applies unless its coverage topic is N/A in the phase's COVERAGE.md (the gap critic judges the
 reason). Every run goes through gate/confined.py: Docker is required (UNKNOWN without it), images are
@@ -34,6 +36,7 @@ network with no egress), and everything the run created is removed afterwards.
 
 Exit 0 pass or N/A, 1 fail, 2 unknown.
 """
+import csv
 import io
 import json
 import os
@@ -208,18 +211,49 @@ def parse_junit(text, what="tests"):
     return fails, ["%s: %d case(s), %d failed, %d skipped" % (what, c["tests"], len(c["failed"]), c["skipped"])], c
 
 
-def parse_zap(text):
+ZAP_RULES = os.path.join(EXEC, "zap-rules.tsv")
+ZAP_ACTIONS = ("IGNORE", "INFO", "WARN", "FAIL")
+
+
+def load_zap_rules(path=ZAP_RULES):
+    """The gate-owned ZAP rules file (zap-baseline.py -c format: <plugin id> TAB <action> TAB (<name>)).
+    Returns {plugin id: action}; a malformed file raises ValueError (the gate is UNKNOWN, never a pass)."""
+    rules = {}
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            cols = line.rstrip("\n").split("\t")
+            if len(cols) < 2 or not cols[0].isdigit() or cols[1] not in ZAP_ACTIONS:
+                raise ValueError("zap-rules.tsv line %d is not <id> TAB IGNORE|INFO|WARN|FAIL TAB (name)" % n)
+            if cols[0] in rules:
+                raise ValueError("zap-rules.tsv line %d repeats rule %s" % (n, cols[0]))
+            rules[cols[0]] = cols[1]
+    return rules
+
+
+def parse_zap(text, rules=None):
+    """High (riskcode 3) always fails, whatever the rules say; a rule the gate's rules file sets to FAIL fails at
+    any risk; IGNORE and the rest are reported."""
     data = json.loads(text)
-    fails, notes, n = [], [], 0
+    rules = rules or {}
+    fails, notes, n, ignored = [], [], 0, 0
     for site in data.get("site") or []:
         for a in site.get("alerts") or []:
             n += 1
             risk = int(a.get("riskcode") or 0)
-            line = "zap [%s] %s %s (%s instance(s))" % (a.get("riskdesc"), a.get("pluginid"), a.get("name") or a.get("alert"),
+            pid = str(a.get("pluginid") or "")
+            act = rules.get(pid, "WARN")
+            line = "zap [%s] %s %s (%s instance(s))" % (a.get("riskdesc"), pid, a.get("name") or a.get("alert"),
                                                        a.get("count") or len(a.get("instances") or []))
-            (fails if risk >= 3 else notes).append(line)
-    notes.append("zap: %d alert(s), High fails, Medium and below reported" % n)
-    return fails, notes, {"alerts": n}
+            if risk >= 3 or act == "FAIL":
+                fails.append(line + ("" if risk >= 3 else " (FAIL in the gate's rules)"))
+            elif act == "IGNORE":
+                ignored += 1
+            else:
+                notes.append(line)
+    notes.append("zap: %d alert(s), %d ignored by the gate's rules; High and rules set to FAIL fail" % (n, ignored))
+    return fails, notes, {"alerts": n, "ignored": ignored}
 
 
 def parse_lhr(text, budgets=None):
@@ -377,15 +411,16 @@ def live_script(gate, port, spec_rel, paths):
         return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s --report junit "
                 "--report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url))
     if gate == "zap":
-        return wait_for(port) + "zap-baseline.py -t %s -J zap.json -I -m 1 > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % url
+        return (wait_for(port) + "zap-baseline.py -t %s -c zap-rules.tsv -J zap.json -I -m 1 > /zap/wrk/run.log 2>&1; "
+                "echo $? > /zap/wrk/run.rc" % url)
     if gate == "lhci":
         return (wait_for(port) + "export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -1) && "
                 "cd /tmp && node /deps/tool/node_modules/@lhci/cli/src/cli.js collect --url=%s/ --numberOfRuns=1 "
                 "--settings.chromeFlags='--no-sandbox --headless=new' > /out/run.log 2>&1; echo $? > /out/run.rc; "
                 "cp /tmp/.lighthouseci/lhr-*.json /out/ 2>/dev/null; true" % url)
     if gate == "axe":
-        ps = " ".join(p for p in paths if re.match(r"^/[\w./-]*$", p)) or "/"
-        return wait_for(port) + "node /gx/axe-run.js %s /out/axe.json %s > /out/run.log 2>&1; echo $? > /out/run.rc" % (url, ps)
+        return (wait_for(port) + "node /gx/axe-run.js %s /out/axe.json --paths-file /gx/paths.json > /out/run.log 2>&1; "
+                "echo $? > /out/run.rc" % url)
     raise ValueError(gate)
 
 
@@ -526,12 +561,64 @@ def start_services(r, pt, net):
     return env
 
 
+URL_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/?#-]*$")
+
+
+def _head_csv(root, rel):
+    """Rows (lower-case keys) of a CSV as committed at HEAD, or None when it is not committed."""
+    p = subprocess.run([state.GIT, "-C", root, "show", "HEAD:%s" % rel], capture_output=True)
+    if p.returncode != 0:
+        return None
+    rows = [r for r in csv.reader(io.StringIO(p.stdout.decode("utf-8", "replace"))) if any(c.strip() for c in r)]
+    if not rows:
+        return []
+    head = [c.strip().lower() for c in rows[0]]
+    return [{head[i]: (r[i].strip() if i < len(r) else "") for i in range(len(head))} for r in rows[1:]]
+
+
+def axe_urls(root, st, pt, label):
+    """(paths, problems). axe visits product-tools.yaml live.paths, every designed row of design/screen-states.csv
+    and, from phase 10a, every row of LV-INVENTORY.csv that is not n/a. A row gives its URL in a `url` column
+    (an app-relative path) or names a path itself; a row that gives neither is a problem (the gate never guesses
+    a screen's address)."""
+    paths, probs = [], []
+
+    def add(p, where):
+        if not URL_PATH.match(p) or "//" in p or "/../" in p + "/":
+            probs.append("%s: %r is not an app-relative path (it must start with / and name no host)" % (where, p))
+        elif p not in paths:
+            paths.append(p)
+
+    for p in (pt.get("live") or {}).get("paths") or ["/"]:
+        add(str(p), "product-tools.yaml live.paths")
+    sources = [("design/screen-states.csv", "screen", lambda r: r.get("status", "").lower() == "designed")]
+    if label == "10a":
+        sources.append(("%s/10a/LV-INVENTORY.csv" % contract.doc_dir(st), "target",
+                        lambda r: r.get("result", "").lower() != "n/a"))
+    for rel, key, wanted in sources:
+        rows = _head_csv(root, rel)
+        for n, r in enumerate(rows or [], 2):
+            if not wanted(r):
+                continue
+            u = r.get("url") or (r.get(key) if (r.get(key) or "").startswith("/") else "")
+            if u:
+                add(u, "%s line %d" % (rel, n))
+            else:
+                probs.append("%s line %d (%s %s, %s): no URL; give it a `url` column (an app-relative path such as "
+                             "/notes) so axe can visit it" % (rel, n, key, r.get(key), r.get("state")))
+    return paths, probs
+
+
 def run_gate(root, st, gate, label):
     g, pt = GATES[gate], _pt(root)
     run_id = "x" + secrets.token_hex(5)
     tmp = toolrun.mkdtemp("moadix-exec-")
     r = None
     try:
+        if gate == "axe":  # every URL is resolved before the engine is called
+            paths, probs = axe_urls(root, st, pt, label)
+            if probs:
+                return ["axe: %s" % x for x in probs], [], {}, None
         export = os.path.join(tmp, "export.tar")
         p = subprocess.run([state.GIT, "-C", root, "archive", "--format=tar", "-o", export, "HEAD"], capture_output=True)
         if p.returncode != 0:
@@ -543,6 +630,9 @@ def run_gate(root, st, gate, label):
         r.load(src, export, img)
         out = r.volume("out")
         out_path = "/zap/wrk" if gate == "zap" else "/out"
+        if gate == "zap":
+            load_zap_rules()  # a malformed gate rules file stops here (UNKNOWN), before anything runs
+            r.load(out, _write(tmp, "zap.tar", _tar_of({"zap-rules.tsv": _rb(ZAP_RULES)})), img)
         r.own(out, img, uid=int(user.split(":")[0]) if user else None)
         mounts = [(src, "/src", True), (out, out_path, False)]
         if g.get("tool") or g.get("product"):
@@ -583,7 +673,8 @@ def run_gate(root, st, gate, label):
                 return ["schemathesis needs the OpenAPI description under %s/05-lld/" % contract.doc_dir(st)], [], {}, None
             if gate == "axe":
                 gx = r.volume("gx")
-                r.load(gx, _write(tmp, "gx.tar", _tar_of({"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js"))})), img)
+                r.load(gx, _write(tmp, "gx.tar", _tar_of({"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
+                                                          "paths.json": json.dumps(paths).encode()})), img)
                 mounts.append((gx, "/gx", True))
             script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"])
         else:
@@ -650,7 +741,7 @@ def verdict(gate, d, pt, root, st):
                 raise confined.Refused("schemathesis wrote %d JUnit report(s), expected 1" % len(reports))
             return parse_junit(_read(sd, reports[0]), "schemathesis")
         if gate == "zap":
-            return parse_zap(_read(d, "zap.json"))
+            return parse_zap(_read(d, "zap.json"), load_zap_rules())
         if gate == "lhci":
             reports = sorted(x for x in os.listdir(d) if re.match(r"^lhr-\d+\.json$", x))
             if not reports:

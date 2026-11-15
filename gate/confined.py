@@ -417,8 +417,19 @@ class Run(object):
             with open(tar_path, "rb") as f:
                 self._d(["cp", "-", "%s:/v" % c], stdin=f, timeout=600)
         finally:
-            self._d(["rm", "-f", c], check=False)
+            self._rm_own(c)
         self._helper(img, [(vol, "/v", False)], ["chown", "-R", "%d:%d" % (self.uid, self.uid), "/v"])
+
+    def _own_ids(self, name):
+        """Ids of this run's container called name: only an object carrying this run's label is ever removed."""
+        p = self._d(["ps", "-aq", "--no-trunc", "--filter", "label=%s" % self.label, "--filter", "name=^/%s$" % name],
+                    check=False)
+        return p.stdout.decode().split()
+
+    def _rm_own(self, name):
+        ids = self._own_ids(name)
+        if ids:
+            self._d(["rm", "-f"] + ids, check=False)
 
     def own(self, vol, img, uid=None):
         self._helper(img, [(vol, "/v", False)], ["chown", "%d:%d" % (uid or self.uid, uid or self.uid), "/v"])
@@ -431,7 +442,7 @@ class Run(object):
             os.makedirs(dest, exist_ok=True)
             self._d(["cp", "%s:/v/." % c, dest], timeout=600)
         finally:
-            self._d(["rm", "-f", c], check=False)
+            self._rm_own(c)
 
     # ---- the egress proxy and the install step (3.4)
     def proxy(self, install_net, egress_net, proxy_src_vol):
@@ -486,10 +497,12 @@ class Run(object):
         try:
             p = subprocess.run([self.d] + args, capture_output=True, text=True, timeout=lim["wall_s"] + 30)
         except subprocess.TimeoutExpired:
-            self._d(["rm", "-f", name], check=False)
+            self._rm_own(name)
             raise Refused("the run exceeded its wall clock (%ss)" % lim["wall_s"]) from None
-        state = self._d(["inspect", "--format", "{{.State.OOMKilled}}", name], check=False).stdout.decode().strip()
-        self._d(["rm", "-f", name], check=False)
+        ids = self._own_ids(name)
+        state = self._d(["inspect", "--format", "{{.State.OOMKilled}}"] + ids[:1], check=False).stdout.decode().strip() \
+            if ids else ""
+        self._rm_own(name)
         if state == "true":
             raise Refused("the run exceeded its memory limit (%d MiB) and was killed" % lim["memory_mb"])
         return p.returncode, p.stdout[-20000:], p.stderr[-20000:]

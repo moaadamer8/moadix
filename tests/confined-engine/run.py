@@ -5,7 +5,14 @@
 
 The agent's sandbox cannot reach the Docker socket, so the operator runs this in Terminal. It uses only
 throwaway fixtures and its own containers, volumes and networks, every one labelled moadix.run=es<hex>,
-and removes them at the end (by that label only: it never prunes, never touches anything else).
+and removes them at the end. Safeguards (ruling 3 on increment 7d):
+  * it removes only objects carrying its own run label (moadix.run=es + 10 hex digits); it has no pruning
+    command of any kind and no compose "down" with volumes; tests/lib/no_prune.py checks that statically,
+    here before anything starts and in tests/inc7d on every sandbox run;
+  * before it starts and after its cleanup it records every container, volume, network and image that is
+    not its own (names and ids); if the two records differ, the suite fails and prints the difference;
+  * it never starts, stops or inspects the contents of a foreign project: it only lists names, ids, states
+    and labels.
 
 It refuses to start, and says what it found, when:
   * any RUNNING container on the machine is not its own;
@@ -20,10 +27,10 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
   egress    the live network is internal: no route out; the install proxy refuses a host off its allowlist
   limits    fork bomb (pids), memory (OOM kill), disk (file-size cap, tmpfs cap), wall clock
   output    a forged report (symlink to a host file, a FIFO, an oversized file) is refused
-  cleanup   nothing labelled is left; every foreign container, volume and network is exactly as before
+  cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
 """
-import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -33,7 +40,9 @@ import time
 HERE = os.path.dirname(os.path.realpath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
 
+import no_prune  # noqa: E402
 from gate import confined  # noqa: E402  (the repository's runner and configuration, never a fixture copy)
 
 RESULTS = []
@@ -72,8 +81,40 @@ def inventory():
     return cs, vols, nets
 
 
+OWN = re.compile(r"^%s[0-9a-f]{10}$" % PREFIX)
+
+
 def ours(run_label):
-    return bool(run_label) and run_label.startswith(PREFIX)
+    return bool(run_label) and bool(OWN.match(run_label))
+
+
+def own_images():
+    """Ids of the pinned images the suite pulls (its own); every other image is foreign."""
+    ids = set()
+    for name in NEEDED:
+        p = docker(["image", "inspect", "--format", "{{.Id}}", confined.image(name)])
+        ids.update(p.stdout.split())
+    return ids
+
+
+def snapshot(own_img):
+    """Every container, volume, network and image that is not the suite's: names, ids (and container state)."""
+    cs, vols, nets = inventory()
+    imgs = lines(["image", "ls", "-a", "--no-trunc", "--format", "{{.ID}}\t{{.Repository}}:{{.Tag}}"])
+    return {
+        "containers": sorted("%s %s %s" % (c["id"], c["name"], c["state"]) for c in cs if not ours(c["run"])),
+        "volumes": sorted(v.split("\t")[0] for v in vols if not ours((v.split("\t") + [""])[1])),
+        "networks": sorted(" ".join(n.split("\t")[:2]) for n in nets if not ours((n.split("\t") + ["", ""])[2])),
+        "images": sorted(i.replace("\t", " ") for i in imgs if i.split("\t")[0] not in own_img),
+    }
+
+
+def difference(a, b):
+    out = []
+    for k in a:
+        gone, new = sorted(set(a[k]) - set(b[k])), sorted(set(b[k]) - set(a[k]))
+        out += ["%s gone: %s" % (k, x) for x in gone] + ["%s new: %s" % (k, x) for x in new]
+    return out
 
 
 def preflight():
@@ -316,16 +357,30 @@ def test_output(node):
 
 def main():
     print("MOADIX confined-engine suite (Terminal only). It never touches anything not labelled moadix.run=%s*." % PREFIX)
+    hits = no_prune.scan(REPO)
+    record("safeguards", "static: no pruning and no compose down with volumes in the runner, the gates or this suite",
+           not hits, hits)
+    if hits:
+        print("REFUSED: a forbidden removal command is present (above)")
+        return 2
     why, stopped = preflight()
     if why:
-        print("REFUSED: the suite starts only on a machine where nothing else runs and the images are cleared:")
+        print("REFUSED: the suite starts only when no foreign container or compose project is running and the "
+              "images are cleared:")
         for w in why:
             print("  - %s" % w)
         if stopped:
             print("  (stopped compose projects found, left untouched: %s)" % ", ".join(stopped))
         return 2
     if stopped:
-        print("found stopped compose projects (left untouched, never started, read or removed): %s" % ", ".join(stopped))
+        print("found stopped compose projects (they do not block; left untouched, never started, stopped or "
+              "inspected): %s" % ", ".join(stopped))
+    node, py = confined.image("node"), confined.image("python")
+    for img in (node, py):
+        p = docker(["pull", "-q", img], timeout=900)
+        if p.returncode != 0:
+            print("REFUSED: pulling %s failed: %s" % (img, p.stderr.strip()[:300]))
+            return 2
     # remove what an earlier, interrupted run of this suite left (its own label only)
     cs, vols, nets = inventory()
     for c in cs:
@@ -339,16 +394,9 @@ def main():
         f = (ln.split("\t") + [""])[:2]
         if ours(f[1]):
             docker(["volume", "rm", "-f", f[0]])
-    before = inventory()
-    foreign_before = ({c["id"]: c["state"] for c in before[0] if not ours(c["run"])},
-                      sorted(v for v in before[1] if not ours((v.split("\t") + [""])[1])),
-                      sorted(n for n in before[2] if not ours((n.split("\t") + ["", ""])[2])))
-    node, py = confined.image("node"), confined.image("python")
-    for img in (node, py):
-        p = docker(["pull", "-q", img], timeout=900)
-        if p.returncode != 0:
-            print("REFUSED: pulling %s failed: %s" % (img, p.stderr.strip()[:300]))
-            return 2
+    own_img = own_images()
+    before = snapshot(own_img)
+    print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,))):
         try:
@@ -357,16 +405,16 @@ def main():
             import traceback
             record(t.__name__, "group ran to the end", False, "%s: %s\n%s" % (type(e).__name__, e,
                                                                              traceback.format_exc()[-1500:]))
-    after = inventory()
-    mine = [c["name"] for c in after[0] if ours(c["run"])] + [v for v in after[1] if ours((v.split("\t") + [""])[1])] + \
-           [n for n in after[2] if ours((n.split("\t") + ["", ""])[2])]
+    cs, vols, nets = inventory()
+    mine = [c["name"] for c in cs if ours(c["run"])] + [v for v in vols if ours((v.split("\t") + [""])[1])] + \
+           [n for n in nets if ours((n.split("\t") + ["", ""])[2])]
     record("cleanup", "nothing this suite created is left (containers, volumes, networks)", not mine, mine)
-    foreign_after = ({c["id"]: c["state"] for c in after[0] if not ours(c["run"])},
-                     sorted(v for v in after[1] if not ours((v.split("\t") + [""])[1])),
-                     sorted(n for n in after[2] if not ours((n.split("\t") + ["", ""])[2])))
-    record("cleanup", "every container, volume and network that is not the suite's is exactly as before (%d, %d, %d)" % (
-        len(foreign_before[0]), len(foreign_before[1]), len(foreign_before[2])), foreign_before == foreign_after,
-        json.dumps([foreign_before, foreign_after])[:1500])
+    after = snapshot(own_img)
+    diff = difference(before, after)
+    record("cleanup", "every container, volume, network and image that is not the suite's is exactly as before "
+                      "(%s)" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()), not diff, "")
+    for d in diff:
+        print("      DIFFERENCE %s" % d)
     n = len(RESULTS)
     bad = [r for r in RESULTS if not r[2]]
     for g, name, _ok in bad:

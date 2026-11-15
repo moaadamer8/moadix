@@ -328,11 +328,11 @@ def test_fail_closed(p):
     cfg = os.path.join(E.home, "gate", "config", "confinement.yaml")
     saved = open(cfg).read()
     try:
-        shutil.copy(os.path.join(REPO, "gate", "config", "confinement.yaml"), cfg)
+        with open(cfg, "w") as f:
+            f.write(re.sub(r"(?m)^    status: cleared$", "    status: blocked\n    reason: \"blocked for the fail-closed test\"", saved))
         for gate in X.GATES:
             rc, out = run(p, gate)
-            record(G, "%s with the repository's configuration (image blocked by the licence ruling): UNKNOWN, nothing run"
-                   % gate, rc == 2 and "UNKNOWN" in out and "blocked" in out and not [c for c in calls() if c[0] == "run"],
+            record(G, "%s with its image blocked: UNKNOWN, nothing run" % gate, rc == 2 and "UNKNOWN" in out and "blocked" in out and not [c for c in calls() if c[0] == "run"],
                    out)
     finally:
         with open(cfg, "w") as f:
@@ -345,6 +345,144 @@ def test_fail_closed(p):
     rc, out = run(p, "tests", MOADIX_TEST_ENGINE=down)
     record(G, "the engine is not reachable: UNKNOWN (never a run on the host)",
            rc == 2 and "UNKNOWN" in out and "not reachable" in out, out)
+
+
+def test_axe_urls():
+    G = "axe URLs (ruling 4)"
+    ST = X.state
+    q = product("execaxe")
+    put(q, "design/screen-states.csv", "screen,state,status,reference,url\nNotes,default,designed,design/a.md,/notes\n"
+                                        "Notes,empty,designed,design/a.md,/notes?empty=1\nNotes,loading,n/a,slow api,\n"
+                                        "/settings,default,designed,design/a.md,\n")
+    put(q, "sdlc/10a/LV-INVENTORY.csv", "lv_id,target,state,result,artifact,url\nLV-1,Notes,default,pass,t.zip,/notes\n"
+                                         "LV-2,Login,default,pass,t.zip,/login\nLV-3,Help,default,n/a,not built,\n")
+    E.commit(q, "design states with urls")
+    st = ST.current_state(q)[0]
+    pt = {"live": {"paths": ["/"]}}
+    paths, probs = X.axe_urls(q, st, pt, "8")
+    record(G, "phase 8: live.paths plus every designed screen-states row, by its url column or a path-like name; "
+              "n/a rows skipped", paths == ["/", "/notes", "/notes?empty=1", "/settings"] and not probs, (paths, probs))
+    paths, probs = X.axe_urls(q, st, pt, "10a")
+    record(G, "phase 10a: LV-INVENTORY.csv rows that are not n/a are added (/login)",
+           paths == ["/", "/notes", "/notes?empty=1", "/settings", "/login"] and not probs, (paths, probs))
+    rc, out = run(q, "axe", "10a")
+    record(G, "control: axe at 10a with every row resolvable runs and passes", rc == 0 and "PASS" in out, out)
+    put(q, "design/screen-states.csv", "screen,state,status,reference\nNotes,default,designed,design/a.md\n")
+    E.commit(q, "a designed screen without a url")
+    rc, out = run(q, "axe", "8")
+    record(G, "a designed screen with no URL fails the gate and names the row (the gate never guesses an address)",
+           rc == 1 and "screen-states.csv line 2" in out and "no URL" in out and not [c for c in calls() if c[0] == "run"],
+           out)
+    for bad in ("http://evil.example/x", "//evil.example/x", "/a/../../b"):
+        put(q, "design/screen-states.csv", "screen,state,status,reference,url\nNotes,default,designed,design/a.md,%s\n" % bad)
+        E.commit(q, "hostile url")
+        _p, probs = X.axe_urls(q, ST.current_state(q)[0], pt, "8")
+        record(G, "hostile: a url %r that leaves the app is refused" % bad, probs and "app-relative" in probs[0], probs)
+    js = open(os.path.join(REPO, "gate", "exec", "axe-run.js")).read()
+    record(G, "the axe runner reads the gate's paths file and refuses a path whose origin is not the app's",
+           "--paths-file" in js and "refusing a path that leaves the app" in js, "")
+
+
+def test_zap_rules(p):
+    G = "ZAP rules (ruling 4)"
+    rules = X.load_zap_rules()
+    record(G, "the gate-owned rules file parses (%d rules, actions IGNORE/INFO/WARN/FAIL)" % len(rules),
+           len(rules) >= 10 and set(rules.values()) <= set(X.ZAP_ACTIONS) and "FAIL" in rules.values(), rules)
+    z = json.loads(raw("zap.json"))
+    f, n, _d = X.parse_zap(json.dumps(z), rules)
+    record(G, "control: the real report passes with the rules (Mediums reported, 10049 ignored)",
+           not f and "1 ignored" in n[-1], (f, n[-1:]))
+    z["site"][0]["alerts"][0].update(pluginid="10010", riskcode="1", name="Cookie No HttpOnly Flag")
+    record(G, "a Low alert of a rule set to FAIL (10010) fails", len(X.parse_zap(json.dumps(z), rules)[0]) == 1, "")
+    z["site"][0]["alerts"][0].update(pluginid="10049", riskcode="3")
+    record(G, "a High alert fails even when its rule is IGNORE", len(X.parse_zap(json.dumps(z), rules)[0]) == 1, "")
+    bad = os.path.join(E.base, "zap-bad.tsv")
+    for text, why in (("10010\tBLOCK\t(x)\n", "an unknown action"), ("abc\tFAIL\t(x)\n", "a non-numeric id"),
+                      ("10010\tFAIL\t(x)\n10010\tIGNORE\t(x)\n", "a repeated rule")):
+        with open(bad, "w") as f:
+            f.write(text)
+        try:
+            X.load_zap_rules(bad)
+            ok = False
+        except ValueError:
+            ok = True
+        record(G, "a rules file with %s is refused (the gate is UNKNOWN, never a pass)" % why, ok, text)
+    rc, out = run(p, "zap")
+    cs = calls()
+    zrun = [c for c in cs if c and c[0] == "run" and "--name" in c and c[c.index("--name") + 1].endswith("-zap")]
+    loaded = [c for c in cs if c and c[0] == "create" and c[c.index("--name") + 1].endswith("-load-out")]
+    record(G, "the ZAP run loads the rules into /zap/wrk and passes -c zap-rules.tsv",
+           rc == 0 and loaded and zrun and "-c zap-rules.tsv" in " ".join(zrun[0]), (out, loaded, zrun))
+
+
+def test_safeguards():
+    G = "engine-suite safeguards (ruling 3)"
+    import no_prune
+    hits = no_prune.scan(REPO)
+    record(G, "static: no pruning, no compose down with volumes, no image removal in the runner, the gates or the "
+              "engine suite (%d files)" % len(no_prune.SCANNED), not hits, hits)
+    fake = os.path.join(E.base, "fake-repo")
+    planted = {"system": 'docker(["system", "pr' + 'une", "-f"])', "volume": "docker volume pr" + "une -f",
+               "compose": "docker compose -p x do" + "wn -v", "compose2": "docker compose do" + "wn --vol" + "umes",
+               "rmi": 'docker(["rm' + 'i", img])'}
+    for k, line in planted.items():
+        put(fake, "gate/confined.py", "x = 1\n%s\n" % line)
+        for rel in no_prune.SCANNED[1:]:
+            put(fake, rel, "x = 1\n")
+        h = no_prune.scan(fake)
+        record(G, "negative control: a planted %r is caught" % line, h and h[0][1] == 2, h)
+    sys.path.insert(0, os.path.join(REPO, "tests", "confined-engine"))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("engine_suite", os.path.join(REPO, "tests", "confined-engine", "run.py"))
+    es = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(es)
+    record(G, "only its own label counts as its own (es + 10 hex digits; a gate run x..., a look-alike es-1 are not)",
+           es.ours("es0123456789") and not es.ours("x0123456789") and not es.ours("es-1") and not es.ours("") and
+           not es.ours("es0123456789a"), "")
+    a = {"containers": ["c1 onlinemarket-app-1 exited"], "volumes": ["v1"], "networks": ["n1 bridge"],
+         "images": ["sha256:1 postgres:17"]}
+    b = {"containers": ["c1 onlinemarket-app-1 running"], "volumes": [], "networks": ["n1 bridge"],
+         "images": ["sha256:1 postgres:17", "sha256:2 x:1"]}
+    d = es.difference(a, b)
+    record(G, "the before/after records print every difference (a state change, a volume gone, an image new)",
+           "containers gone: c1 onlinemarket-app-1 exited" in d and "containers new: c1 onlinemarket-app-1 running" in d
+           and "volumes gone: v1" in d and "images new: sha256:2 x:1" in d and not es.difference(a, a), d)
+
+    class P(object):
+        def __init__(self, out, rc=0):
+            self.stdout, self.returncode, self.stderr = out, rc, ""
+
+    def fake_docker(rows):
+        def f(args, timeout=120, stdin=None):
+            if args[0] == "version":
+                return P("29.0.0\n")
+            if args[0] == "ps":
+                return P("".join("\t".join(r) + "\n" for r in rows))
+            return P("")
+        return f
+
+    saved = (es.docker, es.confined.docker_path)
+    es.confined.docker_path = lambda: "/fake/docker"
+    try:
+        es.docker = fake_docker([("c1", "onlinemarket-app-1", "exited", "", "onlinemarket"),
+                                 ("c2", "momento-app", "exited", "", "momento")])
+        why, stopped = es.preflight()
+        record(G, "stopped foreign compose projects do not block; they are listed as found", not why and
+               stopped == ["momento", "onlinemarket"], (why, stopped))
+        es.docker = fake_docker([("c1", "onlinemarket-app-1", "running", "", "onlinemarket"),
+                                 ("c3", "solo", "running", "", ""), ("c4", "moadix-es-x", "running", "es0123456789", "")])
+        why, stopped = es.preflight()
+        j = " ".join(why)
+        record(G, "a running foreign container or compose project blocks, and each is named; its own does not",
+               "onlinemarket-app-1" in j and "solo" in j and "compose projects with running containers: onlinemarket" in j
+               and "moadix-es-x" not in j, why)
+    finally:
+        es.docker, es.confined.docker_path = saved
+    src = open(os.path.join(REPO, "tests", "confined-engine", "run.py")).read()
+    record(G, "the suite records images too, and fails on any difference",
+           '"images"' in src and "DIFFERENCE" in src and "not diff" in src, "")
+    record(G, "it never starts, stops or inspects a foreign object: inspect only on its own pinned images and its own "
+              "containers", '"start"' not in src and '"stop"' not in src and src.count('"inspect"') == 1, "")
 
 
 def test_install_and_locks():
@@ -398,7 +536,8 @@ def main():
         p = product("execprod")
         fd = fail_set()
         for t, a in ((test_gates, (p, fd)), (test_argv, (p,)), (test_forged, (p,)), (test_applicability_and_inputs, ()),
-                     (test_fail_closed, (p,)), (test_install_and_locks, ())):
+                     (test_fail_closed, (p,)), (test_axe_urls, ()), (test_zap_rules, (p,)), (test_safeguards, ()),
+                     (test_install_and_locks, ())):
             try:
                 t(*a)
             except Exception as e:

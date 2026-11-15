@@ -251,17 +251,77 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>` | refused (protected) |
 | 12 | `firebase projects:list` | runs |
 
-## Confined gates: the real-engine suite (0.6.0, Terminal)
+## Updating from 0.4.0 to 0.6.1: the complete procedure
 
-The gates that run product code (`check-exec-*`) need Docker Desktop running. They need the images in `gate/config/confinement.yaml` set to `status: cleared` once you have ruled on their licences (`docs/increment-7d-report.md` section 2). Until then, every such gate reports UNKNOWN.
+This takes you from the installed 0.4.0 to 0.6.1 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
-After clearing the images, and with no other container running, run once in Terminal from the repository:
+**1. Confirm the version you are about to install.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
 ```
-/usr/bin/python3 tests/confined-engine/run.py
+cd ~/moadix && git log --oneline -1
 ```
 
-It refuses to start if a container or compose project that is not its own is running, and names each one. Stopped projects (for example a parked stack) are listed and left untouched. It pulls the node and python images by digest and runs its hostile fixtures. At the end it removes everything labelled `moadix.run=es*` and checks that nothing else changed.
+Expected last line: `<commit> 0.6.1: …` (the 0.6.1 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.1"`).
+
+**2. Create the local overlay.** Docker Desktop: not needed. Claude Code sessions: may stay open. The format is in "Local overlay" above. Put in your production Firebase project id and the hosts your products need. Skip the file entirely if you want no protected project and no extra hosts (then every `firebase` command that names a project is refused).
+
+```
+mkdir -p ~/.config/moadix && chmod 700 ~/.config/moadix
+nano ~/.config/moadix/overlay.json
+/usr/bin/python3 -c 'import json,os; d=json.load(open(os.path.expanduser("~/.config/moadix/overlay.json"))); assert d.get("version") == 1; print("overlay OK:", len(d.get("protected_firebase_projects") or []), "project(s),", len(d.get("extra_network_hosts") or []), "host(s)")'
+```
+
+Expected last line: `overlay OK: 1 project(s), N host(s)`. The installer validates the hosts fully at step 6 and refuses a URL, path, port or whole top-level domain.
+
+**3. Run the real-engine suite of the confined gates.** Docker Desktop: **must be running**, with no other container running (stopped stacks are fine and stay untouched). Claude Code sessions: may stay open, but none may start a container during the run (the suite would report the difference and fail). It needs internet once to pull two pinned images and for one proxy check.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `31 checks, 31 passed, 0 failed (<seconds> s)`. If it starts with `REFUSED:` it names what is running; stop that, or wait for it, and run again. It removes only what carries its own label `moadix.run=es…`. It records every other container, volume, network and image before and after, and prints `DIFFERENCE …` lines if anything changed.
+
+**4. Run the attack corpus.** Docker Desktop: not needed. Claude Code sessions: may stay open (it uses its own scratch keychains and checkers under `~/moadix-scratch/corpus`). About 4–6 minutes. See "Running the attack corpus" above for what scrolls past.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/corpus/run.py
+```
+
+Expected last line: `128 checks, 128 passed, 0 failed`.
+
+**5. Run the install dry run.** Docker Desktop: not needed. Claude Code sessions: may stay open (it installs into a stand-in root and keychain under `~/moadix-scratch/install-dryrun`, never the real ones).
+
+```
+cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py
+```
+
+Expected last line: `18 checks, 18 passed`.
+
+**6. Reinstall.** Docker Desktop: not needed. Claude Code sessions: **must all be closed** (the policy changes for the whole machine; open sessions would keep the old hooks). It asks for your macOS password once, shows the overlay and asks `Apply this overlay? [y/N]`: answer `y`.
+
+```
+cd ~/moadix && managed/install.sh
+```
+
+Expected last line: `MOADIX is updated.` If it prints `MOADIX SETUP FAILED: …` instead, nothing further was changed; fix what it names and run it again.
+
+**7. Run the live policy check.** Docker Desktop: not needed. Claude Code sessions: open **one new** session in `~/moadix` after step 6 and type each line there as its own Bash tool call (not in Terminal: it tests the sandbox and the guard).
+
+```
+bash tests/install/policy_live.sh
+```
+
+Expected last line: `Now run the GitHub CLI checks in docs/INSTALL.md as separate Bash calls (typed directly).`, with `0 failed` on the line before it. Then run checks 2–12 of the table in "Local overlay" above, one Bash call each. Expected: 3, 6, 7, 8, 9, 10 and 11 are refused; 2, 4, 5 and 12 run.
+
+**8. Push and tag.** Docker Desktop: not needed. Claude Code sessions: may stay open; do this in **Terminal** (the guard refuses a push to the main branch from Claude Code).
+
+```
+cd ~/moadix && git push origin master
+git tag -a v0.6.1 -m "MOADIX 0.6.1"
+git push origin v0.6.1
+```
+
+Expected last line of the first command: `   451a03a..<0.6.1 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.1 -> v0.6.1`.
 
 ## 5. Uninstall
 

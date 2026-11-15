@@ -1,6 +1,6 @@
 # Increment 7d: rulings on 7c, the executing gates, the engine suites (0.6.0)
 
-Status: built and committed locally as 0.6.0. Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
+Status: built and committed locally as 0.6.0; review rulings applied in 0.6.1 (section 8, which supersedes section 2's "stopped"). Nothing was pushed, tagged or installed. One item stops for the operator's ruling: every image's licence scan (section 2). Until that ruling, every executing gate reports UNKNOWN, and `tests/confined-engine` refuses to start.
 
 ## 1. Rulings on increment 7c, as applied
 
@@ -216,3 +216,25 @@ I could not run it: the sandbox cannot reach the Docker socket from Python, and 
 5. Reinstall in Terminal: `managed/install.sh` (it asks for your password once, shows the overlay and asks before applying it).
 6. Run the live policy check: `bash tests/install/policy_live.sh`.
 7. Push and tag when satisfied; nothing was pushed or tagged.
+
+## 8. Review of 7d, rulings applied (0.6.1)
+
+1. **Image licences.**
+   - The image rule in `docs/AMENDMENT-3.md` section 4 is replaced: software that is only pulled unmodified by digest and executed is accepted under any licence that permits use without restriction. It stops only for a licence that restricts use, or for a component with no identifiable licence in a program the gate executes. Documentation, icon and data licences do not stop.
+   - All six images are `status: cleared`.
+   - `THIRD-PARTY.md` keeps the full inventory per image: every `License:` identifier, 148 to 510 per image, re-read on 2026-11-15.
+   - In that re-read, one component has no identified licence: Blackmagic's DeckLink API headers in GStreamer's plugins-bad, in the Playwright image (`License: UNKNOWN`). The gates run only Node.js and Playwright's own Chromium, which does not load GStreamer, so under the new rule this does not stop. It is recorded there.
+2. **Running the images to read their licences.** Accepted as reported.
+3. **Engine-suite safeguards.**
+   - Only running foreign containers or projects block the suite.
+   - It removes only objects carrying its own run label (`es` plus 10 hex digits). The runner now removes a single container only after finding it by its run label and name.
+   - `tests/lib/no_prune.py` fails if a pruning command, a compose `down -v`/`--volumes` or an image removal appears in the runner, the gates or the suite. The engine suite runs it first, and `tests/inc7d` runs it with planted negative controls.
+   - The suite records every foreign container (id, name, state), volume, network and image before it starts and after cleanup. It fails and prints each difference.
+   - It runs `inspect` only on its own pinned images and its own containers.
+4. **Gaps closed.**
+   - axe visits `live.paths`, every designed row of `design/screen-states.csv` and, at 10a, every `LV-INVENTORY.csv` row that is not n/a. Each row gives its address in an optional `url` column (an app-relative path), or names a path itself.
+   - **My choice, which you may relax:** a row without a URL fails the gate before the engine is called, rather than being skipped. A URL that names a host or climbs out of the app is refused.
+   - The paths reach the runner as a gate-written JSON file.
+   - ZAP runs with the gate-owned `gate/exec/zap-rules.tsv` (`-c`). The gate applies the same file to the JSON report: High always fails, a rule set to FAIL fails at any risk, and IGNORE is counted.
+
+The complete operator procedure from 0.4.0 is in `docs/INSTALL.md`, "Updating from 0.4.0 to 0.6.1".
