@@ -1,0 +1,60 @@
+PASS  --plugin: strictKnownMarketplaces allows exactly this repo and anthropics/claude-plugins-official
+      [{"source": "github", "repo": "someone/moadix"}, {"source": "github", "repo": "anthropics/claude-plugins-official"}]
+PASS  --plugin: both marketplaces registered (moadix, claude-plugins-official)
+      {"moadix": {"source": {"source": "github", "repo": "someone/moadix"}}, "claude-plugins-official": {"source": {"source": "github", "repo": "anthropics/claude-plugins-official"}}}
+PASS  increment 5 policy test: the rendered policy enables EXACTLY moadix and claude-security
+      enabled: ['claude-security@claude-plugins-official', 'moadix@moadix']
+PASS  every other plugin of the official marketplace is force-DISABLED (316 plugins)
+      316 false entries, e.g. ['42crunch-api-security-testing@claude-plugins-official', 'activecampaign@claude-plugins-official', 'adobe-for-creativity@claude-plugins-official']
+PASS  no plugin from any other marketplace appears in enabledPlugins
+      318 entries
+PASS  increment 5 network allowlist entries are present
+      20 hosts
+PASS  the public template carries no product host and no Firebase project id (they belong in the local overlay)
+      20 hosts
+PASS  no allowlist entry is a bare wildcard or a whole TLD (e.g. '*', '*.com', '*.googleapis.com')
+      ['registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org', 'cdn.playwright.dev', 'playwright.download.prss.microsoft.com', 'storage.googleapis.com', 'registry-1.docker.io', 'auth.docker.io', 'production.cloudflare.docker.com', 'github.com', 'codeload.github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'api.osv.dev', 'api.deps.dev', 'osv-vulnerabilities.storage.googleapis.com', 'mirror.gcr.io', 'ghcr.io', 'pkg-containers.githubusercontent.com', 'api.github.com']
+PASS  every allowlist entry is a plain host name string (no scheme, link or path)
+      ['registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org', 'cdn.playwright.dev', 'playwright.download.prss.microsoft.com', 'storage.googleapis.com', 'registry-1.docker.io', 'auth.docker.io', 'production.cloudflare.docker.com', 'github.com', 'codeload.github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'api.osv.dev', 'api.deps.dev', 'osv-vulnerabilities.storage.googleapis.com', 'mirror.gcr.io', 'ghcr.io', 'pkg-containers.githubusercontent.com', 'api.github.com']
+PASS  excludedCommands are exactly docker, playwright (2 forms), gh, firebase
+      ["docker *", "npx playwright *", "playwright *", "gh *", "firebase *"]
+PASS  the sandbox still has no escape hatch (allowUnsandboxedCommands false, failIfUnavailable true)
+      enabled=True allowUnsandboxed=False failIfUnavailable=True
+PASS  managed deny carries the project guards (main pushes, gh pr merge, vercel prod, gh token and merge API writes, the production Firebase project, firestore:delete) that allowManagedPermissionRulesOnly would otherwise drop
+      missing []
+PASS  the agent cannot read gh's or firebase's stored credentials (Read tool and sandbox denyRead)
+      ['Read(~/.config/gh/**)', 'Read(~/.config/configstore/**)']
+PASS  the earlier deny rules are all still there
+      29 rules
+PASS  allowManagedHooksOnly and allowManagedPermissionRulesOnly are still on
+      hooks=True rules=True
+PASS  a local overlay merges: its hosts join the allowlist, each protected project gets a deny rule, and the gate's copy lists the protected projects
+      {'extra_network_hosts': ['api.example.com', '*.example.org'], 'protected_firebase_projects': ['prod-proj-1'], 'source': '/tmp/claude-503/tmp4q0kxnpw/overlay.json', 'version': 1}
+PASS  no overlay file: the policy renders without one and the gate's copy protects nothing
+      
+PASS  a malformed overlay is refused: {"version": 1, "extra_network_hosts": ["[api.example.com](http://api.e
+      overlay: extra_network_hosts entry '[api.example.com](http://api.example.com)' is not a plain host name (no scheme, path, port or Markdown link; a leading *. is allowed)
+PASS  a malformed overlay is refused: {"version": 1, "extra_network_hosts": ["https://api.example.com"]}
+      overlay: extra_network_hosts entry 'https://api.example.com' is not a plain host name (no scheme, path, port or Markdown link; a leading *. is allowed)
+PASS  a malformed overlay is refused: {"version": 1, "extra_network_hosts": ["*.com"]}
+      overlay: extra_network_hosts entry '*.com' is not a plain host name (no scheme, path, port or Markdown link; a leading *. is allowed)
+PASS  a malformed overlay is refused: {"version": 1, "extra_network_hosts": ["*.googleapis"]}
+      overlay: extra_network_hosts entry '*.googleapis' is not a plain host name (no scheme, path, port or Markdown link; a leading *. is allowed)
+PASS  a malformed overlay is refused: {"version": 1, "protected_firebase_projects": ["Prod Project"]}
+      overlay: protected_firebase_projects must be a list of Firebase project ids (plain strings)
+PASS  a malformed overlay is refused: {"version": 1, "allowUnsandboxedCommands": true}
+      overlay /tmp/claude-503/tmp4q0kxnpw/overlay.json has keys it may not set: allowUnsandboxedCommands (allowed: extra_network_hosts, protected_firebase_projects, version)
+PASS  a malformed overlay is refused: {"extra_network_hosts": []}
+      overlay /tmp/claude-503/tmp4q0kxnpw/overlay.json must be a JSON object with "version": 1
+PASS  negative control: a template enabling a third plugin from the official marketplace is refused
+      enabledPlugins must force-enable exactly claude-security@claude-plugins-official, moadix@moadix
+PASS  no --plugin: no marketplace allowed, no plugin keys
+      strictKnownMarketplaces=[]
+PASS  marketplace.json is named 'moadix' and lists exactly the plugin 'moadix' from this repo
+      marketplace=moadix plugins=['moadix']
+PASS  negative control: a template allowing a second marketplace is refused
+      strictKnownMarketplaces must allow exactly someone/moadix and anthropics/claude-plugins-official
+PASS  a malformed owner/repo is refused
+      bad repo
+
+29 checks, 29 passed, 0 failed
