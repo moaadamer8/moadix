@@ -45,6 +45,8 @@ def main(argv):
     for name, status, probs, info in rows:
         for m in info.get("minors") or []:  # increment 7: the gap critic's MINORs go to the operator's file
             print("MINOR %s:%s: %s" % (verify.PLUGIN, name, m))
+        for m in info.get("frozen_blockers") or []:  # 0.7.2 (ruling A1): shown in REVIEW and APPROVE, never blocking
+            print("FROZEN-BLOCKER %s:%s: %s" % (verify.PLUGIN, name, m))
         for w in info.get("waived") or []:
             print("OK %s:%s: waived by the operator: %s" % (verify.PLUGIN, name, w))
         if status == "ok":

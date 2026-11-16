@@ -366,7 +366,18 @@ def threshold(root, st):
     return t
 
 
-def tool_script(gate, root, pt):
+NO_SOURCE_DIR = ".moadix-no-source"
+
+
+def depcruise_paths(pt, files):
+    """(configured scan paths, those with a tracked file at HEAD). 0.7.2 (task-tracker MF-26): phase 3
+    writes the rules before any code exists; with no source yet the gate checks the configuration alone."""
+    want = [str(p) for p in ((pt.get("depcruise") or {}).get("paths") or ["src"]) if re.match(r"^[\w./-]+$", str(p))]
+    have = [p for p in want if any(f == p or f.startswith(p.rstrip("/") + "/") for f in files or [])]
+    return want, have
+
+
+def tool_script(gate, root, pt, files=None):
     if gate == "pytm":
         return WORK + " && PYTHONPATH=/deps/tool python tm/model.py --json /out/tm.json > /out/run.log 2>&1; echo $? > /out/run.rc"
     if gate == "likec4":
@@ -374,10 +385,13 @@ def tool_script(gate, root, pt):
         return (WORK + " && %s validate . > /out/validate.log 2>&1; echo $? > /out/validate.rc; "
                 "%s export json -o /out/model.json . > /out/export.log 2>&1; true" % (cli, cli))
     if gate == "dependency-cruiser":
-        paths = " ".join(str(p) for p in ((pt.get("depcruise") or {}).get("paths") or ["src"]) if re.match(r"^[\w./-]+$", str(p)))
-        return (WORK + " && node /deps/tool/node_modules/dependency-cruiser/bin/dependency-cruiser.mjs --config "
+        _want, have = depcruise_paths(pt, files if files is not None else tracked(root))
+        # No source yet (phase 3, before phase 7 writes src/): load and validate the rules against an empty
+        # folder, so a malformed .dependency-cruiser.json still fails; with source, cruise it.
+        pre = "" if have else " && mkdir -p %s" % NO_SOURCE_DIR
+        return (WORK + pre + " && node /deps/tool/node_modules/dependency-cruiser/bin/dependency-cruiser.mjs --config "
                 ".dependency-cruiser.json --output-type json --output-to /out/depcruise.json %s > /out/run.log 2>&1; "
-                "echo $? > /out/run.rc" % paths)
+                "echo $? > /out/run.rc" % (" ".join(have) or NO_SOURCE_DIR))
     if gate == "knip":
         return (WORK + LINK_PRODUCT + " && node /deps/tool/node_modules/knip/bin/knip.js --reporter json > /out/knip.json "
                 "2> /out/run.log; echo $? > /out/run.rc")
@@ -723,7 +737,12 @@ def verdict(gate, d, pt, root, st):
         if gate == "likec4":
             return parse_likec4(_read(d, "validate.log"), _rc(d, "validate.rc"), _read(d, "model.json"))
         if gate == "dependency-cruiser":
-            return parse_depcruise(_read(d, "depcruise.json"))
+            f, n, data = parse_depcruise(_read(d, "depcruise.json"))
+            want, have = depcruise_paths(pt, tracked(root))
+            if not have:
+                n = ["dependency-cruiser: configuration only; no source in %s yet (the rules are cruised once code "
+                     "exists, at phase 7)" % ", ".join(want)] + list(n)
+            return f, n, data
         if gate == "knip":
             return parse_knip(_read(d, "knip.json"), (pt.get("knip") or {}).get("allow") or [])
         if gate == "eslint":

@@ -74,7 +74,9 @@ PHASES = [
     (0, "0", "BRD", ["sdlc/00-*.md", "sdlc/00-forge/**", "sdlc/0/**"]),
     (1, "1", "Research", ["sdlc/01-*.md", "sdlc/01-research/**", "sdlc/decisions/**", "sdlc/1/**"]),
     (2, "2", "PRD", ["sdlc/02-*.md", "sdlc/02-prd/**", "sdlc/2/**"]),
-    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/03-architecture/**", "sdlc/adr/**", "sdlc/3/**"]),
+    # 0.7.2 (task-tracker MF-26): H20's rules file sits at the root, where dependency-cruiser and the gate
+    # read it; phase 3 writes it, phase 7 (I6) may refine it once code exists, phase B (BL3) records it.
+    (3, "3", "HLD", ["sdlc/03-*.md", "sdlc/03-architecture/**", "sdlc/adr/**", "sdlc/3/**", ".dependency-cruiser.json"]),
     (4, "4", "Threat Model", ["sdlc/04-*.md", "sdlc/4/**", "tm/**"]),
     (5, "5", "LLD", ["sdlc/05-*.md", "sdlc/05-lld/**", "api/**", "openapi/**", "sdlc/5/**"]),
     (6, "6", "UX", ["sdlc/06-*.md", "design/**", "sdlc/6/**"]),
@@ -84,7 +86,7 @@ PHASES = [
         "docker-compose.yml", "compose/**", "Dockerfile", ".dockerignore", "scripts/**",
         "package-lock.json", "tsconfig.json", "next.config.*", "next-env.d.ts", "drizzle.config.*",
         "vitest.config.*", "playwright.config.*", "eslint.config.*", ".prettierrc*", "prettier.config.*",
-        ".prettierignore", ".github/workflows/**", "tests/**", "sdlc/7/**"]),
+        ".prettierignore", ".github/workflows/**", "tests/**", "sdlc/7/**", ".dependency-cruiser.json"]),
     (9, "8", "Testing", ["sdlc/08-*.md", "tests/**", "ui-tests/**", "test-results/**", "pytest.ini", "sdlc/8/**", "sdlc/B-test-inventory.md"]),
     (10, "9", "Security Verification", ["sdlc/09-*.md", "security/**", "sdlc/9/**", "sdlc/B-known-gaps.md"]),
     (11, "10a", "Live Verification", ["sdlc/10a-*.md", "evidence/live/**", "evidence/live-mobile/**", "evidence/authz/**", "sdlc/10a/**"]),
@@ -108,7 +110,7 @@ LABELS = [p[1] for p in PHASES]
 # and services. After APPROVE B every change is a feature cycle.
 BASELINE = [
     (0, "B", "Baseline", ["sdlc/00-*.md", "sdlc/02-*.md", "sdlc/03-*.md", "sdlc/04-*.md", "sdlc/B-*.md",
-                          "sdlc/02-prd/**", "sdlc/03-architecture/**", "sdlc/B/**"]),
+                          "sdlc/02-prd/**", "sdlc/03-architecture/**", "sdlc/B/**", ".dependency-cruiser.json"]),
 ]
 RELEASE = next(lab for _i, lab, name, _p in PHASES if name == "Release")  # the phase a feature's merge happens in
 RETRO = next(lab for _i, lab, name, _p in PHASES if name == "Retro")  # ruling 2 on increment 7: gated
@@ -277,7 +279,9 @@ def phase_owners(rel, phases=None):
     best, owners = -1, []
     for pid, _l, _n, pats in (phases or PHASES):
         for g in pats:
-            if glob_match(g, rel):
+            # 0.7.2 (task-tracker MF-24): the directory `d` itself belongs to the phase that owns `d/**`
+            # (`mkdir -p sdlc/2`), but only for that exact glob, never a parent such as `sdlc`.
+            if glob_match(g, rel) or g == rel.rstrip("/") + "/**":
                 spec = len(re.split(r"[*?\[]", g, maxsplit=1)[0])
                 if spec > best:
                     best, owners = spec, [pid]

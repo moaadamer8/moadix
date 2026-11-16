@@ -1,6 +1,6 @@
 # Gap-critic convergence: design (F-3)
 
-Status: **§1–§9 approved by the operator with the rulings in §8, and built in 0.7.0;** where the build differs from the text, §9 says so. **§10 is a proposal for 0.7.2, not built.** Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
+Status: **§1–§9 approved by the operator with the rulings in §8, and built in 0.7.0;** where the build differs from the text, §9 says so. **§10 was approved with rulings A1–A5 (§10.8) and built in 0.7.2; §10.9 says where the build differs.** Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
 
 ## 1. Why the critic does not converge
 
@@ -156,7 +156,7 @@ The risk is that a real gap gets labelled "later phase" and is never closed. The
 
 ## 10. Proposed for 0.7.2: scoped runs, claim severity, citations without network, section fingerprints, size bars
 
-Status: **proposed, not built; for the operator's review.** Source: the task-tracker run on 0.7.0, findings MF-12 and MF-17 to MF-20 (`~/task-tracker/docs/moadix-findings.md`). On phase 1, runs 1 to 3 had 16, 4 and 10 findings. Earlier findings converged: they were checked and closed, and none was raised again. New findings on unchanged text grew from 2 to 7, so the runs still do not converge. §4's memory makes late findings visible but does not stop them, and Q6 keeps them at full severity.
+Status: **approved with rulings A1–A5 (§10.8); built in 0.7.2.** Source: the task-tracker run on 0.7.0, findings MF-12 and MF-17 to MF-20 (`~/task-tracker/docs/moadix-findings.md`). On phase 1, runs 1 to 3 had 16, 4 and 10 findings. Earlier findings converged: they were checked and closed, and none was raised again. New findings on unchanged text grew from 2 to 7, so the runs still do not converge. §4's memory makes late findings visible but does not stop them, and Q6 keeps them at full severity.
 
 ### 10.1 What a run may review
 
@@ -315,3 +315,19 @@ M and L keep today's numbers. **Ruling A4**: the two numbers above.
 - **A3.** The §10.3 table as written, including the gate setting the table's severity when the critic's differs?
 - **A4.** S bars: R2 at 2–3 products and B13 at least 2, with no other relaxation?
 - **A5.** Q6 is amended for runs ≥ 3 as in §10.1, and is unchanged for runs 1 and 2?
+
+### 10.8 The operator's rulings (review of 0.7.1)
+
+- **A1.** Option (i): a new finding on frozen text that fails the exceptions goes to the MINOR file, tagged `frozen`, and is counted on STATUS. Addition: when the critic rated it BLOCKER, the REVIEW and APPROVE summaries show it in full under "Frozen findings rated BLOCKER by the critic, not blocking". It still blocks nothing.
+- **A2.** As recommended: a waiver lapses on its cited lines only.
+- **A3.** Accepted as written, including the gate setting the table's severity.
+- **A4.** Accepted: at size S, R2 at 2 to 3 products and B13 at least 2; nothing else relaxed.
+- **A5.** Accepted: Q6 is amended for runs ≥ 3 as in §10.1, and is unchanged for runs 1 and 2.
+
+### 10.9 Where the 0.7.2 build differs from the text above
+
+- **The section unit is computed by comparing section bodies, not by mapping `git diff -U0` hunks.** A section is identified by its heading anchor plus an occurrence number, so two sections with the same heading stay apart. Its body is the text between its heading and the next heading, whitespace-normalized. A section is frozen when it exists with the same body at run n-2's commit, run n-1's commit and the reviewed commit. This is the same diff, read per section, and a moved section stays frozen. A renamed heading is a new section, so it is never frozen.
+- **A whole file without headings is one section.** `COVERAGE.md` is the common case. Any edit to it reopens every finding that cites it (`fixed?`), and no new finding on it is ever frozen. This is the long-section cost §10.2 accepted.
+- **The frozen BLOCKER's channel.** check-verifiers prints `FROZEN-BLOCKER` lines. The validator worker keeps them in the result (`frozen_blockers`), and `validation.summary`, the APPROVE refusal and the APPROVE record show them in full. They are never counted as a failure.
+- **What fails the evidence, and what the gate decides.** A claim or basis problem fails the evidence, as other schema checks do (the critic runs again): a missing or unknown `decision`, `uncited` on a line cite-lint accepts, `quote-*` with no quote in the section, `no-quote` where a quote exists. Two things do not fail it: a frozen-text finding is moved, and a severity that differs from the table is replaced by the table's.
+- **A regression the gate does not accept as one** cites a different section that has not changed since the run that raised the original. It gets a new id and is judged as a new finding, so the frozen rule can then apply. The brief warns that this shifts the later ids it predicted.

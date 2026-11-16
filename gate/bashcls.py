@@ -89,11 +89,33 @@ def strip_heredocs(cmd, live=None):
 # Commands whose output, inside $(...), <(...) or backticks, is all the substitution does: they read
 # and print, run nothing and write nothing. Narrower than READ_ONLY on purpose: awk (system(), print >),
 # yq (-i), rg (--pre), sed (e, w), find (-exec), openssl and less/more are left out.
-SUBST_READ_ONLY = {"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "file", "stat", "du", "md5",
-                   "md5sum", "shasum", "sha1sum", "sha256sum", "echo", "printf", "basename", "dirname", "realpath",
-                   "readlink", "test", "[", "true", "false", "jq", "diff", "cmp", "sort", "uniq", "cut", "tr",
-                   "column", "nl", "fold", "git", "date", "pwd", "seq"}
-SUBST_BAD_FLAGS = ("--output", "-o", "--compress-program", "--ext-diff", "--exec-path", "-c", "--files0-from")
+SUBST_READ_ONLY = {"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "stat", "du", "md5", "md5sum",
+                   "shasum", "sha1sum", "sha256sum", "echo", "printf", "basename", "dirname", "realpath", "readlink",
+                   "test", "[", "true", "false", "jq", "diff", "cmp", "sort", "uniq", "cut", "tr", "column", "nl",
+                   "fold", "git", "pwd", "seq"}
+# 0.7.2 (review of 0.7.1, hook item 2): `file` (-C compiles a magic file) and `date` (-s sets the clock)
+# were removed. Flags refused for every reader; per-tool rules are in _reader_ok.
+SUBST_BAD_FLAGS = ("--output", "--compress-program", "--ext-diff", "--exec-path", "--temporary-directory",
+                   "--paginate", "--textconv", "--filters")
+# Paths a substitution may never read (0.7.2, hook item 1): the sandbox's denyRead and the managed
+# Read() rules (transcripts and memory, the gh and firebase credential stores), plus secrets the
+# path map protects and the overlay. Matched on the body's text after leading literal variables are
+# resolved; an indirect name (a glob, a variable from the environment) is left to the sandbox.
+SUBST_READ_DENY = [
+    (re.compile(r"\.claude/projects"), "Claude Code transcripts and memory (~/.claude/projects)"),
+    (re.compile(r"\.config/gh(?:/|\b)"), "the gh credential store (~/.config/gh)"),
+    (re.compile(r"\.config/configstore"), "the firebase credential store (~/.config/configstore)"),
+    (re.compile(r"\.config/moadix"), "the operator's overlay (~/.config/moadix)"),
+    (re.compile(r"(?:^|[/\s'\"=])\.env(?!\.(?:example|sample|template)\b)(?:\.[\w-]+)?(?=$|[\s'\";|&)/])"),
+     "a real environment file (.env)"),
+    (re.compile(r"Keychains|\.pem\b|\.p12\b|\.pfx\b|\.jks\b|\.keystore\b|\bid_rsa|\bid_ed25519|"
+                r"service-account[^\s/]*\.json|\.key\b"), "key material"),
+]
+# Anything that can make a reader's name run something else: a function or alias definition, a
+# PATH change, shell options. With one of these in the command, L2 and L4 do not apply.
+SHADOWING = re.compile(r"(?:^|[\s;&|(])(?:function\s+[\w.-]+|[\w.-]+\s*\(\s*\)|alias\b|unalias\b|hash\s|enable\s|"
+                       r"(?:export\s+|typeset\s+|declare\s+|readonly\s+|local\s+)?(?:PATH|BASH_ENV|ENV|"
+                       r"FPATH|IFS)\+?=|setopt\b|shopt\b|set\s+[-+])")
 # Commands that only read their arguments (no option of theirs runs code or writes a file the
 # classifier would miss): the gate's names in their ARGUMENTS are data (`grep <gate name> a.c`).
 DATA_READERS = {"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "file", "stat", "du", "md5", "md5sum",
@@ -154,11 +176,55 @@ def substitutions(text, live_bodies=()):
     return out
 
 
+def _reader_ok(verb, args):
+    """Per-tool rules for SUBST_READ_ONLY (0.7.2, hook item 2): no operand or flag may write or run."""
+    if any(a in SUBST_BAD_FLAGS or a.startswith(tuple(f + "=" for f in SUBST_BAD_FLAGS if f.startswith("--")))
+           for a in args):
+        return False
+    if verb == "sort":
+        # -o FILE writes, -T DIR writes temporaries, --compress-program runs; also as -ofile / -ro / -T/tmp
+        return not any(a.startswith("-") and not a.startswith("--") and ("o" in a[1:] or "T" in a[1:])
+                       for a in args)
+    if verb == "uniq":
+        return all(a.startswith("-") for a in args)  # `uniq in out` writes out: no operand at all
+    if verb == "jq":
+        # modules (-L, --library-path, import/include) load code from files; jq itself writes nothing
+        return not any(a.startswith(("-L", "--library-path")) or re.search(r"\b(?:import|include)\b", a)
+                       for a in args)
+    if verb == "git":
+        return _git_reader_ok(args)
+    return True
+
+
+def _git_reader_ok(args):
+    """git in a substitution: only forms that run no filter, driver, pager, hook or signature check.
+    Global options: only -C <dir>. Subcommands: rev-parse; cat-file -t/-s/-p/-e (no --textconv,
+    --filters, --batch*); show of a blob, `<rev>:<path>` and no option ("For plain blobs, it shows the
+    plain contents", git-show(1): no textconv, no diff, no signature)."""
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        if args[i] == "-C" and i + 1 < len(args) and not COMPUTED.search(args[i + 1]):
+            i += 2
+            continue
+        return False
+    if i >= len(args):
+        return False
+    sub, rest = args[i], args[i + 1:]
+    if sub == "rev-parse":
+        return True
+    if sub == "cat-file":
+        return all(not a.startswith("-") or a in ("-t", "-s", "-p", "-e") for a in rest)
+    if sub == "show":
+        return bool(rest) and all(re.match(r"^[A-Za-z0-9_.~^@{}/-]+:[^/\s$`]", a) and not a.startswith("-")
+                                  and not COMPUTED.search(a) for a in rest)  # a literal <rev>:<path> only
+    return False
+
+
 def read_only_body(body):
-    """True when a substitution body only reads: every segment a SUBST_READ_ONLY command with no
-    writing or code-running option, no environment prefix, no write redirection, no nested
+    """True when a substitution body only reads: every segment a SUBST_READ_ONLY command called by
+    bare name, passing _reader_ok, with no environment prefix, no write redirection, no nested
     substitution. Anything else stays opaque (the conservative direction)."""
-    if body is None or re.search(r"\$\(|`|<\(|>\(", body) or "<<" in body:
+    if body is None or re.search(r"\$\(|`|<\(|>\(", body) or "<<" in body or SHADOWING.search(body):
         return False
     for seg in split_segments(body):
         toks = tokenize(seg)
@@ -169,17 +235,19 @@ def read_only_body(body):
                     return False
         toks = [t for k, t in enumerate(toks)
                 if not REDIRECT_ANY.match(t) and not (k > 0 and REDIRECT_ANY.match(toks[k - 1]))]
-        if not toks or "=" in toks[0] or toks[0] in KEYWORDS or "(" in toks[0] or ")" in toks[0]:
+        if not toks or "=" in toks[0] or toks[0] in KEYWORDS or "(" in toks[0] or ")" in toks[0] or \
+                "/" in toks[0] or COMPUTED.search(toks[0]):
             return False
-        verb = toks[0].rsplit("/", 1)[-1]
-        if verb not in SUBST_READ_ONLY or COMPUTED.search(toks[0]):
-            return False
-        if any(a in SUBST_BAD_FLAGS or a.startswith(tuple(f + "=" for f in SUBST_BAD_FLAGS if f.startswith("--")))
-               for a in toks[1:]):
-            return False
-        if verb == "git" and not _read_only(toks):
+        if toks[0] not in SUBST_READ_ONLY or not _reader_ok(toks[0], toks[1:]):
             return False
     return True
+
+
+def subst_denied_reads(body, env):
+    """What a substitution body names that it may never read (SUBST_READ_DENY), or []."""
+    text = expand_vars(body or "", env)
+    text = re.sub(r"(^|[\s'\"=])~(?=/)", lambda m: m.group(1) + os.path.expanduser("~"), text)
+    return [what for rx, what in SUBST_READ_DENY if rx.search(text)]
 
 
 def leading_assignments(text):
@@ -461,10 +529,15 @@ def analyse(cmd, cwd=None):
             return
         res["writes"].append((path, at))
 
+    shadowed = bool(SHADOWING.search(cmd))
+    res["shadowed"] = shadowed
+    res["subst_denied"] = []
     for kind, body in substitutions(cmd, live):
         # 0.7.1: a substitution that only reads (`$(git show HEAD:a)`) runs nothing the gate cannot see;
-        # >(...) feeds a process and stays opaque, as does any body with a writer, an interpreter or a nest
-        if kind == ">(" or not read_only_body(body):
+        # >(...) feeds a process and stays opaque, as does any body with a writer, an interpreter or a nest.
+        # 0.7.2: never when the command can shadow a reader; and a read of a denied path is refused outright.
+        res["subst_denied"] += subst_denied_reads(body, env)
+        if kind == ">(" or shadowed or not read_only_body(body):
             opaque("command substitution")
     start = cwd
     cur, prev, stack = start, start, []
@@ -490,7 +563,7 @@ def analyse(cmd, cwd=None):
             ops = _operands(args)
             if COMPUTED.search(toks[0]):
                 opaque("the command name %r is only known at run time" % toks[0])  # 0.7.1: `X=rm; $X ...`
-            if verb not in DATA_READERS or "/" in toks[0]:
+            if verb not in DATA_READERS or "/" in toks[0] or shadowed:
                 res["exec_text"].append(inner)
             if verb in ("cd", "pushd"):
                 dest = expand_vars(ops[0], env) if ops else "~"

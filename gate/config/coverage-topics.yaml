@@ -16,7 +16,7 @@
 #                           still needs a section), and what each size turns on
 version: 1
 severity:
-  BLOCKER: "a required topic missing or hollow; a contradiction with an upstream or frozen document; a missing security or privacy control; a claim that needs a citation and has none. An open BLOCKER refuses APPROVE and cannot be waived."
+  BLOCKER: "a required topic missing or hollow; a contradiction with an upstream or frozen document; a missing security or privacy control; an uncited legal, cost, security or feasibility claim that a decision depends on (other uncited claims are MAJOR or MINOR by the claim table in the brief). An open BLOCKER refuses APPROVE and cannot be waived."
   MAJOR: "the topic is answered but not testable or not measurable. A MAJOR refuses APPROVE until the operator WAIVEs it with a reason."
   MINOR: "clarity. Written to a file for the operator; never shown in the APPROVE or REVIEW summary and never blocking."
 phases:
@@ -130,10 +130,10 @@ phases:
           what: "a feasibility claim"
           keywords: ["feasible", "infeasible", "not possible", "cannot be done"]
         - id: D1.3
-          what: "a citation for every claim"
+          what: "a citation for every claim a decision depends on; any other claim is cited or marked as the author's assumption"
           keywords: ["studies show", "statistic", "according to"]
         - id: D1.B
-          what: "the phase's BLOCKER rules: an uncited legal or cost claim"
+          what: "the phase's BLOCKER rules: an uncited legal, cost, security or feasibility claim that a decision depends on"
           keywords: ["uncited", "per month", "legal requirement"]
       defers:
         - id: X1.1
@@ -145,7 +145,7 @@ phases:
         - id: X1.3
           what: "operational cost tuning"
           to: "11"
-    blockers: "uncited legal or cost claim."
+    blockers: "an uncited legal, cost, security or feasibility claim that a decision depends on."
     gate: "`cite-lint` (every claim has URL and date; links resolve)."
     topics:
       - id: R1
@@ -1122,6 +1122,15 @@ feature_topics:
 sizes:
   S:
     profile: "at most about five entities, no payments, one locale, low risk"
+    # 0.7.2 (design §10.5, ruling A4): size relaxes quantity bars only, never a legal, privacy, security,
+    # tenant-isolation, citation, EARS or depth bar. The operator restores a full bar with turn_on.
+    bars:
+      - topic: R2
+        bar: "2 to 3 real products"
+        reason: "Size S: a small product is compared with 2 to 3 real products instead of 3 to 5."
+      - topic: B13
+        bar: "at least 2 competitors"
+        reason: "Size S: the BRD names at least 2 competitors."
     na:
       - topic: B17
         partial: "the 100x growth path"

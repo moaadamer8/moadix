@@ -251,18 +251,25 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>`, with your real protected project id from the overlay in place of the placeholder | refused as `a protected production project`. The real id is needed: typed with the placeholder, the shell reads `<…>` as a redirection and the guard refuses it for that instead, so the protected-project rule is never tested. Run it from `~/moadix`, which has no `firebase.json`, so nothing could deploy even if the guard failed |
 | 12 | `firebase projects:list` | runs |
 
-## Updating from 0.7.0 to 0.7.1
+## Updating from 0.7.0 to 0.7.2
 
-0.7.1 changes the gate's Python, its configuration and the plugin's docs. Nothing changes in the checker program, the Keychain, the overlay or the shape of the managed policy, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+0.7.2 includes 0.7.1, which was committed but not installed. It changes the gate's Python, its configuration, the gap critic's agent text and the plugin's docs. Nothing changes in the checker program, the Keychain, the overlay or the shape of the managed policy, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
-1. **Confirm the version.** `cd ~/moadix && git log --oneline -1` shows the 0.7.1 commit; `.claude-plugin/plugin.json` shows `"version": "0.7.1"`.
-2. **Attack corpus.** `cd ~/moadix && /usr/bin/python3 tests/corpus/run.py`. Expected last line: `128 checks, 128 passed, 0 failed`. The hook's Bash classifier changed (see `docs/release-0.7.1-report.md`), so this step matters.
-3. **Install dry run.** `cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py`. Expected last line: `19 checks, 19 passed`.
-4. **Real-engine suite** (Docker Desktop running, no other container): `cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py`. Expected last line: `31 checks, 31 passed, 0 failed (<seconds> s)`.
-5. **Reinstall** (all Claude Code sessions closed): `cd ~/moadix && managed/install.sh`, then answer `y` at the overlay. Expected last line: `MOADIX is updated.`
-6. **Refresh the plugin** in one new Claude Code session in `~/moadix`: `/plugin marketplace update moadix`, then `/reload-plugins`. `/plugin` shows moadix **0.7.1**.
-7. **Live policy check**, as for 0.7.0 (step 7 there). Expected: `0 failed`, and the same refused and run checks.
-8. **What a product sees.** In a WEB product, `COLLAPSE 11b <code>` is accepted when phase 11b is current. The critic's brief names the GC ids its findings will get. `/moadix:coverage` shows the complete WAIVE line. Nothing to do by hand.
+1. **Confirm the version.** `cd ~/moadix && git log --oneline -2` shows the 0.7.2 commit, then the 0.7.1 commit. `.claude-plugin/plugin.json` shows `"version": "0.7.2"`.
+2. **The two suites the hook would not let the agent run.** The main-branch guard refuses a script whose text names the two credential CLIs, so these were not run inside Claude Code:
+   - `cd ~/moadix && /usr/bin/python3 tests/mainguard/run.py`. Expected last line: `281 checks, 281 passed, 0 failed`.
+   - `cd ~/moadix && /usr/bin/python3 tests/inc6/run.py`. Expected last line: `70 checks, 70 passed, 0 failed (<seconds> s)`.
+3. **Attack corpus.** `cd ~/moadix && /usr/bin/python3 tests/corpus/run.py`. Expected last line: `128 checks, 128 passed, 0 failed`. The hook's Bash classifier changed in 0.7.1 and 0.7.2 (see both release reports), so this step matters.
+4. **Install dry run.** `cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py`. Expected last line: `19 checks, 19 passed`.
+5. **Real-engine suite.** Docker Desktop must be running, with no other container: `cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py`. Expected last line: `31 checks, 31 passed, 0 failed (<seconds> s)`. 0.7.2 changes how the dependency-cruiser gate runs before `src/` exists (MF-26), and this suite has no case for that yet. To see it on a real engine, take a product at phase 3 with a committed `.dependency-cruiser.json` and no `src/`: REVIEW 3 should show `dependency-cruiser: configuration only`.
+6. **Reinstall.** All Claude Code sessions must be closed: `cd ~/moadix && managed/install.sh`, then answer `y` at the overlay. Expected last line: `MOADIX is updated.`
+7. **Refresh the plugin** in one new Claude Code session in `~/moadix`: `/plugin marketplace update moadix`, then `/reload-plugins`. `/plugin` shows moadix **0.7.2**.
+8. **Live policy check**, as for 0.7.0 (step 7 there). Expected: `0 failed`, with the same checks refused and run.
+9. **What a product sees.** Nothing to do by hand:
+   - The critic's next run continues the phase's run count, so a phase already at run 2 gets a scoped run 3.
+   - Findings archived before 0.7.2 have no section fingerprint, so they keep the line-based `fixed?` until they are raised again.
+   - A WEB product can `COLLAPSE 11b <code>`.
+   - `.dependency-cruiser.json` is writable in phases 3 and 7.
 
 ## Updating from 0.6.3 to 0.7.0
 

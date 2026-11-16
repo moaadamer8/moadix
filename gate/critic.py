@@ -137,7 +137,9 @@ def fingerprint(root, commit, citation, memo=None):
     lines = text.splitlines()
     a, b = int(m.group("a")), int(m.group("b") or m.group("a"))
     cited = norm(" ".join(lines[max(0, a - 1):b]))[:MAX_TEXT]
-    return {"path": path, "section": _section(lines, a), "text": cited, "text_sha": sha(cited)}
+    key, body = section_of(text, a)
+    return {"path": path, "section": _section(lines, a), "text": cited, "text_sha": sha(cited),
+            "skey": key, "section_sha": sha(body) if body is not None else None}
 
 
 def present(root, commit, path, ntext, memo=None):
@@ -150,6 +152,220 @@ def present(root, commit, path, ntext, memo=None):
         memo[key] = _show(root, commit, path)
     whole = memo[key]
     return whole is not None and ntext in norm(whole.replace("\n", " "))
+
+
+# ------------------------------------------------------------------ 0.7.2: sections (design §10.1, §10.2)
+def _sections(text):
+    """[(key, first line, last line, normalized body)] for each heading-bounded section. The key is
+    "<anchor>#<k>" (k counts equal anchors); the text before the first heading is "#0". The heading
+    line belongs to its section; the body excludes it, so a renamed heading is a new key."""
+    from . import contract
+    lines = (text or "").splitlines()
+    out, seen = [], {}
+    key, start, buf = "#0", 1, []
+    for i, ln in enumerate(lines, 1):
+        m = contract.HEADING.match(ln)
+        if m:
+            out.append((key, start, i - 1, norm(" ".join(buf))))
+            s_ = contract.slug(m.group(2))
+            seen[s_] = seen.get(s_, -1) + 1
+            key, start, buf = "%s#%d" % (s_, seen[s_]), i, []
+        else:
+            buf.append(ln)
+    out.append((key, start, len(lines), norm(" ".join(buf))))
+    return out
+
+
+def section_of(text, n):
+    """(key, normalized body) of the section holding line n, or (None, None)."""
+    for key, a, b, body in _sections(text):
+        if a <= n <= b:
+            return key, body
+    return None, None
+
+
+def _text(root, commit, path, memo):
+    key = (commit, path)
+    if key not in memo:
+        memo[key] = _show(root, commit, path)
+    return memo[key]
+
+
+def section_body(root, commit, path, skey, memo):
+    """The normalized body of section `skey` of path at commit; None when it does not exist there."""
+    text = _text(root, commit, path, memo)
+    if text is None:
+        return None
+    return next((body for key, _a, _b, body in _sections(text) if key == skey), None)
+
+
+def frozen(root, path, skey, commits, memo):
+    """True when section `skey` of path exists, with the same body, at every one of `commits`."""
+    bodies = [section_body(root, c, path, skey, memo) for c in commits]
+    return bool(commits) and all(b is not None for b in bodies) and len(set(bodies)) == 1
+
+
+def changed_sections(root, old, new, paths, memo):
+    """[(path, key, first line, last line, status)] for the sections of `paths` that differ between two
+    commits: status "changed" (or new) at `new`, or "removed" (present only at `old`)."""
+    out = []
+    for p in paths:
+        a, b = _text(root, old, p, memo), _text(root, new, p, memo)
+        if b is None and a is None:
+            continue
+        olds = {k: body for k, _x, _y, body in _sections(a)} if a is not None else {}
+        news = _sections(b) if b is not None else []
+        for k, x, y, body in news:
+            if olds.get(k) != body and (y >= x or k not in olds):
+                out.append((p, k, x, y, "changed"))
+        for k in olds:
+            if k not in {n[0] for n in news} and olds[k]:
+                out.append((p, k, 0, 0, "removed"))
+    return out
+
+
+# ------------------------------------------------------------------ 0.7.2: frozen-text exceptions, claims (§10.1, §10.3, §10.4)
+EXCEPTIONS = {"security": "security", "privacy": "privacy", "tenant": "tenant-isolation"}
+CLAIM_CLASSES = ("legal", "cost", "security", "feasibility", "other")
+BIG_CLASSES = ("legal", "cost", "security", "feasibility")
+QUOTE_RE = re.compile(r'^\s*>\s*\S|"[^"\n]{12,}"|\u201c[^\u201d\n]{12,}\u201d')
+URL_RE = re.compile(r"https?://")
+DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+FOOTREF = re.compile(r"\[\^([^\]\s]+)\]")
+
+
+def upstream_phase(st, path):
+    """The label of an earlier phase that is APPROVED or PROCEED-PAST and whose path map owns `path`
+    (in a feature cycle, any closed product phase too), or None."""
+    path = path.lstrip("./")
+    feature = (st or {}).get("feature")
+    cur = order(st, (st or {}).get("current_phase"))
+    cands = []
+    for i, (_pid, lab, _n, globs) in enumerate(pathmap.scope_phases((st or {}).get("mode"), feature)):
+        if cur is not None and i < cur:
+            cands.append((lab, globs, phase_status(st, lab)))
+    if feature:
+        for _pid, lab, _n, globs in pathmap.scope_phases((st or {}).get("mode"), None):
+            p = next((x for x in (st or {}).get("product_phases") or [] if x["label"] == lab), None)
+            cands.append((lab, globs, p["status"] if p else None))
+    for lab, globs, status in cands:
+        if status in ("APPROVED", "PROCEED-PAST") and pathmap.any_glob(globs, path):
+            return lab
+    return None
+
+
+def frozen_exception(root, st, f, commit, memo):
+    """None when a new finding on frozen text passes an exception (§10.1), else the reason it does not."""
+    if f.get("severity") != "BLOCKER":
+        return "only a BLOCKER under an exception may be raised on frozen text"
+    exc = f.get("exception")
+    if exc in EXCEPTIONS:
+        words = rules()["class_keywords"].get(EXCEPTIONS[exc]) or []
+        if _kw(words, "%s %s" % (f.get("quote") or "", f.get("fix") or "")):
+            return None
+        return "exception %s claimed, but its quote and fix name none of the catalogue's %s words" % (
+            exc, EXCEPTIONS[exc])
+    if exc == "upstream":
+        m = CITATION.match(str(f.get("upstream") or "").strip())
+        if not m:
+            return "exception upstream needs `upstream: path:line`"
+        text = _text(root, commit, m.group("path"), memo)
+        if text is None or int(m.group("b") or m.group("a")) > len(text.splitlines()):
+            return "upstream %s does not exist at the reviewed commit" % f.get("upstream")
+        if not upstream_phase(st, m.group("path")):
+            return "upstream %s is not a document of an earlier phase that is APPROVED or PROCEED-PAST" % (
+                f.get("upstream"))
+        return None
+    return "no exception claimed (security, privacy, tenant or upstream)"
+
+
+def decision_ids(root, commit):
+    """Ids a claim's `decision` may name at commit: Q-n headings in any DISCOVERY.md, ADR-nnn files,
+    and every decides rule of the catalogue."""
+    out = {str(r["id"]) for e in (_cat().get("phases") or {}).values()
+           for r in ((e or {}).get("depth") or {}).get("decides") or []}
+    try:
+        p = subprocess.run([GIT, "-C", root, "ls-tree", "-r", "--name-only", commit], capture_output=True,
+                           text=True, timeout=15)
+        names = p.stdout.splitlines() if p.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError):
+        names = []
+    memo = {}
+    for n in names:
+        m = re.search(r"(?:^|/)(ADR-\d{3,4})-", n)
+        if m:
+            out.add(m.group(1))
+        if n.endswith("DISCOVERY.md"):
+            out |= set(re.findall(r"^##\s+(Q-\d+)\b", _text(root, commit, n, memo) or "", re.M))
+    return out
+
+
+def _line_cited(lines, a, b, whole):
+    """True when one of lines a..b carries a source as cite-lint reads it: a URL with a date on the
+    line, or a footnote reference whose definition has one."""
+    for ln in lines[max(0, a - 1):b]:
+        if URL_RE.search(ln) and DATE_RE.search(ln):
+            return True
+        for ref in FOOTREF.findall(ln):
+            d = re.search(r"^\[\^%s\]:(.*)$" % re.escape(ref), whole, re.M)
+            if d and URL_RE.search(d.group(1)) and DATE_RE.search(d.group(1)):
+                return True
+    return False
+
+
+def claim_rule(root, f, commit, ids, memo):
+    """(severity the gate records, problems) for a claim finding (`kind` uncited or support, §10.3 and
+    §10.4); (None, []) for any other finding. The severity is the table's, from the two fields."""
+    kind = f.get("kind")
+    if not kind:
+        return None, []
+    probs = []
+    cls, dec = f.get("claim_class"), str(f.get("decision") or "")
+    if cls not in CLAIM_CLASSES:
+        probs.append("kind %s needs claim_class (%s)" % (kind, ", ".join(CLAIM_CLASSES)))
+    if not dec:
+        probs.append("kind %s needs decision (a Q-n, an ADR-nnn, a decides rule id, or none)" % kind)
+    elif dec != "none" and dec not in ids:
+        probs.append("decision %s does not exist (no Q-n heading in a DISCOVERY.md, ADR file or decides rule "
+                     "with that id at the reviewed commit)" % dec)
+    terms = [w for k in ("security", "privacy", "tenant-isolation") for w in rules()["class_keywords"].get(k) or []]
+    if cls in CLAIM_CLASSES and cls != "security" and _kw(terms, f.get("quote") or ""):
+        probs.append("the quote names security, privacy or tenant terms, so claim_class is security (§10.3)")
+    big, dep = cls in BIG_CLASSES, dec not in ("", "none")
+    table = "BLOCKER" if big and dep else "MAJOR" if (big or dep) else "MINOR"
+    m = CITATION.match(str(f.get("citation") or "").strip())
+    text = _text(root, commit, m.group("path"), memo) if m else None
+    lines = (text or "").splitlines()
+    a = int(m.group("a")) if m else 0
+    b = int(m.group("b") or a) if m else 0
+    sec = next(((x, y) for _k, x, y, _body in _sections(text) if x <= a <= y), (a, b)) if text else (a, b)
+    hasq = any(QUOTE_RE.search(ln) for ln in lines[max(0, sec[0] - 1):sec[1]])
+    basis = f.get("basis")
+    sev = table
+    if kind == "uncited":
+        if basis not in (None, "no-citation"):
+            probs.append("an uncited claim has basis no-citation, not %s" % basis)
+        if text is not None and _line_cited(lines, a, b, text):
+            probs.append("the cited line carries a source (a URL with a date, or a footnote with one), which "
+                         "cite-lint accepts: it is not uncited; judge its support from a quoted sentence (§10.4)")
+    elif kind == "support":
+        if basis not in ("quote-contradicts", "quote-insufficient", "no-quote"):
+            probs.append("kind support needs basis quote-contradicts, quote-insufficient or no-quote")
+        elif basis != "no-quote" and not hasq:
+            probs.append("basis %s, but the cited section quotes no source text: you cannot see the page, so "
+                         "support is judged only from a quote in the document (§10.4)" % basis)
+        elif basis == "no-quote":
+            if hasq:
+                probs.append("basis no-quote, but the cited section quotes its source")
+            if not (big and dep):
+                probs.append("no-quote is a finding only for a legal, cost, security or feasibility claim a "
+                             "decision depends on")
+            sev = "MAJOR"
+        elif basis == "quote-contradicts":
+            sev = "BLOCKER" if big and dep else "MAJOR"
+    else:
+        probs.append("kind %r is not uncited or support" % kind)
+    return sev, probs
 
 
 # ------------------------------------------------------------------ registry
@@ -192,9 +408,12 @@ def ingest(root, st, label, ev, receipt_sha, evidence_sha):
     commit = str(ev.get("source_commit") or "")
     run = {"n": len(reg["runs"]) + 1, "commit": commit, "receipt_sha256": receipt_sha,
            "evidence_sha256": evidence_sha, "map": {}, "late": [], "regressions": [], "problems": [], "prints": {},
-           "counts": {}}
+           "counts": {}, "frozen": {}, "severity": {}, "demoted": []}
     memo = {}
     pre = prefix(st, label)
+    # 0.7.2 (§10.1): from run 3 a new finding on a section unchanged since run n-2 needs an exception
+    frozen_at = [reg["runs"][-2].get("commit"), reg["runs"][-1].get("commit"), commit] if run["n"] >= 3 else []
+    ids = None
     for i, f in enumerate(ev.get("findings") or []):
         if not isinstance(f, dict):
             continue
@@ -218,6 +437,13 @@ def ingest(root, st, label, ev, receipt_sha, evidence_sha):
             elif key == "same_as" and fp and old.get("section") != fp["section"]:
                 bad = ("finding %s: same_as %s cited section #%s, this finding cites #%s; a finding elsewhere is a "
                        "new finding" % (cid, v, old.get("section"), fp["section"]))
+            elif key == "regression_of" and fp and not (old.get("path") == fp["path"] and
+                                                        old.get("section") == fp["section"]) and \
+                    frozen(root, fp["path"], fp.get("skey"), [old.get("commit"), commit], memo):
+                # 0.7.2 (§10.1, MF-18): a regression cites the original's section or text changed since it
+                run["demoted"].append("finding %s: regression_of %s cites #%s in %s, neither the section %s cited "
+                                      "nor text changed since; it counts as a new finding" % (
+                                          cid, v, fp["section"], fp["path"], v))
             else:
                 gid = str(v)
                 if key == "regression_of":
@@ -230,13 +456,26 @@ def ingest(root, st, label, ev, receipt_sha, evidence_sha):
             reg["next"] += 1
             if prev and fp and present(root, prev.get("commit"), fp["path"], fp["text"], memo):
                 run["late"].append(gid)
+            if frozen_at and fp and fp.get("skey") and frozen(root, fp["path"], fp["skey"], frozen_at, memo):
+                why = frozen_exception(root, st, f, commit, memo)
+                if why:
+                    run["frozen"][gid] = why
+        if f.get("kind"):
+            if ids is None:
+                ids = decision_ids(root, commit)
+            eff, cprobs = claim_rule(root, f, commit, ids, memo)
+            run["problems"] += ["finding %s: %s" % (cid, p) for p in cprobs]
+            if eff and sev in ("BLOCKER", "MAJOR", "MINOR") and eff != sev:
+                run["severity"][gid] = eff
         old = reg["findings"].get(gid) or {}
         reg["findings"][gid] = {
             "topic": str(f.get("topic")), "severity": sev, "quote": str(f.get("quote") or "")[:600],
             "citation": str(f.get("citation") or ""), "commit": commit, "path": (fp or {}).get("path"),
             "section": (fp or {}).get("section"), "text": (fp or {}).get("text"), "text_sha": (fp or {}).get("text_sha"),
             "first_run": old.get("first_run", run["n"]), "last_run": run["n"],
-            "defer_rule": f.get("defer_rule"), "to": f.get("to"), "class": f.get("class")}
+            "defer_rule": f.get("defer_rule"), "to": f.get("to"), "class": f.get("class"),
+            "fix": str(f.get("fix") or "")[:600], "ac": f.get("ac"), "skey": (fp or {}).get("skey"),
+            "section_sha": (fp or {}).get("section_sha")}
         run["map"][cid] = gid
         if fp:
             run["prints"][gid] = fp
@@ -449,13 +688,21 @@ def dispositions(root, st, label, hd, active):
     defers = {str(r["id"]) for r in depth(label)["defers"]}
     for gid in sorted(reg["findings"], key=lambda g: int(GC_ID.match(g).group("n")) if GC_ID.match(g) else 0):
         f = reg["findings"][gid]
-        here = bool(f.get("path")) and present(root, hd, f["path"], f.get("text"), memo)
+        lines_here = bool(f.get("path")) and present(root, hd, f["path"], f.get("text"), memo)
+        # 0.7.2 (§10.2, MF-17, MF-22): the finding's text changed when its cited lines are gone OR its section
+        # changed (lines added next to it, a renamed heading). A waiver still lapses on the cited lines only (A2).
+        same_section = True
+        if f.get("skey") and f.get("section_sha"):
+            body = section_body(root, hd, f["path"], f["skey"], memo)
+            same_section = body is not None and sha(body) == f["section_sha"]
+        here = lines_here and same_section
         covered, _lapse = waiver_covers(root, st, label, gid, f.get("topic"),
                                         {"path": f.get("path"), "text": f.get("text"), "text_sha": f.get("text_sha")}
-                                        if here else None, active)
+                                        if lines_here else None, active)
         if covered:
             disp = "waived"
-        elif f.get("severity") == CARRY and here and gid not in uncarried and str(f.get("defer_rule")) in defers:
+        elif f.get("severity") == CARRY and lines_here and gid not in uncarried and \
+                str(f.get("defer_rule")) in defers:
             disp = "carried"
         elif gid in ruled:
             disp = "ruled"
@@ -477,8 +724,9 @@ DISPOSITION_RULE = {
 }
 
 
-def brief_sections(root, st, label, hd, active):
-    """Lines for the critic's brief: the phase's depth, earlier runs, carries in."""
+def brief_sections(root, st, label, hd, active, paths=()):
+    """Lines for the critic's brief: the phase's depth, earlier runs, carries in, and (0.7.2) the claim
+    rules and, from run 3, the run's scope."""
     d = depth(label)
     R = rules()
     L = ["", "## Depth of phase %s (what it decides, what it defers)" % label,
@@ -503,12 +751,55 @@ def brief_sections(root, st, label, hd, active):
           "defect."]
     # 0.7.1 (task-tracker MF-14): the ids are fixed when the brief is written (the previous run was
     # archived at this launch), so the critic can print them and the operator can WAIVE at once.
-    nxt, pre = load(root, st, label)["next"], prefix(st, label)
+    reg0 = load(root, st, label)
+    nxt, pre = reg0["next"], prefix(st, label)
     L += ["", "## The ids your findings will get",
           "The gate numbers your NEW findings (no same_as, no regression_of) in the order they appear in "
           "`findings`: the first becomes %s, the second %s, and so on. A finding with same_as or regression_of "
-          "keeps that GC id. In your final message, list each finding as `C<k> = GC-...` so the operator can type "
-          "a WAIVE without waiting for REVIEW." % ("GC-%s-%d" % (pre, nxt), "GC-%s-%d" % (pre, nxt + 1))]
+          "keeps that GC id (a regression_of the gate does not accept as one takes the next id instead). In your "
+          "final message, list each finding as `C<k> = GC-...` so the operator can type a WAIVE without waiting "
+          "for REVIEW." % ("GC-%s-%d" % (pre, nxt), "GC-%s-%d" % (pre, nxt + 1))]
+    L += ["", "## Claims and citations",
+          "You have no network. Never state what a cited page says unless the document quotes it. Judge support "
+          "only from quoted text; the gate's link check decides whether a citation exists and resolves.",
+          "- A claim with no citation: set \"kind\": \"uncited\", \"claim_class\" (legal, cost, security, "
+          "feasibility or other) and \"decision\" (the Q-n, ADR-nnn or decides rule id whose choice rests on the "
+          "claim, or \"none\"). The gate sets the severity: legal, cost, security or feasibility with a decision is "
+          "BLOCKER; one of the two is MAJOR; neither is MINOR. A quote naming security, privacy or tenant terms is "
+          "claim_class security. A line that carries a URL with a date (or a footnote with one) is not uncited.",
+          "- A cited claim its source may not support: set \"kind\": \"support\", the two fields above, and "
+          "\"basis\": \"quote-contradicts\" (the document's quote of the source says otherwise), "
+          "\"quote-insufficient\" (it covers only part of the claim) or \"no-quote\" (a legal, cost, security or "
+          "feasibility claim a decision depends on, cited without the source's sentence). quote-* needs a quote "
+          "(a `>` line or a quoted sentence) in the cited section."]
+    if reg0["runs"] and len(reg0["runs"]) + 1 >= 3:
+        r1, r2 = reg0["runs"][-2], reg0["runs"][-1]
+        L += ["", "## Scope of this run (run %d)" % (len(reg0["runs"]) + 1),
+              "Runs 1 and 2 reviewed everything. This run reviews only (1) the earlier findings below and (2) the "
+              "sections changed since run %d (commit %s), listed here in full. Read any other document only to "
+              "judge a change against it." % (r2["n"], str(r2.get("commit"))[:12]),
+              "Frozen text: a section unchanged since run %d (commit %s). The gate refuses to count a NEW finding "
+              "there unless it is a BLOCKER with \"exception\": \"security\", \"privacy\" or \"tenant\" (its quote "
+              "or fix names that class's terms), or \"exception\": \"upstream\" with \"upstream\": \"path:line\" "
+              "in an approved earlier phase's document it contradicts. Without one it goes to the operator's MINOR "
+              "file and blocks nothing. A finding about missing text cites the nearest line where the text belongs."
+              % (r1["n"], str(r1.get("commit"))[:12])]
+        memo = {}
+        ch = changed_sections(root, r2.get("commit"), hd, list(paths), memo)
+        if not ch:
+            L.append("- (no section changed since run %d)" % r2["n"])
+        budget = 40000
+        for path, key, a, b, status in ch:
+            if status == "removed":
+                L.append("- %s §%s: removed since run %d" % (path, key.split("#")[0] or "(top)", r2["n"]))
+                continue
+            body = "\n".join((_text(root, hd, path, memo) or "").splitlines()[a - 1:b][:120])
+            if budget <= 0:
+                L.append("- %s §%s (lines %d-%d): changed; read it there" % (path, key.split("#")[0], a, b))
+                continue
+            budget -= len(body)
+            L += ["", "### %s §%s (lines %d-%d, changed)" % (path, key.split("#")[0] or "(top)", a, b), "```",
+                  body, "```"]
     rows = dispositions(root, st, label, hd, active)
     L += ["", "## Earlier runs on this phase"]
     if not rows:
@@ -549,10 +840,20 @@ def carries_out(root, st, label, run, ev, active):
     n = max([int(CARRY_ID.match(c).group("n")) for c in have if CARRY_ID.match(c)] or [0])
     prios = story_priorities(root, st)
     out = []
-    for f in ev.get("findings") or []:
-        if not isinstance(f, dict) or f.get("severity") != CARRY:
-            continue
-        gid = run["map"].get(str(f.get("id")))
+    items = [(run["map"].get(str(f.get("id"))), f) for f in ev.get("findings") or []
+             if isinstance(f, dict) and f.get("severity") == CARRY]
+    # 0.7.2 (task-tracker MF-21): a CARRY of an earlier run that the next brief marked [carried] (so the
+    # critic rightly did not raise it again) is recorded too, from the archive, with its text at that run.
+    seen = {g for g, _f in items} | set(run["map"].values())
+    _r, reg = latest_run(root, st, label)
+    for gid, disp in [(g, d) for g, _x, d in dispositions(root, st, label, run.get("commit"), active)]:
+        if disp == "carried" and gid not in seen:
+            r = reg["findings"][gid]
+            items.append((gid, {"id": gid, "topic": r.get("topic"), "severity": CARRY, "quote": r.get("quote"),
+                                "citation": r.get("citation"), "fix": r.get("fix") or "(see the earlier run)",
+                                "defer_rule": r.get("defer_rule"), "to": r.get("to"), "class": r.get("class"),
+                                "ac": r.get("ac"), "_commit": r.get("commit")}))
+    for gid, f in items:
         if not gid or gid in uncarried or carry_problems(root, st, label, f, prios):
             continue
         n += 1
@@ -560,7 +861,7 @@ def carries_out(root, st, label, run, ev, active):
         out.append({"id": "CARRY-%s-%d" % (pre, n), "gc": gid, "from": str(label), "to": to,
                     "rule": str(f.get("defer_rule")), "class": str(f.get("class")), "topic": str(f.get("topic")),
                     "quote": str(f.get("quote") or "")[:600], "citation": str(f.get("citation") or ""),
-                    "fix": str(f.get("fix") or "")[:600], "commit": run.get("commit")})
+                    "fix": str(f.get("fix") or "")[:600], "commit": f.get("_commit") or run.get("commit")})
     return out
 
 

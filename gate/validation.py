@@ -293,7 +293,19 @@ def summary(data, limit=8):
     out = rows[:limit] + (["... and %d more" % (len(rows) - limit)] if len(rows) > limit else [])
     if (data or {}).get("minor"):
         out.append("%d MINOR finding(s), not shown: %s" % (data["minor"], data.get("minor_file")))
+    fz = frozen_text(data)
+    if fz:
+        out.append(fz)
     return out
+
+
+FROZEN_HEAD = "Frozen findings rated BLOCKER by the critic, not blocking"
+
+
+def frozen_text(data):
+    """0.7.2 (ruling A1): the frozen-text findings the critic rated BLOCKER, in full, or ""."""
+    fb = (data or {}).get("frozen_blockers") or []
+    return "%s: %s" % (FROZEN_HEAD, " | ".join(fb)) if fb else ""
 
 
 def findings(data, limit=6):

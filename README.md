@@ -97,6 +97,7 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/release/run.py      # shipped plugin folders changed => plugin.json version bumped
 /usr/bin/python3 tests/skills/run.py       # phase manifest, vendored sources, self-approval grep
 /usr/bin/python3 tests/rel071/run.py       # 0.7.1: hook loosenings and their guarded cases, generated docs, COLLAPSE 11b
+/usr/bin/python3 tests/rel072/run.py       # 0.7.2: substitution read-deny and reader proofs, critic section 10 (A1-A5)
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)
 /usr/bin/python3 tests/corpus/run.py       # attack corpus (Terminal; scratch keychains only)

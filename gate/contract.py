@@ -222,6 +222,15 @@ def defaults(label, size, ruling, ov=None, feature=False):
     return out
 
 
+def bars(size, ov=None):
+    """{topic: bar} the size relaxes (0.7.2, design §10.5, ruling A4), minus topics the operator turned on."""
+    ov = ov or {"turn_on": set(), "na": {}}
+    if not size:
+        return {}
+    return {str(e["topic"]): str(e["bar"]) for e in ((catalogue().get("sizes") or {}).get(size) or {}).get("bars") or []
+            if e.get("topic") and e.get("bar") and str(e["topic"]) not in ov["turn_on"]}
+
+
 def turned_on(size, ov=None):
     ov = ov or {"turn_on": set(), "na": {}}
     return list(((catalogue().get("turned_on") or {}).get(size) or [])) if size else []
@@ -907,7 +916,7 @@ VAGUE = re.compile(r"\b(fast|faster|quick|quickly|user[- ]friendly|appropriate|a
                    r"and/or|should|may|might|could|user friendly|modern|nice)\b", re.I)
 UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:ms|milliseconds?|s|sec|seconds?|min|minutes?|h|hours?|days?|%|percent|"
                   r"req/s|requests?(?:/s| per second)?|rps|qps|users?|MB|GB|KB|kB|TB|MiB|GiB|items?|concurrent|"
-                  r"errors?|x|times|connections?|rows?|records?|bytes?|chars?|characters?|px|pt|:1)\b", re.I)
+                  r"errors?|x|times|connections?|rows?|records?|bytes?|chars?|characters?|px|pt|:1)(?!\w)", re.I)  # 0.7.2 (MF-23): `\b` never matched after %
 ALLOW_CELL = re.compile(r"^(?:✓|✔|✅|yes|y|allow|allowed|permit|permitted|own|own only|read|write|r|w|rw|crud)$", re.I)
 DENY_CELL = re.compile(r"^(?:✗|✘|❌|×|no|n|deny|denied|forbidden|none|must not)$", re.I)
 
@@ -1276,6 +1285,8 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
                      "phase" % ", ".join(miss))
     run = run or {"map": {}, "late": [], "regressions": [], "problems": [], "prints": {}}
     probs += list(run.get("problems") or [])
+    frozen_runs, sev_set = run.get("frozen") or {}, run.get("severity") or {}
+    frozen_minor, frozen_blockers, severity_notes = [], [], []
     uncarried = set((st or {}).get("_uncarried") or [])
     prios = None
     blocking, majors, minors, waived, carried, lapsed = [], [], [], [], [], []
@@ -1295,6 +1306,10 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
             probs.append("finding %s: its quote is not at %s (evidence must quote the document)" % (
                 fid, f.get("citation")))
         sev = f.get("severity")
+        if gid in sev_set:  # 0.7.2 (§10.3, ruling A3): the claim table's severity, from claim_class and decision
+            severity_notes.append("%s %s: severity %s set by the uncited-claim rule (the critic said %s)" % (
+                fid, gid, sev_set[gid], sev))
+            sev = sev_set[gid]
         tags = []
         if gid in (run.get("late") or []):
             tags.append("late")
@@ -1305,6 +1320,15 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
         if f.get("fix"):
             line += " -> fix: %s" % str(f["fix"])[:120]
         fp = (run.get("prints") or {}).get(gid)
+        if gid in frozen_runs:
+            # 0.7.2 (§10.1, ruling A1): a new finding on frozen text without an exception blocks nothing; it goes
+            # to the MINOR file tagged frozen. One the critic rated BLOCKER is also shown in full in the summaries.
+            frozen_minor.append("[frozen] %s (%s)" % (line, frozen_runs[gid]))
+            if f.get("severity") == "BLOCKER":
+                frozen_blockers.append("%s %s (%s) at %s: \"%s\" -> fix: %s [not blocking: %s]" % (
+                    gid or fid, fid, tid, f.get("citation"), str(f.get("quote") or ""), str(f.get("fix") or ""),
+                    frozen_runs[gid]))
+            continue
         if sev == CARRY_SEV:
             if prios is None:
                 prios = critic.story_priorities(root, st)
@@ -1333,7 +1357,9 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
     if carried and big and len(carried) / float(big) > critic.rules()["carry_note_ratio"]:
         note = ("this run carries %d of its %d MAJOR-or-worse findings (more than %d%%); the operator may UNCARRY any "
                 "of them" % (len(carried), big, int(critic.rules()["carry_note_ratio"] * 100)))
+    minors += frozen_minor + severity_notes
     info = {"blockers": blocking, "majors": [m for m, _g in majors], "minors": minors, "waived": waived,
+            "frozen": len(frozen_minor), "frozen_blockers": frozen_blockers,
             "carried": carried, "lapsed": sorted(set(lapsed)), "late": list(run.get("late") or []),
             "regressions": list(run.get("regressions") or []), "carry_note": note,
             "topics": len(want), "findings": len(ev.get("findings") or [])}
@@ -1488,7 +1514,12 @@ def coverage_doc():
          "findings with what happened to each (waived, carried, ruled, fixed?, open), so findings converge. A waiver "
          "binds one finding and lapses when the cited text changes. To rule on a finding in the log, write `Rules: "
          "GC-<phase>-<n>` in the Q-n or ADR that decides it. Fix the documents, commit, and launch it again. It "
-         "never passes a phase. Its result is tied to the documents it read: a fix commit to them needs a new run "
+         "never passes a phase. Runs 1 and 2 of a phase are full reviews; from run 3 a run reviews only the earlier "
+         "findings and the sections changed since the previous run, and a new finding on a section unchanged since "
+         "run n-2 counts only as a security, privacy, tenant-isolation or upstream-contradiction BLOCKER (otherwise "
+         "it goes to the MINOR file, tagged frozen). An uncited claim is a BLOCKER only when it is a legal, cost, "
+         "security or feasibility claim a decision depends on; cite the source's sentence for such a claim, because "
+         "the critic has no network and judges support only from quoted text. Its result is tied to the documents it read: a fix commit to them needs a new run "
          "before APPROVE, so plan on at least two runs for a phase with a BLOCKER. A verifier's result stays current "
          "while its document set is byte-identical to the commit it reviewed: committing other files does not make "
          "it stale." % opcmd_usage("WAIVE"),
@@ -1530,8 +1561,10 @@ def coverage_doc():
                 t += " if %s" % str(e["when"]).replace("-", " ")
             na.append(t)
         on = ", ".join("%s (%s)" % (x.get("what"), x.get("topic")) for x in (cat.get("turned_on") or {}).get(size) or [])
-        L.append("- **%s** (%s). N/A by default: %s. Turned on: %s." % (
-            size, size_definition(size), ", ".join(na) or "none", on or "nothing"))
+        br = "; ".join("%s %s" % (t, b) for t, b in bars(size).items())
+        L.append("- **%s** (%s). N/A by default: %s. Turned on: %s.%s" % (
+            size, size_definition(size), ", ".join(na) or "none", on or "nothing",
+            " Bars relaxed (quantities only): %s." % br if br else ""))
     L += ["", "## Topics per phase", ""]
     for label, e in cat["phases"].items():
         L.append("### Phase %s %s (role: %s)%s" % (label, e.get("name"), e.get("role"), "" if e.get("gated", True)

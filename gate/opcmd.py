@@ -251,11 +251,13 @@ def contract_status(root, st):
     if label and label != "done":
         _run, reg = critic.latest_run(root, st, label)
         if reg["runs"]:
-            t += " Gap critic on phase %s: %d run(s); findings per run %s; late findings %d; regressions %d." % (
-                label, len(reg["runs"]),
-                ", ".join(str(sum((r.get("counts") or {}).values())) for r in reg["runs"]),
-                sum(len(r.get("late") or []) for r in reg["runs"]),
-                sum(len(r.get("regressions") or []) for r in reg["runs"]))
+            t += (" Gap critic on phase %s: %d run(s); findings per run %s; late findings %d; regressions %d; "
+                  "frozen-text findings %d." % (
+                      label, len(reg["runs"]),
+                      ", ".join(str(sum((r.get("counts") or {}).values())) for r in reg["runs"]),
+                      sum(len(r.get("late") or []) for r in reg["runs"]),
+                      sum(len(r.get("regressions") or []) for r in reg["runs"]),
+                      sum(len(r.get("frozen") or {}) for r in reg["runs"])))
         cin = critic.carries_in(st, label, aw)
         if cin:
             t += " Carried into phase %s: %s." % (label, ", ".join(c for c, _x in cin))
@@ -388,8 +390,10 @@ def _approve_gate(root, st, label):
         return False, "the phase's validators have no fresh result for this commit (%s), and a stale or missing " \
                       "result counts as a failure%s" % (detail, hint), None
     if data["verdict"] != "pass":
-        return False, "the phase %s validators did not pass (%s). Findings: %s" % (
-            label, data["verdict"].upper(), " | ".join(validation.findings(data)) or "see REVIEW %s" % label), data
+        fz = validation.frozen_text(data)  # 0.7.2 (ruling A1)
+        return False, "the phase %s validators did not pass (%s). Findings: %s%s" % (
+            label, data["verdict"].upper(), " | ".join(validation.findings(data)) or "see REVIEW %s" % label,
+            ". " + fz if fz else ""), data
     return True, None, data
 
 
@@ -1076,6 +1080,9 @@ def handle(hook_input):
     nxt = ""
     if name == "APPROVE":
         nxt = " It rests on validator result %s." % payload["validation"]["digest"][:19]
+        fz = validation.frozen_text(data)  # 0.7.2 (ruling A1): shown, never blocking
+        if fz:
+            nxt += " %s." % fz
     if name in ("APPROVE", "PROCEED-PAST", "COLLAPSE"):
         nxt += merged
         if st.get("feature") and st2.get("feature") != st["feature"]:

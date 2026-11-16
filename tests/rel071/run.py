@@ -86,7 +86,7 @@ def test_hook():
         ("L1 a $( or backtick inside single quotes is literal text, not a substitution", "MF-5",
          "grep -c '`WAIVE`' .sdlc/phase.yaml"),
         ("L2 a substitution whose body only reads ($(git show ...), $(cat ...)) is not opaque", "MF-16d",
-         'for c in HEAD; do echo "$(git show $c:.sdlc/phase.yaml | head -3)"; done'),
+         'echo "$(git show HEAD:.sdlc/phase.yaml | head -3)"'),  # 0.7.2: a literal revision only
         ("L3 a quoted-tag heredoc body is data: the gate's names in it do not refuse the command", "MF-8",
          "cat >> docs/notes.md <<'EOF'\nran contract.py coverage; the %s is root-owned\nEOF\ngit status" % GATE_BIN),
         ("L4 the gate's names in the arguments of a command that only reads are data", "MF-8",

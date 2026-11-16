@@ -643,6 +643,9 @@ def critic_brief(root, st, name, role, base, hd, required):
             note = " [size %s default: N/A, %s]" % (size, d["reason"])
         elif tid in ov["turn_on"]:
             note = " [turned on by the operator]"
+        bar = contract.bars(size, ov).get(tid)
+        if bar:
+            note += " [size %s bar: %s, in place of the number in the title]" % (size, bar)
         L.append("- %s %s%s" % (tid, title, note))
     sev = cat.get("severity") or {}
     L += ["", "## Severity (use exactly these)",
@@ -657,7 +660,7 @@ def critic_brief(root, st, name, role, base, hd, required):
           "An N/A whose reason does not hold for this product is a finding on that topic. A size default the "
           "operator has not overridden is not a finding by itself."]
     from . import critic
-    L += critic.brief_sections(root, st, label, hd, active_waivers(st))
+    L += critic.brief_sections(root, st, label, hd, active_waivers(st), required)
     L += ["", "## Evidence",
           "Write exactly one file with the Write tool: %s" % ev,
           "It is JSON with these keys and no others (gate/config/critic.schema.json):",
@@ -675,7 +678,9 @@ def critic_brief(root, st, name, role, base, hd, required):
           "may be []. A CARRY adds \"defer_rule\" (a defers rule above), \"to\" (the phase it names) and \"class\" "
           "(security, privacy, tenant-isolation or other); a known issue adds \"ac\". A finding the gate listed under "
           "earlier runs adds \"same_as\": \"<GC id>\" (raised again) or \"regression_of\": \"<GC id>\" (a fix or "
-          "ruling that did not hold).",
+          "ruling that did not hold). A claim finding adds \"kind\", \"claim_class\", \"decision\" and, for "
+          "kind support, \"basis\" (see Claims and citations). A finding on frozen text adds \"exception\" and, for "
+          "upstream, \"upstream\".",
           "- notes: optional free text",
           "The quote must appear at the cited lines in source_commit (for a missing topic, quote the coverage line or "
           "the heading where it should be). Do not include a verdict, a pass/fail field or a recommendation to "
@@ -1234,6 +1239,9 @@ def passed_findings(root, st, label):
         sev = fd.get("severity")
         gid = (run or {}).get("map", {}).get(str(fd.get("id")))
         fp = (run or {}).get("prints", {}).get(gid)
+        if gid in ((run or {}).get("frozen") or {}):
+            continue  # 0.7.2 (A1): frozen-text findings block nothing, so a PROCEED-PAST passes nothing for them
+        sev = ((run or {}).get("severity") or {}).get(gid, sev)
         if sev == "CARRY" and gid in uncarried:
             sev = "MAJOR"
         if sev == "BLOCKER" or (sev == "MAJOR" and not critic.waiver_covers(

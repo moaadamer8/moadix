@@ -148,6 +148,11 @@ def check_bash(cmd, cwd, cache):
     # opaque (an interpreter fed a heredoc, a substitution that is not read-only), the whole text.
     if GATE_NAMES.search(cmd if a["opaque"] else "\n".join(a["exec_text"])):
         return "the agent has no command that changes gate state; operator commands are typed in chat (invariant 3)"
+    if a.get("subst_denied"):
+        # 0.7.2: a substitution never reads what the sandbox's denyRead, the managed Read() rules or the
+        # path map's secret classes protect. Stricter than a top-level read, which only the sandbox stops.
+        return "a command substitution reads %s; read-protected paths are never read inside $(...)" % (
+            a["subst_denied"][0])
     why = mainguard.check(cmd, cwd)  # main-branch and production guard, every repository (fails closed)
     if why:
         return why
