@@ -416,6 +416,7 @@ def tool_script(gate, root, pt, files=None):
 
 
 def wait_for(port):
+    """A bash loop (the live scripts run under bash -c: /dev/tcp is a bash feature, not dash's)."""
     return ("i=0; until (echo > /dev/tcp/%s/%d) 2>/dev/null; do i=$((i+1)); [ $i -gt 90 ] && echo 'the app never "
             "listened on port %d' > /out/wait.log && exit 3; sleep 1; done; " % (confined.SUT_ALIAS, port, port))
 
@@ -426,7 +427,7 @@ def live_script(gate, port, spec_rel, paths):
         return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s --report junit "
                 "--report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url))
     if gate == "zap":
-        return (wait_for(port) + "zap-baseline.py -t %s -c zap-rules.tsv -J zap.json -I -m 1 > /zap/wrk/run.log 2>&1; "
+        return (wait_for(port) + "zap-baseline.py -t %s -c zap-rules.tsv -J zap.json -I -m 1 -z '-dir /tmp/zaphome' > /zap/wrk/run.log 2>&1; "
                 "echo $? > /zap/wrk/run.rc" % url)
     if gate == "lhci":
         return (wait_for(port) + "export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -1) && "
@@ -520,12 +521,23 @@ def start_live(r, root, pt, export_tar, tmp, net):
             probs = confined.dockerfile_problems(text, pt)
             if probs:
                 raise confined.Refused("%s's Dockerfile: %s" % (name, "; ".join(probs)))
-            args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt)
+            bnet = None
+            if confined.build_network(pt) == "registry":
+                # section 3.9: the classic builder on an internal network whose only way out is the allowlisting
+                # proxy (0.7.4: the network used to be named but never created)
+                bnet, benet = r.network("build"), r.network("build-egress", internal=False)
+                pvol = r.volume("build-proxy")
+                r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
+                       confined.image("python"))
+                r.proxy(bnet, benet, pvol)
+            args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt, network=bnet)
             with open(ctx_tar, "rb") as f:
                 p = subprocess.run([r.d] + args, stdin=f, capture_output=True, timeout=confined.limits("build", pt)["wall_s"],
                                    env=dict(os.environ, **envb))
             if p.returncode != 0:
-                raise confined.Refused("building %s failed: %s" % (name, p.stderr.decode(errors="replace")[-400:]))
+                err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
+                err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
+                raise err
         argv = svc.get("command") or []
         argv = argv if isinstance(argv, list) else str(argv).split()
         r.execute(svc["image"], [str(x) for x in argv], "L", [], network=net, env=svc.get("environment") or {},
@@ -541,18 +553,34 @@ def _member(tar_path, rel):
 
 
 def _context_tar(tar_path, ctx, tmp):
+    """The build context: the export's `ctx` subfolder, as a tar the engine reads from stdin. 0.7.4: written
+    without PAX headers (git archive's global `comment` header used to be copied onto every member, so the
+    first entry was a PAX header and the engine took the stream for a Dockerfile) and with a short-named
+    entry first, so its first 512 bytes are a plain ustar header (confined.stdin_context_problem)."""
     ctx = os.path.normpath(ctx)
     out = os.path.join(tmp, "context.tar")
-    with tarfile.open(tar_path) as src, tarfile.open(out, "w") as dst:
+    with tarfile.open(tar_path) as src:
+        keep = []
         for m in src.getmembers():
             name = os.path.normpath(m.name)
             if ctx != "." and not (name == ctx or name.startswith(ctx + "/")):
                 continue
-            if m.issym() or m.islnk() or name.startswith("/") or ".." in name.split("/"):
+            if m.issym() or m.islnk() or name.startswith("/") or ".." in name.split("/") or not (m.isfile() or m.isdir()):
                 continue
             rel = name if ctx == "." else os.path.relpath(name, ctx)
-            m.name = rel
-            dst.addfile(m, src.extractfile(m) if m.isfile() else None)
+            if rel == ".":
+                continue
+            m.name, m.pax_headers = rel, {}
+            m.uname = m.gname = ""
+            m.mtime = int(m.mtime)
+            keep.append(m)
+        keep.sort(key=lambda m: len(m.name.encode("utf-8")) >= 100)  # stable: a short name first
+        with tarfile.open(out, "w", format=tarfile.GNU_FORMAT) as dst:
+            for m in keep:
+                dst.addfile(m, src.extractfile(m) if m.isfile() else None)
+    why = confined.stdin_context_problem(out)
+    if why:
+        raise confined.Refused("the build context cannot be streamed to the engine: %s" % why)
     return out
 
 
@@ -762,7 +790,15 @@ def run_gate(root, st, gate, label, run_id=None):
         net, env = "none", {}
         if g.get("live"):
             net = r.network("live")
-            port, _notes = start_live(r, root, pt, export, tmp, net)
+            try:
+                port, _notes = start_live(r, root, pt, export, tmp, net)
+            except confined.Refused as e:
+                # 0.7.4: a failed build keeps the engine's output (bounded, redacted) and names its last lines
+                if getattr(e, "log", None):
+                    so_, se_, rc_ = e.log
+                    rel, line = keep_logs(root, label, gate, None, rc_, so_, se_)
+                    raise confined.Refused("%s; %s; the build log is kept at %s" % (e, line, rel)) from None
+                raise
             spec = next((f for f in tracked(root) if re.match(r"^%s/05-lld/.*\.(ya?ml|json)$" % re.escape(contract.doc_dir(st)), f)), None)
             if gate == "schemathesis" and not spec:
                 return ["schemathesis needs the OpenAPI description under %s/05-lld/" % contract.doc_dir(st)], [], {}, None
@@ -780,7 +816,10 @@ def run_gate(root, st, gate, label, run_id=None):
             script = tool_script(gate, root, pt)
         dest = os.path.join(tmp, "out")
         try:
-            rc, so, se = r.execute(img, ["sh", "-c", script], g["tier"], mounts, network=net, env=env, user=user,
+            # 0.7.4 (the 0.7.3 engine run): a live script waits for the app with bash's /dev/tcp; /bin/sh is dash in
+            # every pinned image, where /dev/tcp does not exist, so the wait could never succeed
+            shell = "bash" if g.get("live") else "sh"
+            rc, so, se = r.execute(img, [shell, "-c", script], g["tier"], mounts, network=net, env=env, user=user,
                                    name="moadix-%s-%s" % (run_id, gate.replace("-", "")))
         except confined.Refused as e:  # past its wall clock or memory: keep what it wrote, then refuse
             with contextlib.suppress(confined.Unavailable):

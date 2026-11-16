@@ -63,6 +63,31 @@ def mounts(args):
     return m
 
 
+# 0.7.4 (the 0.7.3 engine run): the double now refuses what the real engine or the pinned images refuse, so
+# the sandbox suites catch the argument combinations the 0.7.3 run met for the first time.
+BUILTIN_NETWORKS = ("none", "bridge", "host", "default")
+
+
+def refuse(msg, code=1):
+    sys.stderr.write(msg + "\n")
+    return code
+
+
+def plain_tar_head(h):
+    """As the engine decides `docker build -`: a tar only when stdin's first 512 bytes are a whole header."""
+    if len(h) < 512 or h[257:262] != b"ustar" or h[156:157] in (b"x", b"g", b"L", b"K"):
+        return False
+    try:
+        want = int(h[148:156].split(b"\0", 1)[0].strip() or b"0", 8)
+    except ValueError:
+        return False
+    return want == sum(h[:148]) + 8 * 32 + sum(h[156:])
+
+
+def network_ok(s, net):
+    return net in BUILTIN_NETWORKS or net in s["networks"]
+
+
 def main():
     a = sys.argv[1:]
     os.makedirs(BASE, exist_ok=True)
@@ -94,6 +119,10 @@ def main():
     elif cmd == "network" and a[1] == "rm":
         for n in a[2:]:
             s["networks"].pop(n, None)
+    elif cmd == "network" and a[1] == "connect":
+        net = [x for x in a[2:] if not x.startswith("-") and x not in opt(a, "--alias")][0]
+        if net not in s["networks"]:
+            return refuse("Error response from daemon: network %s not found" % net)
     elif cmd == "network":
         pass
     elif cmd == "create":
@@ -126,11 +155,33 @@ def main():
     elif cmd == "inspect":
         print("false" if len(a) > 3 else "")
     elif cmd == "build":
-        sys.stdin.buffer.read()
+        data = sys.stdin.buffer.read()
+        net = (opt(a, "--network") or ["default"])[0]
+        if os.environ.get("DOCKER_BUILDKIT") == "0":
+            if not network_ok(s, net):
+                return refuse("ERROR: network %s not found" % net)
+        elif net not in ("none", "default", "host"):
+            return refuse("ERROR: network mode %r not supported by buildkit" % net)
+        if os.environ.get("MOADIX_DOUBLE_BUILD_FAIL"):  # a test asks for a failing build, with engine output
+            sys.stdout.write("#5 [2/2] RUN npm ci\n#5 npm ERR! token=npm_" + "Q1w2E3r4T5y6" * 3 + "\n")
+            return refuse("ERROR: failed to build: process \"/bin/sh -c npm ci\" did not complete successfully: exit "
+                          "code: 1")
+        if "-" in a[1:] and opt(a, "-f") and not plain_tar_head(data[:512]):
+            return refuse("ERROR: failed to build: ambiguous Dockerfile source: both stdin and flag correspond to "
+                          "Dockerfiles")
     elif cmd == "run" and "getent" in a:
         save(s)
         return 0  # 0.7.3: the runner's passwd check (confined.Run.check_user); the double's images have the entry
     elif cmd == "run":
+        net = (opt(a, "--network") or ["bridge"])[0]
+        if not network_ok(s, net):
+            return refuse("docker: Error response from daemon: network %s not found" % net, 125)
+        if opt(a, "--network-alias") and net in BUILTIN_NETWORKS:
+            return refuse("docker: Error response from daemon: network-scoped alias is supported only for containers "
+                          "in user defined networks", 125)
+        if "sh" in a and "-c" in a and "/dev/tcp/" in a[a.index("-c") + 1 if a.index("-c") + 1 < len(a) else -1]:
+            # the pinned images' /bin/sh is dash, which has no /dev/tcp: the wait never succeeds
+            return refuse("sh: 1: cannot create /dev/tcp/sut.moadix.test/3000: Directory nonexistent", 3)
         name = (opt(a, "--name") or ["anon"])[0]
         m = mounts(a)
         if "-d" in a or "--rm" not in a:

@@ -251,7 +251,7 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>`, with your real protected project id from the overlay in place of the placeholder | refused as `a protected production project`. The real id is needed: typed with the placeholder, the shell reads `<…>` as a redirection and the guard refuses it for that instead, so the protected-project rule is never tested. Run it from `~/moadix`, which has no `firebase.json`, so nothing could deploy even if the guard failed |
 | 12 | `firebase projects:list` | runs |
 
-**Read protection (0.7.3).** Before these rows, create the fixture files in **Terminal** (step 9 of "Updating from 0.7.0 to 0.7.3" gives the command). Rows 13 and 14 are refused by the hook, which reads the file name. Rows 15–27 use a `?` wildcard or a variable, so the hook cannot see the name, and the sandbox's `denyRead` must stop the read. Each of those rows tests one new rule. Rows 28 and 29 are positive controls.
+**Read protection (0.7.3).** Before these rows, create the fixture files in **Terminal** (step 9 of "Updating from 0.7.0 to 0.7.4" gives the command). Rows 13 and 14 are refused by the hook, which reads the file name. Rows 15–27 use a `?` wildcard or a variable, so the hook cannot see the name, and the sandbox's `denyRead` must stop the read. Each of those rows tests one new rule. Rows 28 and 29 are positive controls.
 
 | # | Bash call (or tool) | Expect |
 |---|---|---|
@@ -273,17 +273,17 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
-## Updating from 0.7.0 to 0.7.3
+## Updating from 0.7.0 to 0.7.4
 
-0.7.3 includes 0.7.1 and 0.7.2, which were committed but not installed. It changes the gate's Python, its configuration, the gap critic's agent text, the plugin's docs, and the managed policy: new read rules in the sandbox's `denyRead` and in the managed `Read()` deny rules. Nothing changes in the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+0.7.4 includes 0.7.1, 0.7.2 and 0.7.3, which were committed but not installed. It changes the gate's Python, its configuration, the gap critic's agent text, the plugin's docs, and the managed policy: new read rules in the sandbox's `denyRead` and in the managed `Read()` deny rules. Nothing changes in the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
 **1. Confirm the version.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
 ```
-cd ~/moadix && git log --oneline -4
+cd ~/moadix && git log --oneline -5
 ```
 
-Expected: the 0.7.3, 0.7.2, 0.7.1 and 0.7.0 commits, newest first. `cat .claude-plugin/plugin.json` shows `"version": "0.7.3"`.
+Expected: the 0.7.4, 0.7.3, 0.7.2, 0.7.1 and 0.7.0 commits, newest first. `cat .claude-plugin/plugin.json` shows `"version": "0.7.4"`.
 
 **2. Run the main-branch guard suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it: the installed guard refuses any script whose text names the gh or firebase CLI.
 
@@ -301,7 +301,7 @@ cd ~/moadix && /usr/bin/python3 tests/inc6/run.py
 
 Expected last line: `70 checks, 70 passed, 0 failed (<seconds> s)`.
 
-**4. Run the policy rendering suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it either. It now also checks the 0.7.3 read rules.
+**4. Run the policy rendering suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it either. It also checks the read rules added in 0.7.3.
 
 ```
 cd ~/moadix && /usr/bin/python3 tests/install/render.py
@@ -334,7 +334,7 @@ Expected last line: `19 checks, 19 passed`.
 cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
 ```
 
-Expected last line: `49 checks, 49 passed, 0 failed (<seconds> s)`. If a smoke check fails, its line shows the tool's exit code, the files it wrote and the last lines of its log. Send me that output.
+Expected last line: `49 checks, 49 passed, 0 failed (<seconds> s)`. On 0.7.3 the four live smoke checks failed at the image build (`ambiguous Dockerfile source`); 0.7.4 fixes that and three faults behind it. If a smoke check fails, its line shows the tool's or the build's exit code, the files it wrote and the last lines of its log. Send me that output.
 
 **8. Reinstall.** Docker Desktop: not needed. Claude Code sessions: **must all be closed**. It asks for your macOS password once and shows the overlay: answer `y`.
 
@@ -358,7 +358,7 @@ Expected last line: `14`.
 cd ~/moadix && git fetch origin && /usr/bin/python3 tests/install/no_product_strings.py origin/master..HEAD
 ```
 
-Expected last line: `no product-specific string in origin/master..HEAD (3 commits, <n> strings checked)`. If it prints `FOUND` lines, stop and send them to me; do not push.
+Expected last line: `no product-specific string in origin/master..HEAD (4 commits, <n> strings checked)`. If it prints `FOUND` lines, stop and send them to me; do not push.
 
 **11. Push master and the tag.** Docker Desktop: not needed. Claude Code sessions: may stay open. Do this in **Terminal**: the guard refuses a push to the main branch from Claude Code. The plugin is fetched from GitHub, so this must come before the refresh in step 12.
 
@@ -366,19 +366,19 @@ Expected last line: `no product-specific string in origin/master..HEAD (3 commit
 cd ~/moadix && git push origin master
 ```
 
-Expected last line: `   3b8244e..<0.7.3 commit>  master -> master`.
+Expected last line: `   3b8244e..<0.7.4 commit>  master -> master`.
 
 ```
-cd ~/moadix && git tag -a v0.7.3 -m "MOADIX 0.7.3"
+cd ~/moadix && git tag -a v0.7.4 -m "MOADIX 0.7.4"
 ```
 
 It prints nothing.
 
 ```
-cd ~/moadix && git push origin v0.7.3
+cd ~/moadix && git push origin v0.7.4
 ```
 
-Expected last line: ` * [new tag]         v0.7.3 -> v0.7.3`.
+Expected last line: ` * [new tag]         v0.7.4 -> v0.7.4`.
 
 **12. Refresh the plugin.** Docker Desktop: not needed. Claude Code sessions: open **one new** session in `~/moadix` and type these two commands there, not in Terminal.
 
@@ -390,7 +390,7 @@ Expected last line: ` * [new tag]         v0.7.3 -> v0.7.3`.
 /reload-plugins
 ```
 
-Then type `/plugin`. Expected: moadix is shown at version **0.7.3**.
+Then type `/plugin`. Expected: moadix is shown at version **0.7.4**.
 
 **13. Run the live policy check.** Docker Desktop: not needed. Claude Code sessions: in the session from step 12, type each line as its own Bash tool call (not in Terminal: it tests the sandbox and the guard).
 

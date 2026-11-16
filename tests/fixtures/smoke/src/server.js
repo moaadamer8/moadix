@@ -6,6 +6,11 @@ const page = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><ti
   "<body><main><h1>Smoke fixture</h1><p>A page for axe and Lighthouse.</p></main></body></html>";
 
 http.createServer((req, res) => {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405, { allow: "GET, HEAD", "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "method not allowed" }));
+    return;
+  }
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ status: "ok" }));

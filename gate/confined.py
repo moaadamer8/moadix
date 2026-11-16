@@ -154,7 +154,7 @@ def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env
     if network != "none" and not re.match(r"^moadix-[a-z0-9-]+$", network):
         raise Refused("network %r is not the run's internal network" % (network,))
     uid = int(config().get("uid") or 65534)
-    e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/home",  # noqa: S108 (inside the container: a tmpfs)
+    e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp",  # noqa: S108 (inside the container: a tmpfs)
          "LANG": "C.UTF-8", "CI": "1", "NODE_ENV": "test", "TZ": "UTC"}
     for k, val in (env or {}).items():
         if SECRETISH.search(k) or not re.match(r"^[A-Z][A-Z0-9_]*$", k):
@@ -291,20 +291,68 @@ def dockerfile_problems(text, product_tools=None):
     return probs
 
 
-def build_argv(run_id, tag, dockerfile, lim, product_tools=None):
-    """`docker build -` reading the export as a tar on stdin (section 3.9)."""
+def build_network(product_tools=None):
+    """none (the default) or registry (section 3.9)."""
     net = ((product_tools or {}).get("build") or {}).get("network") or "none"
     if net not in ("none", "registry"):
         raise Refused("build.network %r is not none or registry" % net)
+    return net
+
+
+def build_argv(run_id, tag, dockerfile, lim, product_tools=None, network=None):
+    """`docker build -` reading the export as a tar on stdin (section 3.9). With build.network: registry,
+    `network` is the run's internal build network, joined to the allowlisting egress proxy, and the build
+    reaches the registries only through it (0.7.4: the name used to be one no step created)."""
+    net = build_network(product_tools)
     args = (((product_tools or {}).get("build") or {}).get("args") or {})
     out = ["build", "-", "-f", dockerfile, "-t", tag, "--label", "moadix.run=%s" % run_id, "--pull=false",
            "--memory", "%dm" % lim["memory_mb"]]
     for k, v in sorted(args.items()):
         if SECRETISH.search(str(k)) or SECRETISH.search(str(v)):
             raise Refused("build arg %s looks like a secret; builds get no secrets" % k)
+        if str(k).lower() in ("http_proxy", "https_proxy", "no_proxy", "all_proxy"):
+            raise Refused("build arg %s is set by the gate, never by the product" % k)
         out += ["--build-arg", "%s=%s" % (k, v)]
-    out += ["--network", "none" if net == "none" else "moadix-egress-%s" % run_id]
+    if net == "registry":
+        if not network or not re.match(r"^moadix-[a-z0-9-]+$", network):
+            raise Refused("a registry build needs the run's internal build network")
+        for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            out += ["--build-arg", "%s=http://moadix-proxy:3128" % k]
+        out += ["--network", network]
+    else:
+        out += ["--network", "none"]
     return out, ({"DOCKER_BUILDKIT": "0"} if net == "registry" else {"DOCKER_BUILDKIT": "1"})
+
+
+TAR_PLAIN_TYPES = b"0\x0012345677"
+
+
+def stdin_context_problem(path):
+    """None when the tar at `path` can be streamed to `docker build -` as its context, else the reason.
+    0.7.4 (the 0.7.3 engine run): the engine tells a tar context from a Dockerfile on stdin by its first
+    512 bytes alone; a first entry that needs a second header block (a PAX `x` or `g` header, a GNU long
+    name `L`/`K`) does not parse there, so the engine read the tar as a Dockerfile and, with -f also given,
+    refused the build as "ambiguous Dockerfile source". The first header must be a plain ustar header with
+    a valid checksum."""
+    try:
+        with open(path, "rb") as f:
+            h = f.read(512)
+    except OSError as e:
+        return "the build context cannot be read (%s)" % e
+    if len(h) < 512 or not h.strip(b"\0"):
+        return "the build context is empty"
+    if h[257:262] != b"ustar":
+        return "the build context's first entry is not a ustar header"
+    if h[156:157] not in [bytes([c]) for c in TAR_PLAIN_TYPES]:
+        return ("the build context's first entry is a %r header, which the engine cannot recognise as a tar from "
+                "its first 512 bytes" % h[156:157].decode("latin-1"))
+    try:
+        want = int(h[148:156].split(b"\0", 1)[0].strip() or b"0", 8)
+    except ValueError:
+        return "the build context's first header has no valid checksum"
+    if want != sum(h[:148]) + 8 * 32 + sum(h[156:]):
+        return "the build context's first header checksum is wrong"
+    return None
 
 
 # ------------------------------------------------------------------ output (section 3.6)
@@ -488,7 +536,10 @@ class Run(object):
         lim = limits(tier, self.pt)
         self.check_user(img, user or "%d:%d" % (self.uid, self.uid))
         name = name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower()))
-        e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/home", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+        # 0.7.4 (the 0.7.3 engine run): HOME is the run's own tmpfs /tmp, which exists and is writable by any uid
+        # (mode 1777). It was /tmp/home, which nothing created, so a tool writing to $HOME (zap-baseline.py's
+        # zap.yaml) failed before it started.
+        e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
         for k, v in (env or {}).items():
             if SECRETISH.search(k) or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", k):
                 raise Refused("environment variable %s may not be passed into a confined run" % k)

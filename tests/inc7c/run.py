@@ -184,9 +184,12 @@ def test_network():
     a, envb = confined.build_argv("r4", "t", "Dockerfile", LIM)
     record(G, "the image build has --network none by default (BuildKit)", a[a.index("--network") + 1] == "none" and
            envb["DOCKER_BUILDKIT"] == "1", a)
-    a, envb = confined.build_argv("r4", "t", "Dockerfile", LIM, {"build": {"network": "registry"}})
-    record(G, "build.network: registry uses the run's egress network (classic builder), never the default bridge",
-           a[a.index("--network") + 1] == "moadix-egress-r4" and envb["DOCKER_BUILDKIT"] == "0", a)
+    # 0.7.4: the run's own internal build network (created and joined to the proxy by the gate), passed in
+    a, envb = confined.build_argv("r4", "t", "Dockerfile", LIM, {"build": {"network": "registry"}},
+                                  network="moadix-r4-build")
+    record(G, "build.network: registry uses the run's build network (classic builder) and the proxy, never the "
+              "default bridge", a[a.index("--network") + 1] == "moadix-r4-build" and envb["DOCKER_BUILDKIT"] == "0"
+           and "HTTPS_PROXY=http://moadix-proxy:3128" in a, a)
     why = refused(confined.build_argv, "r4", "t", "Dockerfile", LIM, {"build": {"network": "host"}})
     record(G, "hostile: build.network host is refused", bool(why), why)
     p = confined.dockerfile_problems("FROM node:24-slim\nRUN npm ci\n")
