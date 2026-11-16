@@ -11,7 +11,7 @@ MOADIX adds SDLC gates to [Claude Code](https://claude.com/claude-code). A produ
 The design is in [`docs/DESIGN.md`](docs/DESIGN.md), and progress reports are in `docs/increment-*-report.md`.
 
 > [!WARNING]
-> **Work in progress.** MOADIX is being built in increments (3 done so far). Formats, commands and the installer can change between versions, and some phases' validators and tools are not wired yet. Don't rely on it for anything you can't afford to redo.
+> **Work in progress.** MOADIX is being built in increments and point releases (see `docs/`). Formats, commands and the installer can change between versions, and some phases' validators and tools are not wired yet. Don't rely on it for anything you can't afford to redo.
 
 > [!CAUTION]
 > **Installing MOADIX locks down Claude Code for the whole machine,** not just MOADIX projects. The policy goes into `/Library/Application Support/ClaudeCode/managed-settings.json` and applies to **every** Claude Code session for every user on the machine:
@@ -67,6 +67,7 @@ This removes the managed policy (only if it is MOADIX's), the root-owned gate co
 
 Open Claude Code in a product's git repo and type these **as the whole message**. `<code>` is the current 6-digit code from your app. Each code works once.
 
+<!-- operator commands: generated from gate/opcmd.py (USAGE, HELP) by command_table(); do not edit -->
 | Command | What it does |
 |---|---|
 | `INIT <product-id> <code>` | Starts a product: creates `.sdlc/` at the repo root and the first ledger line. |
@@ -74,11 +75,15 @@ Open Claude Code in a product's git repo and type these **as the whole message**
 | `REVIEW <phase>` | Read-only. Shows the latest validator result for a phase and its digest. |
 | `APPROVE <phase> <code>` | Approves a phase. Refused, with the findings, unless the phase's validators passed on the current commit. |
 | `REOPEN <phase> <reason> <code>` | Reopens an approved (frozen) phase. |
-| `WAIVE <id> owner=<name> scope=<what> expiry=YYYY-MM-DD reason=<text> <code>` | Waives a finding for at most 180 days. High or critical security findings can't be waived. |
+| `WAIVE <id>[,<id>...] owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>` | Waives findings for at most 180 days; a gap-critic finding is named `gap-critic.<GC id>`, a carry `CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or tenant-isolation carries can't be waived. |
 | `UNWAIVE <id> <code>` | Withdraws a waiver. |
-| `PROCEED-PAST <phase> <reason> <code>` | Moves past a phase whose validators definitely failed on the current commit. |
-| `ADOPT <code>` | Adopts the product settings the agent proposed in `.sdlc-proposals/`. |
+| `UNCARRY <GC id or CARRY id> <code>` | Pulls a carried finding back into the current phase (a GC id counts as a MAJOR; a CARRY id is readdressed to this phase). |
+| `PROCEED-PAST <phase> <reason> <code>` | Moves past a phase whose validators definitely failed on the current commit; the findings it passes are recorded. |
+| `COLLAPSE <phase> <code>` | Collapses the current phase when the size profile (S: phases 1, 6b, 10c) or the platform ruling declares it not applicable (see /moadix:coverage) allows it, recording the reason and the checks that will not run. |
+| `FEATURE <feature-id> <code>` | Starts a feature cycle on a released (or onboarded) product. |
+| `ADOPT <code>` | Adopts what the agent proposed in `.sdlc-proposals/` (product settings, coverage overrides, standing instructions). |
 | `PARK <code>` | Stops the product's declared stack, records the counts and tags the repo. |
+<!-- end of generated table -->
 
 The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is ready. That never changes gate state.
 
@@ -91,6 +96,7 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/verifiers/run.py    # verifiers: brief replacement, restrictions, evidence, probe
 /usr/bin/python3 tests/release/run.py      # shipped plugin folders changed => plugin.json version bumped
 /usr/bin/python3 tests/skills/run.py       # phase manifest, vendored sources, self-approval grep
+/usr/bin/python3 tests/rel071/run.py       # 0.7.1: hook loosenings and their guarded cases, generated docs, COLLAPSE 11b
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)
 /usr/bin/python3 tests/corpus/run.py       # attack corpus (Terminal; scratch keychains only)

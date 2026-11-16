@@ -251,6 +251,19 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>`, with your real protected project id from the overlay in place of the placeholder | refused as `a protected production project`. The real id is needed: typed with the placeholder, the shell reads `<…>` as a redirection and the guard refuses it for that instead, so the protected-project rule is never tested. Run it from `~/moadix`, which has no `firebase.json`, so nothing could deploy even if the guard failed |
 | 12 | `firebase projects:list` | runs |
 
+## Updating from 0.7.0 to 0.7.1
+
+0.7.1 changes the gate's Python, its configuration and the plugin's docs. Nothing changes in the checker program, the Keychain, the overlay or the shape of the managed policy, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+
+1. **Confirm the version.** `cd ~/moadix && git log --oneline -1` shows the 0.7.1 commit; `.claude-plugin/plugin.json` shows `"version": "0.7.1"`.
+2. **Attack corpus.** `cd ~/moadix && /usr/bin/python3 tests/corpus/run.py`. Expected last line: `128 checks, 128 passed, 0 failed`. The hook's Bash classifier changed (see `docs/release-0.7.1-report.md`), so this step matters.
+3. **Install dry run.** `cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py`. Expected last line: `19 checks, 19 passed`.
+4. **Real-engine suite** (Docker Desktop running, no other container): `cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py`. Expected last line: `31 checks, 31 passed, 0 failed (<seconds> s)`.
+5. **Reinstall** (all Claude Code sessions closed): `cd ~/moadix && managed/install.sh`, then answer `y` at the overlay. Expected last line: `MOADIX is updated.`
+6. **Refresh the plugin** in one new Claude Code session in `~/moadix`: `/plugin marketplace update moadix`, then `/reload-plugins`. `/plugin` shows moadix **0.7.1**.
+7. **Live policy check**, as for 0.7.0 (step 7 there). Expected: `0 failed`, and the same refused and run checks.
+8. **What a product sees.** In a WEB product, `COLLAPSE 11b <code>` is accepted when phase 11b is current. The critic's brief names the GC ids its findings will get. `/moadix:coverage` shows the complete WAIVE line. Nothing to do by hand.
+
 ## Updating from 0.6.3 to 0.7.0
 
 0.7.0 includes 0.6.4, which was committed but never installed. Nothing changes in the checker program, the Keychain, the overlay or the shape of the managed policy, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.

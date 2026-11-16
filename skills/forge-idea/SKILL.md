@@ -13,7 +13,7 @@ The main goal is better thinking, not producing an artifact. Strengthening an id
 
 This skill can be used on many kinds of ideas. When the idea is about a product or feature, what survives may be written to `forged-idea.md` for later planning.
 
-Lead by questioning, not lecturing. Ask one question at a time, press on weak points, and do not let vague claims pass without examination.
+Lead by questioning, not lecturing. Ask in rounds of questions that do not depend on each other (see `/moadix:coverage`), press on weak points, and do not let vague claims pass without examination.
 
 ## Conventions
 
@@ -61,7 +61,7 @@ Tell the user the path; state is on disk now, so the session survives interrupti
 
 Let the session goal set the first move: for clarifying, pin down terms, boundaries, and assumptions; for testing, go after the central claim first; for making it better, drive each unresolved branch to a concrete decision.
 
-Work one question at a time, in dependency order.
+Work in dependency order: a round holds only questions that do not depend on each other; a question that depends on an answer waits for the next round.
 
 Include your current best answer or hypothesis when it helps the user respond. A concrete proposal is easier to accept, reject, or revise than an open-ended prompt. Find discoverable answers yourself instead of asking.
 

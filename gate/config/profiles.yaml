@@ -20,8 +20,9 @@ profiles:
     description: "Browser-delivered only; no native client planned."
     status: implemented          # v0.3 implements this path end to end
     # increment 7 (toy-notes finding F-2): 6b and 10c were missing here although the gate runs
-    # them for every ruling (nothing reads this list to skip a phase) and Amendment 3 gives both
-    # phases coverage topics. Declared now, so the profile matches what the gate does.
+    # them for every ruling and Amendment 3 gives both phases coverage topics. 0.7.1 (task-tracker
+    # MF-3): COLLAPSE reads this list: a phase left out of it AND declared not_applicable below (11b)
+    # may be collapsed at any size, with that reason (contract.ruling_retires).
     active_phases: ["0","1","2","3","4","5","6","6b","7","8","9","10a","10b","10c","11"]
     extra_checks: []
     # The mirror of APP-FIRST's web entries. Before v0.4 these were missing, and
@@ -57,8 +58,7 @@ profiles:
     description: "Ships web first; a native app is a committed future step."
     status: checks-implemented   # the GATES exist; mobile EXECUTION is deferred
     # increment 7 (toy-notes finding F-2): 6b and 10c were missing here although the gate runs
-    # them for every ruling (nothing reads this list to skip a phase) and Amendment 3 gives both
-    # phases coverage topics. Declared now, so the profile matches what the gate does.
+    # them for every ruling and Amendment 3 gives both phases coverage topics.
     active_phases: ["0","1","2","3","4","5","6","6b","7","8","9","10a","10b","10c","11"]
     extra_checks:
       - id: portability-scoring
@@ -153,9 +153,12 @@ profiles:
 #   for all three.
 sizes:
   S:
+    # 0.7.1 (task-tracker MF-2): this entry used to define S on its own (by surfaces, stories and
+    # trust boundaries), unlike coverage-topics.yaml. S has ONE definition now,
+    # in gate/config/coverage-topics.yaml sizes.S.profile; this file says only what S may collapse.
     description: >-
-      Small work: a single surface, one or two stories, no new trust boundary.
-      Collapses the phases whose cost is not repaid at this size.
+      Size S as defined in gate/config/coverage-topics.yaml (sizes.S.profile).
+      Collapses the phases whose cost is not repaid at this size; the operator chooses each collapse.
     collapse:
       - phase: "1"
         reason: >-

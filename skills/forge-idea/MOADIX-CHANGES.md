@@ -30,3 +30,5 @@ Side effect, left as is: On Activation step 5 offers to resume any session whose
 | SKILL.md frontmatter | `name: bmad-forge-idea` | `name: forge-idea` | rename |
 | SKILL.md title | `# BMad …` | the same title without the mark | rename |
 | customize.toml comments | `_bmad/custom/bmad-forge-idea.toml` | `_bmad/custom/forge-idea.toml` (BMad core keys overrides by the skill folder's name) | rename |
+| SKILL.md, intro | `Ask one question at a time, press on weak points` | `Ask in rounds of questions that do not depend on each other (see /moadix:coverage), press on weak points` (0.7.1, task-tracker MF-1: the same rule as /moadix:coverage's discovery rounds since 0.6.4) | adaptation |
+| SKILL.md, The forge | `Work one question at a time, in dependency order.` | `Work in dependency order: a round holds only questions that do not depend on each other; a question that depends on an answer waits for the next round.` (0.7.1, MF-1) | adaptation |

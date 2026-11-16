@@ -501,6 +501,14 @@ def brief_sections(root, st, label, hd, active):
           "against each decides rule's words);",
           "- a known issue breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation "
           "defect."]
+    # 0.7.1 (task-tracker MF-14): the ids are fixed when the brief is written (the previous run was
+    # archived at this launch), so the critic can print them and the operator can WAIVE at once.
+    nxt, pre = load(root, st, label)["next"], prefix(st, label)
+    L += ["", "## The ids your findings will get",
+          "The gate numbers your NEW findings (no same_as, no regression_of) in the order they appear in "
+          "`findings`: the first becomes %s, the second %s, and so on. A finding with same_as or regression_of "
+          "keeps that GC id. In your final message, list each finding as `C<k> = GC-...` so the operator can type "
+          "a WAIVE without waiting for REVIEW." % ("GC-%s-%d" % (pre, nxt), "GC-%s-%d" % (pre, nxt + 1))]
     rows = dispositions(root, st, label, hd, active)
     L += ["", "## Earlier runs on this phase"]
     if not rows:

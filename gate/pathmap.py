@@ -43,6 +43,12 @@ ALWAYS_ALLOW = ["CLAUDE.md", ".gitignore", "README.md", "docs/**", ".sdlc-propos
 
 HOME = os.path.expanduser("~")
 PROTECTED_EXTERNAL = [
+    # 0.7.1 (task-tracker MF-6): kept closed on purpose, with its own reason. A memory note reaches
+    # every later session without the operator; standing instructions are the reviewed channel.
+    ("~/.claude/projects/*/memory/**", "cc-config",
+     "is Claude Code's auto-memory, which MOADIX keeps off in a product: a note there would reach later sessions "
+     "without the operator seeing it. Put a lasting instruction in .sdlc-proposals/standing.md for the operator "
+     "to ADOPT (standing instructions)"),
     ("~/.claude/**", "cc-config", "is user-level Claude Code state (settings, plugins, transcripts)"),
     ("~/.claude", "cc-config", "is user-level Claude Code state"),
     ("~/.claude.json", "cc-config", "is Claude Code's global config"),

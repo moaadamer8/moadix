@@ -76,6 +76,42 @@ USAGE = {
     "REVIEW": "REVIEW <phase>",
     "STATUS": "STATUS",
 }
+# 0.7.1 (task-tracker MF-4): what each command does, for the README's table, which
+# command_table() generates from USAGE and this map (tests/rel071 checks they agree).
+HELP = {
+    "INIT": "Starts a product: creates `.sdlc/` at the repo root and the first ledger line.",
+    "STATUS": "Shows the gate's state. It starts with `INTEGRITY OK` when the ledger and state verify.",
+    "REVIEW": "Read-only. Shows the latest validator result for a phase and its digest.",
+    "APPROVE": "Approves a phase. Refused, with the findings, unless the phase's validators passed on the current "
+               "commit.",
+    "REOPEN": "Reopens an approved (frozen) phase.",
+    "WAIVE": "Waives findings for at most 180 days; a gap-critic finding is named `gap-critic.<GC id>`, a carry "
+             "`CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or "
+             "tenant-isolation carries can't be waived.",
+    "UNWAIVE": "Withdraws a waiver.",
+    "UNCARRY": "Pulls a carried finding back into the current phase (a GC id counts as a MAJOR; a CARRY id is "
+               "readdressed to this phase).",
+    "PROCEED-PAST": "Moves past a phase whose validators definitely failed on the current commit; the findings it "
+                    "passes are recorded.",
+    "COLLAPSE": "Collapses the current phase when the size profile (S: phases 1, 6b, 10c) or the platform ruling "
+                "declares it not applicable (see /moadix:coverage) allows it, recording the reason and the checks that will "
+                "not run.",
+    "FEATURE": "Starts a feature cycle on a released (or onboarded) product.",
+    "ADOPT": "Adopts what the agent proposed in `.sdlc-proposals/` (product settings, coverage overrides, standing "
+             "instructions).",
+    "PARK": "Stops the product's declared stack, records the counts and tags the repo.",
+}
+TABLE_ORDER = ("INIT", "STATUS", "REVIEW", "APPROVE", "REOPEN", "WAIVE", "UNWAIVE", "UNCARRY", "PROCEED-PAST",
+               "COLLAPSE", "FEATURE", "ADOPT", "PARK")
+
+
+def command_table():
+    """The README's operator-command table, generated from USAGE and HELP."""
+    rows = ["| Command | What it does |", "|---|---|"]
+    rows += ["| `%s` | %s |" % (USAGE[v], HELP[v]) for v in TABLE_ORDER]
+    return "\n".join(rows)
+
+
 CODE_TOKEN = re.compile(r"(?<!\d)\d{6}(?!\d)")
 FINDING_ID = re.compile(r"^(?:SF|SEC)-\d+$")
 PREFIX = "MOADIX gate: "
@@ -434,6 +470,9 @@ def _collapse_gate(root, st, label):
         if not brd:
             return None, "the feature has no BRD additions (%s/00-*.md) declaring its size" % feature.folder(st["feature"])
         brd = os.path.join(root, brd)
+    ruled = _ruling_collapse(root, st, label)
+    if ruled:
+        return ruled, None
     stt, val = hlib.collapsed_phases(root, brd)
     if stt != "ok":
         return None, "whether phase %s may collapse is unknown: %s" % (label, val)
@@ -446,6 +485,25 @@ def _collapse_gate(root, st, label):
                       "collapsed" % (val[label]["size"], size))
     return {"size": val[label]["size"], "reason": val[label]["reason"],
             "checks_not_run": val[label]["checks_not_run"]}, None
+
+
+def _ruling_collapse(root, st, label):
+    """0.7.1 (task-tracker MF-3): a phase the Target Platform Ruling's profile retires (left out of
+    `active_phases` AND declared not_applicable with a reason: 11b under WEB) collapses at any size.
+    The reason and the checks that will not run come from the profile's `not_applicable`
+    entries for that phase. None when the ruling does not retire the phase (or is undeclared)."""
+    from . import contract
+    _size, ruling = contract.size_and_ruling(root, st)
+    if not ruling:
+        return None
+    prof = (contract._yaml(os.path.join(contract.GATE_DIR, "config", "profiles.yaml")).get("profiles") or {}).get(
+        ruling) or {}
+    if not contract.ruling_retires(prof, label):
+        return None
+    nas = [na for na in prof.get("not_applicable") or [] if str(na.get("phase")) == label]
+    reason = " ".join(" ".join(str(na.get("reason") or "").split()) for na in nas).strip()
+    return {"size": None, "ruling": ruling, "reason": reason,
+            "checks_not_run": [str(na["validator"]) for na in nas if na.get("validator")]}
 
 
 # ---------------------------------------------------------------- WAIVE
@@ -1045,8 +1103,9 @@ def handle(hook_input):
             g["id"], st["current_phase"], g["id"]) if critic.GC_ID.match(g["id"]) else
             " %s is now addressed to phase %s: its COVERAGE.md must settle it." % (g["id"], st["current_phase"]))
     if name == "COLLAPSE":
-        nxt = " Phase %s collapsed by the size-%s profile (recorded ruling; checks not run: %s).%s" % (
-            g["phase"], payload["size"], ", ".join(payload["checks_not_run"]) or "none", nxt)
+        nxt = " Phase %s collapsed by the %s (recorded ruling; checks not run: %s).%s" % (
+            g["phase"], "%s platform ruling" % payload["ruling"] if payload.get("ruling") else
+            "size-%s profile" % payload["size"], ", ".join(payload["checks_not_run"]) or "none", nxt)
     if name == "FEATURE":
         nxt = (" Feature %s started at phase %s; its documents go in sdlc/features/%s/ (see /moadix:feature); the "
                "product's approved documents are frozen until the feature's phase 11 merges the additions." % (

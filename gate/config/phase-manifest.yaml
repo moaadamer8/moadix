@@ -208,8 +208,8 @@ phases:
       - templates/baseline/
 skills:
   - name: forge-idea
-    skill_md_bytes: 10370
-    total_bytes: 29728
+    skill_md_bytes: 10530
+    total_bytes: 30437
   - name: deep-recon
     skill_md_bytes: 9288
     total_bytes: 80217

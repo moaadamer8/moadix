@@ -63,20 +63,189 @@ GIT_REWRITE = {"checkout", "switch", "restore", "clean", "reset", "stash", "appl
 COMPUTED = re.compile(r"[$`]|^~[^/]")
 
 
-def strip_heredocs(cmd):
-    """Drop heredoc bodies (their text is data, not commands)."""
+def strip_heredocs(cmd, live=None):
+    """Drop heredoc bodies (their text is data, not commands). When `live` is a list, the body of
+    each heredoc whose tag is NOT quoted is appended to it: the shell still expands $(...) and
+    backticks there (0.7.1: such a body used to be dropped unseen)."""
     out, lines, i = [], cmd.split("\n"), 0
     while i < len(lines):
         line = lines[i]
         out.append(line)
-        m = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+        m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)(['\"]?)", line)
         if m:
-            tag = m.group(1)
+            tag, quoted = m.group(2), bool(m.group(1) or m.group(3))
             i += 1
+            body = []
             while i < len(lines) and lines[i].strip() != tag:
+                body.append(lines[i])
                 i += 1
+            if live is not None and not quoted:
+                live.append("\n".join(body))
         i += 1
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- 0.7.1 (task-tracker MF-5, MF-8, MF-16)
+# Commands whose output, inside $(...), <(...) or backticks, is all the substitution does: they read
+# and print, run nothing and write nothing. Narrower than READ_ONLY on purpose: awk (system(), print >),
+# yq (-i), rg (--pre), sed (e, w), find (-exec), openssl and less/more are left out.
+SUBST_READ_ONLY = {"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "file", "stat", "du", "md5",
+                   "md5sum", "shasum", "sha1sum", "sha256sum", "echo", "printf", "basename", "dirname", "realpath",
+                   "readlink", "test", "[", "true", "false", "jq", "diff", "cmp", "sort", "uniq", "cut", "tr",
+                   "column", "nl", "fold", "git", "date", "pwd", "seq"}
+SUBST_BAD_FLAGS = ("--output", "-o", "--compress-program", "--ext-diff", "--exec-path", "-c", "--files0-from")
+# Commands that only read their arguments (no option of theirs runs code or writes a file the
+# classifier would miss): the gate's names in their ARGUMENTS are data (`grep <gate name> a.c`).
+DATA_READERS = {"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "file", "stat", "du", "md5", "md5sum",
+                "shasum", "sha1sum", "sha256sum", "echo", "printf", "basename", "dirname", "realpath", "readlink",
+                "diff", "cmp", "nl", "test", "[", "true", "false"}
+# Names whose assignment changes how the shell resolves paths or runs commands: never resolved.
+SPECIAL_VARS = {"HOME", "PWD", "OLDPWD", "CDPATH", "IFS", "PATH", "ENV", "BASH_ENV", "ZDOTDIR", "SHELLOPTS",
+                "GLOBIGNORE", "BASHOPTS", "PS4", "PROMPT_COMMAND", "TMPDIR", "FPATH", "LD_PRELOAD",
+                "DYLD_INSERT_LIBRARIES"}
+_ASSIGN = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)=(?:'([^'\s*?\[$`\\]*)'|\"([^\"\s*?\[$`\\]*)\"|"
+                     r"([A-Za-z0-9_./+@:,%~-]+))[ \t]*(?:;|&&|\n)")
+
+
+def substitutions(text, live_bodies=()):
+    """[(kind, body)] for each $(...), backtick, <(...) and >(...) the shell would run in `text`:
+    outside single quotes (a '$(' or '`' there is literal, MF-5) and not escaped. Heredoc bodies with
+    an unquoted tag (`live_bodies`) have no quoting at all. An unbalanced one gives body None."""
+    out = []
+
+    def scan(t, quotes):
+        i, q = 0, None
+        while i < len(t):
+            c = t[i]
+            if c == "\\" and q != "'":
+                i += 2
+                continue
+            if quotes and c == "'" and q in (None, "'"):
+                q = None if q == "'" else "'"
+            elif quotes and c == '"' and q in (None, '"'):
+                q = None if q == '"' else '"'
+            elif q != "'":
+                if c == "`":
+                    j = t.find("`", i + 1)
+                    out.append(("`", t[i + 1:j] if j > 0 else None))
+                    i = (j if j > 0 else len(t)) + 1
+                    continue
+                if c in "$<>" and t[i + 1:i + 2] == "(" and not (c == "$" and t[i + 2:i + 3] == "("):
+                    depth, j, qq = 1, i + 2, None
+                    while j < len(t) and depth:
+                        d = t[j]
+                        if qq:
+                            qq = None if d == qq else qq
+                        elif d in "'\"":
+                            qq = d
+                        elif d == "(":
+                            depth += 1
+                        elif d == ")":
+                            depth -= 1
+                        j += 1
+                    out.append((c + "(", t[i + 2:j - 1] if depth == 0 else None))
+                    i = j
+                    continue
+            i += 1
+
+    scan(text, True)
+    for b in live_bodies:
+        scan(b, False)
+    return out
+
+
+def read_only_body(body):
+    """True when a substitution body only reads: every segment a SUBST_READ_ONLY command with no
+    writing or code-running option, no environment prefix, no write redirection, no nested
+    substitution. Anything else stays opaque (the conservative direction)."""
+    if body is None or re.search(r"\$\(|`|<\(|>\(", body) or "<<" in body:
+        return False
+    for seg in split_segments(body):
+        toks = tokenize(seg)
+        for j, t in enumerate(toks):
+            if REDIRECT.match(t):
+                tgt = toks[j + 1] if j + 1 < len(toks) else ""
+                if not (tgt.startswith("&") or tgt == "/dev/null"):
+                    return False
+        toks = [t for k, t in enumerate(toks)
+                if not REDIRECT_ANY.match(t) and not (k > 0 and REDIRECT_ANY.match(toks[k - 1]))]
+        if not toks or "=" in toks[0] or toks[0] in KEYWORDS or "(" in toks[0] or ")" in toks[0]:
+            return False
+        verb = toks[0].rsplit("/", 1)[-1]
+        if verb not in SUBST_READ_ONLY or COMPUTED.search(toks[0]):
+            return False
+        if any(a in SUBST_BAD_FLAGS or a.startswith(tuple(f + "=" for f in SUBST_BAD_FLAGS if f.startswith("--")))
+               for a in toks[1:]):
+            return False
+        if verb == "git" and not _read_only(toks):
+            return False
+    return True
+
+
+def leading_assignments(text):
+    """{NAME: value} for literal assignments that OPEN the command, each ended by ';', '&&' or a
+    newline (`S=/tmp/x; mkdir -p "$S"`, MF-16). Only these run unconditionally, in this shell,
+    before anything else. A name is resolved only when nothing else in the command can rebind it:
+    its only bare occurrence in the whole text is the assignment (no `read S`, `for S in`, second
+    `S=`), it is not a special variable, and its value has no expansion, space or glob."""
+    found, pos = {}, 0
+    while True:
+        m = _ASSIGN.match(text, pos)
+        if not m:
+            break
+        name = m.group(1)
+        val = next(g for g in (m.group(2), m.group(3), m.group(4)) if g is not None)
+        if "~" in val and not (m.group(4) is not None and (val == "~" or val.startswith("~/"))):
+            val = None  # a quoted ~ stays literal and ~user is someone's home: refuse the guess
+        found[name] = val if name not in found else None
+        pos = m.end()
+    out = {}
+    for name, val in found.items():
+        if val is None or name in SPECIAL_VARS:
+            continue
+        bare = re.findall(r"(?<![\w$])(?<!\$\{)%s(?![\w])" % re.escape(name), text)
+        # '$S' in single quotes is the literal text $S, which shlex cannot tell from "$S": refuse
+        quoted_literal = re.search(r"'[^']*\$\{?%s(?!\w)" % re.escape(name), text[pos:])
+        if len(bare) == 1 and not quoted_literal:
+            out[name] = val
+    return out
+
+
+def expand_vars(word, env):
+    """`word` with each $NAME / ${NAME} of `env` replaced; any other expansion is left for COMPUTED."""
+    if not env or "$" not in word:
+        return word
+    return re.sub(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*)(?![\w{]))",
+                  lambda m: env.get(m.group(1) or m.group(2), m.group(0)), word)
+
+
+def _sed_files(args, gnu):
+    """The files `sed -i` edits (MF-16c): BSD `-i ''` / `-i .bak` and GNU `-i` / `-i.bak`; -e and -f
+    scripts are not files; without them the first operand is the script."""
+    files, script_given, i = [], False, 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            files += args[i + 1:]
+            break
+        if a in ("-e", "--expression", "-f", "--file"):
+            script_given, i = True, i + 2
+            continue
+        if a.startswith(("--expression=", "--file=")):
+            script_given = True
+        elif a in ("-i", "--in-place"):
+            nxt = args[i + 1] if i + 1 < len(args) else None
+            if not gnu and nxt is not None and (nxt == "" or re.match(r"^\.[\w.~-]*$", nxt)):
+                i += 1  # BSD: the backup suffix is the next argument
+        elif a in ("-l", "--line-length"):
+            i += 1
+        elif re.match(r"^-[A-Za-z]*[ef]$", a) and not a.startswith("-i"):
+            script_given, i = True, i + 2  # bundled -ne / -Ee: the script (or script file) follows
+            continue
+        elif not a.startswith("-") or a == "-":
+            files.append(a)
+        i += 1
+    return files if script_given else files[1:]
 
 
 def split_segments(cmd):
@@ -268,9 +437,11 @@ def _read_only(cmd):
 
 def analyse(cmd, cwd=None):
     """See module docstring. `cwd` is the directory the command starts in."""
-    cmd = strip_heredocs(cmd)
+    live = []
+    cmd = strip_heredocs(cmd, live)
+    env = leading_assignments(cmd)
     res = {"writes": [], "links": [], "git": [], "opaque": False, "opaque_why": "", "computed": False,
-           "computed_why": "", "words": [], "verbs": []}
+           "computed_why": "", "words": [], "verbs": [], "exec_text": [], "stripped": cmd, "resolved": dict(env)}
 
     def opaque(why):
         if not res["opaque"]:
@@ -281,6 +452,7 @@ def analyse(cmd, cwd=None):
             res["computed"], res["computed_why"] = True, why
 
     def write(path, at):
+        path = expand_vars(path, env)
         if COMPUTED.search(path):
             computed("the write target %r is only known at run time" % path)
             return
@@ -289,8 +461,11 @@ def analyse(cmd, cwd=None):
             return
         res["writes"].append((path, at))
 
-    if re.search(r"\$\(|`|<\(|>\(", cmd):
-        opaque("command substitution")
+    for kind, body in substitutions(cmd, live):
+        # 0.7.1: a substitution that only reads (`$(git show HEAD:a)`) runs nothing the gate cannot see;
+        # >(...) feeds a process and stays opaque, as does any body with a writer, an interpreter or a nest
+        if kind == ">(" or not read_only_body(body):
+            opaque("command substitution")
     start = cwd
     cur, prev, stack = start, start, []
     for seg in split_segments(cmd):
@@ -313,8 +488,12 @@ def analyse(cmd, cwd=None):
             res["verbs"].append(verb)
             args = toks[1:]
             ops = _operands(args)
+            if COMPUTED.search(toks[0]):
+                opaque("the command name %r is only known at run time" % toks[0])  # 0.7.1: `X=rm; $X ...`
+            if verb not in DATA_READERS or "/" in toks[0]:
+                res["exec_text"].append(inner)
             if verb in ("cd", "pushd"):
-                dest = ops[0] if ops else "~"
+                dest = expand_vars(ops[0], env) if ops else "~"
                 if verb == "pushd":
                     stack.append(cur)
                 if dest == "-":
@@ -327,7 +506,7 @@ def analyse(cmd, cwd=None):
                 cur = stack.pop() if stack else None
             elif verb in OPAQUE_VERBS or INTERPRETERS.match(verb):
                 if verb in OPAQUE_VERBS or any(a in ("-c", "-e", "-E", "--eval", "-p", "-r") for a in args) \
-                        or not ops or verb in ("sh", "bash", "zsh"):
+                        or not ops or ops[0] in ("-", "/dev/stdin", "/dev/fd/0") or verb in ("sh", "bash", "zsh"):
                     opaque("%s runs code given inline or from stdin" % verb)
             elif verb == "xargs":
                 rest = args
@@ -386,9 +565,9 @@ def analyse(cmd, cwd=None):
                         link = os.path.join(dest, os.path.basename(s.rstrip("/"))) if many else dest
                         res["links"].append((s, link, cur, symbolic))
                         write(link, cur)
-            elif verb in ("sed", "gsed", "perl") and any(a.startswith("-i") or a.startswith("--in-place")
-                                                         for a in args):
-                for o in (ops[1:] if verb != "perl" else ops):
+            elif verb in ("sed", "gsed") and any(re.match(r"^-[A-Za-z]*i", a) or a.startswith("--in-place")
+                                                 for a in args):
+                for o in _sed_files(args, gnu=verb == "gsed"):
                     write(o, cur)
             elif verb == "dd":
                 for a in args:

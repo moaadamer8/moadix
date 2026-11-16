@@ -1,6 +1,6 @@
 # Gap-critic convergence: design (F-3)
 
-Status: **approved by the operator with the rulings in §8, and built in 0.7.0.** Where the build differs from the text below, §9 says so. Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
+Status: **§1–§9 approved by the operator with the rulings in §8, and built in 0.7.0;** where the build differs from the text, §9 says so. **§10 is a proposal for 0.7.2, not built.** Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
 
 ## 1. Why the critic does not converge
 
@@ -153,3 +153,165 @@ The risk is that a real gap gets labelled "later phase" and is never closed. The
 - **Old topic waivers (Q3).** A 0.6.x waiver ledger line does not say which findings were open when it was recorded, and the evidence of that time was overwritten. So "only the findings that existed when they were recorded" is implemented as: only a MAJOR on that topic, in the phase where the waiver was recorded, whose cited text already existed at the waiver's commit. A finding on text written later is not covered.
 - **A WAIVE of a finding needs current evidence.** If the documents changed since the critic ran, the operator waits for the next run and waives the finding by its (unchanged) GC id.
 - **Two kinds of rule check.** The tripwires that test a carry against a phase's `decides` rules and the security, privacy and tenant classes are lexical: lists of words in the catalogue. They refuse a carry that names them, and do not judge meaning. The other hard rules (rule, target, order, closed phase, P1 AC) are exact.
+
+## 10. Proposed for 0.7.2: scoped runs, claim severity, citations without network, section fingerprints, size bars
+
+Status: **proposed, not built; for the operator's review.** Source: the task-tracker run on 0.7.0, findings MF-12 and MF-17 to MF-20 (`~/task-tracker/docs/moadix-findings.md`). On phase 1, runs 1 to 3 had 16, 4 and 10 findings. Earlier findings converged: they were checked and closed, and none was raised again. New findings on unchanged text grew from 2 to 7, so the runs still do not converge. §4's memory makes late findings visible but does not stop them, and Q6 keeps them at full severity.
+
+### 10.1 What a run may review
+
+**Runs 1 and 2 of a phase are full reviews,** as today.
+
+**From run 3 on, a run is scoped.** The brief gives the critic two things to review:
+
+1. the earlier findings, with the gate's dispositions (§4);
+2. the text changed since the previous run, as a diff of the document set from run n-1's commit to HEAD. Each hunk comes with its whole section (heading to next heading), so the critic reads the change in context.
+
+The brief tells the critic to review only those two. It may still read any document, to judge a change against it.
+
+**The frozen-text rule.** From run 3 on, the critic may not raise a new finding (no `same_as`, no `regression_of`) on frozen text. Frozen text is a section that did not change between run n-2's commit and HEAD, so both previous runs read it as it is now. There are two exceptions, and both must be BLOCKERs:
+
+- **(a)** a security, privacy or tenant-isolation gap;
+- **(b)** a contradiction with an approved upstream document.
+
+**The gate enforces the rule from the diff, not the critic.** For each new finding of run n ≥ 3, the gate:
+
+1. resolves its citation to a section at HEAD (`critic._section`, as for `same_as`);
+2. decides whether that section is frozen. It runs `git diff -U0 <run n-2 commit> HEAD -- <path>` and maps the hunks to sections. A section with no added, removed or changed line is frozen. A section that did not exist at run n-2 is not frozen;
+3. if the section is frozen, checks the exception:
+   - (a) needs `exception: "security" | "privacy" | "tenant"`. The finding's quote or fix must match that class's words in the catalogue: the same lexical tripwire carries use (§9, "two kinds of rule check").
+   - (b) needs `exception: "upstream"` and a second citation, `upstream: path:line`. That path must belong to an earlier phase that is APPROVED or PROCEED-PAST, and the line must exist at HEAD. The gate checks that the path is upstream and closed. It does not judge whether the contradiction is real; the critic does.
+4. if the section is frozen and the exception is missing or fails its check, the finding does not count. Two options for what happens to it, **ruling A1**:
+   - **(i) Recommended.** The gate moves it to the MINOR file, tagged `frozen` with the reason, and counts it on STATUS as "frozen-text findings: n". It blocks nothing, and the operator can still read it.
+   - (ii) The evidence fails, and the critic must run again.
+
+   (i) keeps every word visible and costs no run. (ii) is stricter, but it spends a run on what is, by this rule, a non-finding.
+
+A finding about missing text cites the nearest line in the section where the text belongs. If that section is frozen, the rule applies. Deleting text changes its section, so a gap a deletion opens is never frozen.
+
+**Regressions.** A `regression_of: GC-x` must cite the section the original finding cited, or a section changed since the run that raised GC-x. Otherwise it is refused as a regression and treated as a new finding under the rules above (MF-18: GC-1-17's regression cited ADR-003, a document the earlier finding only named). `same_as` keeps its 0.7.0 rule: same topic, same section.
+
+**Why runs 1 and 2, and not just run 1.** Run 2 checks the fixes of run 1, and is the second full read of the text. The phase-0 and phase-1 data on two products show real misses in run 2 (GC-1-18, the licence sentence, a BLOCKER that run 1 passed). After two full reads, a new finding on unchanged text has a falling chance of being real and a rising cost. The two exceptions keep the classes where a miss is expensive.
+
+**What 0.7.0 already does that stays.** `late` marking stays, for runs 1 and 2 only: from run 3, a late finding can only exist through an exception. Q6 (late findings are never downgraded) is unchanged for runs 1 and 2. For runs ≥ 3, A1 replaces it for frozen text. This is a change to a ruling, so it needs the operator's yes.
+
+### 10.2 When a finding's text changed (MF-17)
+
+Today a finding counts as fixed when its cited lines are gone at HEAD (`critic.present`). A fix that adds lines next to the cited line, and leaves that line as it was, is recorded as `open`. That happened to GC-1-14.
+
+**Proposal.** The fingerprint gets a second hash, `section_sha`: the sha256 of the cited section's body, with whitespace normalized and the heading excluded.
+
+| Use | Unit | Change |
+|---|---|---|
+| Disposition `fixed?` | the section | `fixed?` when the cited lines are gone **or** `section_sha` changed. `open` only when both are unchanged. The brief shows the section's diff for a `fixed?` finding whose cited lines are still there, so the critic sees what changed next to them. |
+| Frozen text (§10.1) | the section | the same unit, so "changed" means one thing everywhere |
+| Waiver lapse (§5) | the cited lines, as today | **ruling A2**: recommended unchanged. The operator accepted that text. An unrelated edit in the same section should not take the waiver back and force another run. The alternative is to lapse on `section_sha` too: stricter, and noisier. |
+| `late` (runs 1 and 2) | the cited lines, as today | unchanged |
+
+A citation range (`path:12-18`) is one unit. A section is located by its heading anchor, so line shifts do not matter. A document with no headings is one section. For a very long section, one edit reopens all of it; this design accepts that over guessing a smaller unit.
+
+### 10.3 Severity of an uncited claim (MF-19)
+
+Today D1.3 ("a citation for every claim") and D1.B make every uncited claim a BLOCKER. Example: "MIT is permissive and compatible with any licence" (GC-1-18), a sentence nothing downstream used.
+
+**Proposed rule.** A finding about a claim with no citation sets `kind: "uncited"`, plus two fields:
+
+- `claim_class`: one of `legal`, `cost`, `security`, `feasibility`, `other`.
+  - `legal`: a regime applies or not, or what it requires.
+  - `cost`: a price, a fee, or a cost's order of magnitude.
+  - `security`: a security property of a vendor, library or control.
+  - `feasibility`: something can or cannot be done with a named technology, vendor or API.
+- `decision`: what depends on the claim. It is one of:
+  - a `Q-n` in this or a later phase's DISCOVERY.md whose `Chosen:` rests on it;
+  - an `ADR-nnn`;
+  - a decides rule of this phase (`D1.1`, `D1.2`);
+  - `none`.
+
+| claim_class | decision is an existing id | decision is `none` |
+|---|---|---|
+| legal, cost, security, feasibility | **BLOCKER** | **MAJOR** |
+| other | **MAJOR** | **MINOR** |
+
+**What the gate checks.**
+
+- The finding's `decision` id must exist: the Q-n heading in a DISCOVERY.md, the ADR file, or the D rule in the catalogue. A missing id fails the evidence.
+- The severity must be the table's cell. If the critic gives a different severity, the gate records the table's severity and notes "severity set by the uncited-claim rule (§10.3)". This is a fixed mapping from two fields the critic fills in, not a second judgement. Q6's "never downgraded" was about late findings, so it does not apply here.
+- The class itself is the critic's judgement. The gate cannot check it beyond the lexical tripwire for security, privacy and tenant terms. That tripwire makes `security` mandatory when the quote names such terms.
+
+**Catalogue changes.**
+
+- D1.3 becomes "a citation for every claim a decision depends on (§10.3); any other claim is cited or marked as the author's assumption".
+- D1.B becomes "an uncited legal, cost, security or feasibility claim that a decision depends on".
+- The global BLOCKER text, "a claim that needs a citation and has none", points at the same rule.
+
+A claim marked `Assumption:` in the text is not uncited. If a decision rests on it, it belongs in R1 (open questions) or B21 (riskiest-assumption tests).
+
+### 10.4 Judging citations without network access (MF-20)
+
+The critic runs with no network access. The verifier tool set has no WebFetch, and the sandbox allowlist has no general web. It cannot open a cited page, so a finding must never rest on what the critic assumes a page says.
+
+**Division of labour.**
+
+- **The gate's link and date check decides whether a citation exists and is reachable.** cite-lint already does this: a URL on the line, a retrieval date, `links.json` status. The critic does not re-judge it. A finding of "no citation" on a line where cite-lint found a URL and a date is refused. The gate checks this from cite-lint's result for that line.
+- **The critic judges support only from text in the documents.** A claim is "supported" when the document quotes the source next to the citation (a quoted sentence or a block quote, at most about two sentences) and the quote says what the claim says. The critic may raise:
+  - `basis: "quote-contradicts"`: the document's quote says something else (MAJOR, or BLOCKER under §10.3's classes with a decision);
+  - `basis: "quote-insufficient"`: the quote does not cover the whole claim (the §10.3 table, read as "uncited" for the uncovered part);
+  - `basis: "no-quote"`: a §10.3 BLOCKER-class claim with a decision is cited but has no quote (MAJOR: "add the source's sentence"). For any other claim, a missing quote is not a finding.
+- **The brief says so in those words.** "You have no network. Never state what a cited page says unless the document quotes it. Judge support only from quoted text."
+- **What the gate checks.** For `quote-*`, a quote exists on or next to the cited lines (a `"…"` or a `>` line within the citation's section). A finding whose `basis` is missing or does not fit the text is refused. GC-1-20 and GC-1-21 ("the source may not support it", from the footnote list alone) would have been refused.
+
+This also strengthens the documents: a decision-bearing claim now carries the sentence it rests on, so a later reader does not need the page either.
+
+### 10.5 Size S and the critic's bars
+
+Some topics carry a number: R2 "competitor teardown (3–5 real products)", B27 "top three ISO 25010 qualities". The critic holds an S product to the same number as an L product.
+
+**Proposal.** Size relaxes only **quantity** bars, never a class bar:
+
+- **Relaxable.** Counts of competitors, alternatives or products to compare. Proposed for S: R2 at **2–3** real products, and B13 (competitors in the BRD) at least **2**.
+- **Never relaxed.**
+  - legal, privacy, security and tenant-isolation bars;
+  - the citation rule (§10.3), whose classes do not depend on size;
+  - EARS and testability;
+  - a decides rule's depth.
+
+**Where it is recorded.** In the root-owned catalogue, next to the size rule that already lives there: `gate/config/coverage-topics.yaml` gets `sizes.S.bars: [{topic: R2, bar: "2–3 real products", reason: "..."}]`.
+
+- The critic's brief and `/moadix:coverage` show the bar in place of the topic title's number, so the agent and the critic read the same bar.
+- The operator can restore the full bar for one product through the existing override channel (`ADOPT` of `coverage-overrides.yaml`, `turn_on: [R2]`).
+- Nothing is recorded in the BRD: the size is (B19), and the catalogue maps the size to the bars.
+
+M and L keep today's numbers. **Ruling A4**: the two numbers above.
+
+0.7.1 removed the other size problem, two definitions of S (MF-2). S now has one definition, `sizes.S.profile` in this catalogue, and `profiles.yaml` points at it.
+
+### 10.6 What would change
+
+- `gate/critic.py`:
+  - `section_sha` in the fingerprint;
+  - the `fixed?` rule;
+  - frozen-section detection from `git diff -U0`;
+  - the exception checks;
+  - the regression location rule;
+  - the uncited-claim table;
+  - the `basis` checks;
+  - the brief's scoped section and the "no network" text.
+- `gate/config/critic.schema.json`: `exception`, `upstream`, `kind`, `claim_class`, `decision`, `basis`.
+- `gate/config/coverage-topics.yaml`: D1.3 and D1.B text, the global BLOCKER text, `sizes.S.bars`.
+- `gate/contract.py`: the rendering of bars and the new rules in `/moadix:coverage`.
+- `gate/verify.py`: the scoped brief for run ≥ 3 and the diff with section context. A1 decides between the MINOR file and failed evidence.
+- Tests:
+  - a four-run fixture: a full run 1, a full run 2, then run 3 with a planted new finding on a frozen section (refused or moved), a planted security BLOCKER on frozen text (kept), and an upstream contradiction with a valid and an invalid `upstream` citation;
+  - MF-17's case: added lines next to a cited line, giving `fixed?`;
+  - each cell of the §10.3 table;
+  - a `no-citation` finding on a line cite-lint accepts (refused);
+  - a `quote-contradicts` finding without a quote (refused);
+  - R2's bar at S and M.
+
+### 10.7 Rulings needed
+
+- **A1.** A new finding on frozen text that fails the exceptions: moved to the MINOR file as `frozen` (recommended), or the evidence fails?
+- **A2.** Waiver lapse stays on the cited lines (recommended), or also on the section?
+- **A3.** The §10.3 table as written, including the gate setting the table's severity when the critic's differs?
+- **A4.** S bars: R2 at 2–3 products and B13 at least 2, with no other relaxation?
+- **A5.** Q6 is amended for runs ≥ 3 as in §10.1, and is unchanged for runs 1 and 2?

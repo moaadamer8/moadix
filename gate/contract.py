@@ -1378,6 +1378,50 @@ def run(root, st, label, which=None, write_cache=False):
     return out
 
 
+def opcmd_usage(verb):
+    """The operator command's form as the gate parses it (gate/opcmd.py USAGE): the one source for
+    every place that shows a command (task-tracker MF-9, MF-13)."""
+    sys.path.insert(0, os.path.dirname(GATE_DIR))
+    from gate import opcmd
+    return opcmd.USAGE[verb]
+
+
+def size_collapses(size):
+    """Phases profiles.yaml lets a product of `size` collapse."""
+    prof = _yaml(os.path.join(GATE_DIR, "config", "profiles.yaml"))
+    return [str(e.get("phase")) for e in ((prof.get("sizes") or {}).get(size) or {}).get("collapse") or []]
+
+
+def ruling_retires(profile, label):
+    """True when a platform profile retires phase `label`: the phase is not in its active_phases AND
+    the profile declares it not applicable (a `not_applicable` entry for that phase, with a reason).
+    Both, so a phase merely missing from the list (12, the retro) is never retired by a ruling."""
+    active = [str(x) for x in (profile or {}).get("active_phases") or []]
+    return bool(active) and str(label) not in active and any(
+        str(na.get("phase")) == str(label) and str(na.get("reason") or "").strip()
+        for na in (profile or {}).get("not_applicable") or [])
+
+
+def ruling_retired():
+    """{phase label: [rulings]} for each product phase a platform ruling's profile leaves out of its
+    active_phases (computed from profiles.yaml and the phase table, never a hardcoded label)."""
+    sys.path.insert(0, os.path.dirname(GATE_DIR))
+    from gate import pathmap
+    prof = _yaml(os.path.join(GATE_DIR, "config", "profiles.yaml"))
+    out = {}
+    for _pid, lab, _name, _globs in pathmap.PHASES:
+        rs = [name for name, e in (prof.get("profiles") or {}).items() if ruling_retires(e, lab)]
+        if rs:
+            out[lab] = rs
+    return out
+
+
+def size_definition(size):
+    """The one definition of a size (task-tracker MF-2): coverage-topics.yaml `sizes.<size>.profile`.
+    profiles.yaml points here instead of keeping its own."""
+    return str(((catalogue().get("sizes") or {}).get(size) or {}).get("profile") or "")
+
+
 def coverage_doc():
     """commands/coverage.md, generated from the catalogue (tests/inc7 checks the file matches)."""
     cat = catalogue()
@@ -1435,16 +1479,19 @@ def coverage_doc():
          "line, every research claim has a source, and every link resolves.",
          "",
          "**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its "
-         "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until fixed or the operator "
-         "types `WAIVE gap-critic.<GC id> owner=... expiry=... reason=...`; one WAIVE may name several, "
-         "comma-separated), MINOR (a file for the operator) or CARRY (below the phase's depth: recorded for the later "
-         "phase its defers rule names; never blocks this phase). The gate gives every finding a stable id, "
-         "`GC-<phase>-<n>`, and the next brief lists earlier findings with what happened to each (waived, carried, "
-         "ruled, fixed?, open), so findings converge. A waiver binds one finding and lapses when the cited text "
-         "changes. To rule on a finding in the log, write `Rules: GC-<phase>-<n>` in the Q-n or ADR that decides it. "
-         "Fix the documents, commit, and launch it again. It never passes a phase. A verifier's result stays current "
+         "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until fixed or waived by "
+         "the operator), MINOR (a file for the operator) or CARRY (below the phase's depth: recorded for the later "
+         "phase its defers rule names; never blocks this phase). The operator's waiver line is exactly `%s`, with "
+         "`gap-critic.<GC id>` as the id; one WAIVE may name several, comma-separated. The gate gives every finding "
+         "a stable id, `GC-<phase>-<n>`: the brief says which ids the run's new findings will get, and the critic's "
+         "final message lists `C<k> = GC-...`, so a WAIVE can be typed before REVIEW. The next brief lists earlier "
+         "findings with what happened to each (waived, carried, ruled, fixed?, open), so findings converge. A waiver "
+         "binds one finding and lapses when the cited text changes. To rule on a finding in the log, write `Rules: "
+         "GC-<phase>-<n>` in the Q-n or ADR that decides it. Fix the documents, commit, and launch it again. It "
+         "never passes a phase. Its result is tied to the documents it read: a fix commit to them needs a new run "
+         "before APPROVE, so plan on at least two runs for a phase with a BLOCKER. A verifier's result stays current "
          "while its document set is byte-identical to the commit it reviewed: committing other files does not make "
-         "it stale.",
+         "it stale." % opcmd_usage("WAIVE"),
          "",
          "**Depth and carries.** Each phase below lists what it decides and what it defers (to which phase). A gap "
          "that matches no defers rule is judged at the current phase exactly as before; decides wins every overlap; "
@@ -1460,6 +1507,17 @@ def coverage_doc():
          "in the canned reason); `partial` defaults still need a section. The operator can turn a default back on or "
          "rule a topic N/A through `ADOPT` of `.sdlc-proposals/config/coverage-overrides.yaml` (`turn_on: [ID]`, "
          "`na: [{topic: ID, reason: ...}]`); then write `N/A: operator`.",
+         "",
+         "**Collapsing a phase.** At size S the operator may instead collapse phases %s (`%s`), recorded with the "
+         "reason and the checks that will not run; a collapsed phase needs no COVERAGE.md and no critic run. When "
+         "such a phase is not collapsed, its topics follow the size rule below. A phase the platform ruling leaves "
+         "out (%s) collapses the same way at any size." % (
+             ", ".join(size_collapses("S")) or "none", opcmd_usage("COLLAPSE"),
+             "; ".join("%s under %s" % (lab, " and ".join(rs)) for lab, rs in ruling_retired().items()) or "none"),
+         "",
+         "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
+         "note there would reach later sessions without the operator. A lasting instruction goes in "
+         "`.sdlc-proposals/standing.md` for the operator to ADOPT.",
          ""]
     for size in ("S", "M", "L"):
         z = (cat.get("sizes") or {}).get(size) or {}
@@ -1473,7 +1531,7 @@ def coverage_doc():
             na.append(t)
         on = ", ".join("%s (%s)" % (x.get("what"), x.get("topic")) for x in (cat.get("turned_on") or {}).get(size) or [])
         L.append("- **%s** (%s). N/A by default: %s. Turned on: %s." % (
-            size, z.get("profile"), ", ".join(na) or "none", on or "nothing"))
+            size, size_definition(size), ", ".join(na) or "none", on or "nothing"))
     L += ["", "## Topics per phase", ""]
     for label, e in cat["phases"].items():
         L.append("### Phase %s %s (role: %s)%s" % (label, e.get("name"), e.get("role"), "" if e.get("gated", True)
@@ -1536,4 +1594,9 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    # 0.7.1 (task-tracker MF-15): run as a file (`python3 -I <plugin>/gate/contract.py ...`, the form
+    # /moadix:coverage gives), this module has no package, and the linters' `from . import critic`
+    # failed. Re-enter through the package so the file form and `-m gate.contract` behave the same.
+    sys.path.insert(0, os.path.dirname(GATE_DIR))
+    from gate import contract as _packaged
+    sys.exit(_packaged.main(sys.argv[1:]))

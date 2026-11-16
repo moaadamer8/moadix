@@ -142,7 +142,11 @@ def check_bash(cmd, cwd, cache):
         return "sudo is denied (invariant 4)"
     if "claude" in verbs or re.search(r"@anthropic-ai/claude-code|(^|[\s;&|(/])claude\s+(plugin|mcp|-p|--print|--resume|-c)\b", cmd):
         return "nested claude sessions and claude plugin/mcp commands are denied (invariant 4)"
-    if GATE_NAMES.search(cmd):
+    # 0.7.1 (task-tracker MF-8): the gate's names are looked for where they can RUN. When nothing in
+    # the command is opaque, that is the command text minus heredoc bodies (data) and minus the
+    # arguments of commands that only read them (`grep <gate name> notes.md`). When anything is
+    # opaque (an interpreter fed a heredoc, a substitution that is not read-only), the whole text.
+    if GATE_NAMES.search(cmd if a["opaque"] else "\n".join(a["exec_text"])):
         return "the agent has no command that changes gate state; operator commands are typed in chat (invariant 3)"
     why = mainguard.check(cmd, cwd)  # main-branch and production guard, every repository (fails closed)
     if why:
