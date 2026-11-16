@@ -64,14 +64,52 @@ def _git(root, *args):
         return 1, ""
 
 
+# 0.6.4 (F-2): files the operating system drops into folders (Finder, Explorer). They are never a
+# deliverable, so the clean-tree checks ignore them, and INIT adds them to the repository's local
+# exclude (.git/info/exclude) so git ignores them too.
+OS_METADATA = (".DS_Store", "._*", ".Spotlight-V100", ".Trashes", "Thumbs.db", "desktop.ini")
+
+
+def status_pathspec():
+    """The pathspec every clean-tree check passes to `git status`: the whole tree except gate
+    state, pending proposals and OS metadata files."""
+    return ["--", ".", ":(exclude).sdlc", ":(exclude).sdlc-proposals"] + [
+        ":(exclude,glob)**/%s" % n for n in OS_METADATA] + [":(exclude,glob)**/%s/**" % n for n in OS_METADATA[2:4]]
+
+
+def exclude_os_metadata(root):
+    """Append the OS metadata names missing from the repository's local exclude file (never
+    committed). Returns the names added; [] when there was nothing to add or git cannot say
+    where the file is."""
+    rc, out = _git(root, "rev-parse", "--git-path", "info/exclude")
+    if rc != 0 or not out.strip():
+        return []
+    path = out.strip()
+    if not os.path.isabs(path):
+        path = os.path.join(root, path)
+    try:
+        with open(path) as f:
+            have = {ln.strip() for ln in f}
+    except FileNotFoundError:
+        have = set()
+    except OSError:
+        return []
+    add = [n for n in OS_METADATA if n not in have]
+    if not add:
+        return []
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a") as f:
+        f.write("# OS metadata files, added by MOADIX INIT\n" + "".join(n + "\n" for n in add))
+    return add
+
+
 def tree_state(root):
     """(head or None, [changed paths outside .sdlc/ and .sdlc-proposals/]).
     .sdlc-proposals/ holds settings the agent proposes for ADOPT; validators do
     not read it, so a pending proposal does not make results stale."""
     rc, out = _git(root, "rev-parse", "--verify", "HEAD")
     head = out.strip() if rc == 0 and out.strip() else None
-    rc, out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude).sdlc",
-                   ":(exclude).sdlc-proposals")
+    rc, out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *status_pathspec())
     if rc != 0:
         return head, ["(git status failed)"]
     return head, [ln[3:] for ln in out.splitlines() if ln.strip()]

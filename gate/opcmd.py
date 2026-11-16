@@ -39,10 +39,14 @@ PH = r"(?P<phase>\d{1,2}[a-z]?|B)"
 TEXT = r"[ !#-\[\]-~]{1,300}?"  # printable ASCII without " and \ (the checker's alphabet)
 CODE = r" (?P<code>\d{6})"
 PID = r"(?P<id>[A-Za-z0-9_.-]{1,64})"
+# 0.6.4 (F-5): one WAIVE may name up to WAIVE_MAX findings, comma-separated, under one code;
+# each becomes its own waiver (state.replay), each checked as if waived alone.
+WAIVE_MAX = 20
+PIDS = r"(?P<id>[A-Za-z0-9_.-]{1,64}(?:,[A-Za-z0-9_.-]{1,64}){0,%d})" % (WAIVE_MAX - 1)
 COMMANDS = [
     ("APPROVE", re.compile(r"^APPROVE " + PH + CODE + r"$")),
     ("REOPEN", re.compile(r"^REOPEN " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
-    ("WAIVE", re.compile(r"^WAIVE " + PID + r" owner=(?P<owner>[A-Za-z0-9_.@-]{1,64}) "
+    ("WAIVE", re.compile(r"^WAIVE " + PIDS + r" owner=(?P<owner>[A-Za-z0-9_.@-]{1,64}) "
                          r"scope=(?P<scope>[A-Za-z0-9_./:*@-]{1,128}) "
                          r"expiry=(?P<expiry>\d{4}-\d{2}-\d{2}) reason=(?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("UNWAIVE", re.compile(r"^UNWAIVE " + PID + CODE + r"$")),
@@ -59,7 +63,7 @@ VERBS = {name for name, _ in COMMANDS}
 USAGE = {
     "APPROVE": "APPROVE <phase> <code>",
     "REOPEN": "REOPEN <phase> <reason> <code>",
-    "WAIVE": "WAIVE <id> owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>",
+    "WAIVE": "WAIVE <id>[,<id>...] owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>",
     "UNWAIVE": "UNWAIVE <id> <code>",
     "PROCEED-PAST": "PROCEED-PAST <phase> <reason> <code>",
     "PARK": "PARK <code>",
@@ -151,6 +155,11 @@ def _approval_digest(st, label):
     return None
 
 
+def waive_ids(text):
+    """The finding ids one WAIVE names (0.6.4, F-5), in the order typed."""
+    return [x for x in str(text or "").split(",") if x]
+
+
 def _phase(st, label):
     return next((p for p in st["phases"] if p["label"] == label), None)
 
@@ -168,8 +177,17 @@ def _precheck(name, g, st):
         return _feature_precheck(g["id"], st)
     if name == "REOPEN" and ph["status"] not in ("APPROVED", "PROCEED-PAST"):
         return "phase %s is not approved, so there is nothing to reopen" % g["phase"]
-    if name == "WAIVE" and any(w["id"] == g["id"] for w in st["waivers"]):
-        return "waiver %s already exists" % g["id"]
+    if name == "WAIVE":
+        ids = waive_ids(g["id"])
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        if dup:
+            return "the WAIVE names %s more than once" % ", ".join(dup)
+        if len("WAIVE %s owner=%s scope=%s expiry=%s reason=%s" % (
+                g["id"], g["owner"], g["scope"], g["expiry"], g["reason"])) > 512:
+            return "the WAIVE is longer than the ledger's 512-character action limit; split it in two"
+        have = [i for i in ids if any(w["id"] == i for w in st["waivers"])]
+        if have:
+            return "waiver %s already exist%s" % (", ".join(have), "s" if len(have) == 1 else "")
     if name == "UNWAIVE" and not any(w["id"] == g["id"] for w in st["waivers"]):
         return "there is no active waiver %s" % g["id"]
     if name == "PARK" and st["parked"]:
@@ -610,6 +628,8 @@ def _init(message, g, cwd):
     state.append_line(root, out)
     st, _ = state.current_state(root)
     state.write_phase(root, st)
+    with contextlib.suppress(OSError):
+        validation.exclude_os_metadata(root)  # 0.6.4 (F-2): .DS_Store and kin never block a verifier
     from . import bmadcore
     bm = bmadcore.ensure(root) or ""
     if mode == "onboarding":
@@ -746,7 +766,16 @@ def handle(hook_input):
         else:
             why = res
     if not why and name == "WAIVE":
-        why = _waive_gate(root, g)
+        ids = waive_ids(g["id"])
+        if len(ids) > 1:
+            payload["ids"] = ids
+        # Each id is judged as if waived alone; one refusal refuses the whole message (nothing is recorded).
+        for i in ids:
+            why = _waive_gate(root, dict(g, id=i))
+            if why:
+                if len(ids) > 1:
+                    why = "%s (no id of this WAIVE was recorded)" % why
+                break
     if not why and name == "PROCEED-PAST" and st.get("feature") and g["phase"] == pathmap.RELEASE:
         why = ("a feature's phase 11 merges its additions into the product documents, so it can only be APPROVED "
                "(on passing validators), never proceeded past")

@@ -718,10 +718,119 @@ def test_misc():
     record(G, "plugin.json is 0.5.1 or later", pj.get("version", "") >= "0.5.1", pj.get("version"))
 
 
+# ------------------------------------------------------------------ 0.6.4: findings of the first product run
+FACT_Q = ("\n## Q-3: What is your business tax status?\n- A: VAT-registered\n- B: not VAT-registered\n"
+          "Recommendation: none (question of fact)\nChosen: B\n")
+
+
+def test_v064():
+    G = "0.6.4"
+    rel = "sdlc/0/DISCOVERY.md"
+    # F-4: a question of fact
+    f, i, *_ = lint("discovery", {rel: DISC + FACT_Q}, "0")
+    record(G, "F-4: a question of fact with `Recommendation: none (question of fact)` -> passes",
+           not f and i["questions"] == 3 and i["facts"] == 1, f)
+    f, *_ = lint("discovery", {rel: DISC + FACT_Q.replace("none (question of fact)", "None, it is a fact")}, "0")
+    record(G, "F-4: the wording the product run used (`None, it is a fact`) -> passes", not f, f)
+    f, *_ = lint("discovery", {rel: DISC + FACT_Q.replace("Recommendation: none (question of fact)\n",
+                                                          "Recommendation: none (question of fact)\nRecommendation: A\n")},
+                 "0")
+    record(G, "F-4: marked a question of fact AND recommending a letter -> fails", has(f, "question of fact", "also"), f)
+    f, *_ = lint("discovery", {rel: DISC + FACT_Q.replace("Recommendation: none (question of fact)\n", "")}, "0")
+    record(G, "F-4: no recommendation and no fact mark -> still fails, and says how to mark a fact",
+           has(f, "Q-3", "no `Recommendation", "question of fact"), f)
+    f, *_ = lint("discovery", {rel: DISC + FACT_Q.replace("none (question of fact)", "none")}, "0")
+    record(G, "F-4: `Recommendation: none` without saying it is a fact -> fails", has(f, "Q-3", "no `Recommendation"), f)
+    f, *_ = lint("discovery", {rel: DISC + FACT_Q.replace("Chosen: B\n", "")}, "0")
+    record(G, "F-4: a question of fact still needs the operator's answer", has(f, "Q-3", "no chosen option"), f)
+
+    # item 5: the discovery protocol in the coverage command
+    doc = contract.coverage_doc()
+    record(G, "item 5: /moadix:coverage asks in rounds of independent questions, 2-4 lettered options, a "
+              "recommendation with one line of why, a one-line answer, as many rounds as needed, never a guess",
+           all(w in doc for w in ("in rounds", "do not depend on each other", "2-4 lettered options",
+                                  "one line of why", "in one line", "as many rounds", "Never guess",
+                                  "Recommendation: none (question of fact)")) and "one question per message, with" not in doc,
+           "")
+
+    # F-1: a feedback run where no checker program is installed (the plugin directory)
+    p = product("fbk")
+    contract_files(p, "0")
+    plug = os.path.join(E.base, "plugin-cache")
+    shutil.copytree(os.path.join(E.home, "gate"), os.path.join(plug, "gate"))
+    r = fixtures.sh([fixtures.PY, "-I", os.path.join(plug, "gate", "contract.py"), "discovery-lint", p, "0"], env=E.env())
+    record(G, "F-1: a feedback run from a directory with no checker program runs the linter, says the ledger was not "
+              "verified, and accepts the `-lint` spelling",
+           r.returncode == 0 and "NOTE feedback run" in r.stdout and "OK discovery-lint: phase 0" in r.stdout and
+           "Traceback" not in r.stderr, short(r.stdout + r.stderr, 500))
+    write(p, {"sdlc/0/DISCOVERY.md": DISC.replace("Chosen: B\n", "")})
+    r = fixtures.sh([fixtures.PY, "-I", os.path.join(plug, "gate", "contract.py"), "discovery", p, "0"], env=E.env())
+    record(G, "F-1: the same feedback run reports a planted defect as FAIL", r.returncode == 1 and
+           "FAIL discovery-lint" in r.stdout and "no chosen option" in r.stdout, short(r.stdout + r.stderr, 400))
+    git(p, "checkout", "--", ".")
+    r = fixtures.sh([fixtures.PY, "-I", os.path.join(E.home, "gate", "contract.py"), "coverage", p, "0"], env=E.env())
+    record(G, "F-1: with the checker installed, the run verifies the ledger (no NOTE line)",
+           "NOTE" not in r.stdout and "UNKNOWN" not in r.stdout, short(r.stdout + r.stderr, 300))
+
+    # F-2: OS metadata files
+    p = product("dss")
+    excl = open(os.path.join(p, ".git", "info", "exclude")).read()
+    record(G, "F-2: INIT adds the OS metadata files to the repository's local exclude",
+           all(n in excl for n in validation.OS_METADATA), short(excl))
+    git(p, "config", "core.excludesFile", "/dev/null")
+    with open(os.path.join(p, ".git", "info", "exclude"), "w") as f:
+        f.write("")  # as on a product initialised before 0.6.4: git itself does not ignore them
+    contract_files(p, "0")
+    for rel in ("reference/v1/sdlc/.DS_Store", "reference/v1/sdlc/05-lld/.DS_Store", ".DS_Store", "sdlc/._00-brd.md"):
+        write(p, {rel: "\0\0\0\1Bud1"})
+    _h, changed = validation.tree_state(p)
+    record(G, "F-2: the clean-tree check ignores .DS_Store and ._ files in any folder", changed == [], changed)
+    d, why, _pr = contract_fixture.critic(E, p, "0")
+    record(G, "F-2: the gap critic launches with untracked .DS_Store files present (no `commit first`)",
+           d == "allow", short(why))
+    write(p, {"reference/notes.md": "an untracked real file"})
+    d, why, _pr = contract_fixture.critic(E, p, "0")
+    record(G, "F-2 control: an untracked real file still refuses the launch (`commit first`)",
+           d == "deny" and "commit first" in why and "notes.md" in why and ".DS_Store" not in why, short(why))
+    os.remove(os.path.join(p, "reference", "notes.md"))
+
+    # F-5: one WAIVE naming several findings
+    contract_fixture.critic(E, p, "0", findings=[finding(p, "0", "B9", "MAJOR"), finding(p, "0", "B12", "MAJOR", "C2"),
+                                                 finding(p, "0", "B4", "BLOCKER", "C3")])
+    n0 = len(E.ledger(p))
+    ctx = waive(p, "gap-critic.B9,gap-critic.B4", "carried to phase 2")
+    record(G, "F-5: a WAIVE naming a MAJOR and a BLOCKER -> refused whole, nothing recorded",
+           "NOT recorded" in ctx and "cannot be waived" in ctx and "no id of this WAIVE was recorded" in ctx and
+           len(E.ledger(p)) == n0, short(ctx, 300))
+    ctx = waive(p, "gap-critic.B9,gap-critic.B9", "carried to phase 2")
+    record(G, "F-5: a WAIVE naming the same id twice -> refused", "NOT recorded" in ctx and "more than once" in ctx,
+           short(ctx, 300))
+    contract_fixture.critic(E, p, "0", findings=[finding(p, "0", "B9", "MAJOR"), finding(p, "0", "B12", "MAJOR", "C2")])
+    ctx = waive(p, "gap-critic.B9,gap-critic.B12", "carried to phase 2")
+    body, pl = E.payload(p, len(E.ledger(p)))
+    record(G, "F-5: one WAIVE naming two MAJORs with one code -> recorded as one ledger line carrying both ids",
+           "recorded" in ctx and "NOT" not in ctx and len(E.ledger(p)) == n0 + 1 and
+           pl.get("ids") == ["gap-critic.B9", "gap-critic.B12"], short(ctx, 300) + " " + short(pl))
+    from gate import state as gstate
+    st = gstate.replay("dssfx", [json.loads(x["body"]) for x in E.ledger(p)])["waivers"]
+    record(G, "F-5: each id is its own waiver (same owner, expiry and reason)",
+           sorted(w["id"] for w in st) == ["gap-critic.B12", "gap-critic.B9"] and
+           len({(w["owner"], w["expiry"], w["reason"]) for w in st}) == 1, st)
+    ctx = E.prompt(p, "STATUS")
+    record(G, "F-5: STATUS lists both waivers", "gap-critic.B9 (owner" in ctx and "gap-critic.B12 (owner" in ctx,
+           short(ctx, 400))
+    ctx = waive(p, "gap-critic.B12", "again")
+    record(G, "F-5: waiving one of them again -> refused (already exists)", "NOT recorded" in ctx and "already exist" in ctx,
+           short(ctx, 300))
+    rv, ctx = approve(p, "0")
+    record(G, "F-5: with both MAJORs waived by the one WAIVE -> APPROVE 0 recorded", "recorded" in ctx and "NOT" not in ctx,
+           short(ctx, 400))
+
+
 def main():
     try:
         for t in (test_coverage, test_size, test_discovery, test_adr, test_trace, test_ears, test_cite, test_critic,
-                  test_overrides, test_phase7, test_misc):
+                  test_overrides, test_phase7, test_misc, test_v064):
             try:
                 t()
             except Exception as e:  # a crashing group is a failure, never a skip

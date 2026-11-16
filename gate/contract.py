@@ -4,7 +4,7 @@ Every phase (Baseline and feature cycles too) leaves, beside its documents:
 
   sdlc/<label>/COVERAGE.md    every topic ID of the phase, each with a section anchor
                               ([text](doc.md#anchor)) or `N/A: <reason>`
-  sdlc/<label>/DISCOVERY.md   the operator's answers, one question at a time, as Q-n
+  sdlc/<label>/DISCOVERY.md   the operator's answers, asked in rounds, logged as Q-n
   sdlc/<label>/adr/ADR-nnn-*.md   MADR-style decision records
 
 (in a feature cycle the same files live under sdlc/features/<id>/<label>/). The gate's
@@ -12,7 +12,8 @@ linters check them; the agent may run them for feedback, but only the gate's run
 
   coverage-lint   every topic present once, anchors resolve to a section that is not
                   hollow, N/A reasons real; the size rule's defaults and what it turns on
-  discovery-lint  the log exists; each Q-n has 2-4 options, a recommendation, a choice
+  discovery-lint  the log exists; each Q-n has 2-4 options, a recommendation (or, for a
+                  question of fact, `Recommendation: none (question of fact)`), a choice
   adr-lint        the MADR schema (context, >=2 alternatives, criteria, decision,
                   consequences, sources with URL and date)
   trace-lint      every downstream ID points at an existing upstream ID; no dangling
@@ -27,7 +28,12 @@ linters check them; the agent may run them for feedback, but only the gate's run
 Output convention (gate/validation.py): FAIL lines block APPROVE, MINOR lines go to the
 operator's minor-findings file and never into the summary.
 
-    python3 -I gate/contract.py <lint> <product-root> <phase-label>     (feedback runs)
+    python3 -I <plugin dir>/gate/contract.py <lint> <product-root> <phase-label>   (feedback runs)
+
+<lint> is coverage, discovery, adr, trace, ears or cite (a `-lint` suffix is accepted). A
+feedback run needs no checker program: when the ledger cannot be verified where it runs (the
+plugin directory has none), it replays the ledger unverified and says so on its first line.
+Only the gate's own run, against the verified ledger, counts (0.6.4, F-1).
 """
 import datetime
 import json
@@ -525,6 +531,7 @@ def write_skeleton(root, st):
 
 Q_HEAD = re.compile(r"^#{2,4}\s+(Q-(\d+))\b\s*[:—–-]?\s*(.*)$")
 OPTION = re.compile(r"^\s*[-*]\s+\**(?:Option\s+)?([A-Z])\**\s*[:).—–-]\s*(.+)$")
+FACT = re.compile(r"^\s*[-*]?\s*\**Recommend(?:ation|ed)\**\s*:?\**\s*:?\s*\**none\b.*\bfact\b", re.I)
 RECO = re.compile(r"^\s*[-*]?\s*\**Recommend(?:ation|ed)\**\s*:?\**\s*:?\s*\**([A-D])\b", re.I)
 CHOSEN = re.compile(r"^\s*[-*]?\s*\**(?:Chosen|Answer|Operator(?:'s)? (?:choice|answer))\**\s*:?\**\s*:?\s*\**([A-D])\b",
                     re.I)
@@ -534,14 +541,16 @@ def discovery_lint(root, st, label):
     rel = discovery_rel(st, label)
     text = _read(root, rel)
     if text is None:
-        return ["%s is missing: the phase's questions to the operator, one at a time, logged as Q-n with 2-4 options, "
-                "a recommendation and the chosen option (or a line `No questions: <reason>`)" % rel], [], {}
+        return ["%s is missing: the phase's questions to the operator, asked in rounds, logged as Q-n with 2-4 "
+                "options, a recommendation (or `Recommendation: none (question of fact)`) and the chosen option (or a "
+                "line `No questions: <reason>`)" % rel], [], {}
     lines = _lines_no_code(_strip_comments(text))
     qs, cur = [], None
     for n, ln in enumerate(lines, 1):
         m = Q_HEAD.match(ln)
         if m:
-            cur = {"id": m.group(1), "line": n, "q": m.group(3).strip(), "opts": [], "reco": None, "chosen": None}
+            cur = {"id": m.group(1), "line": n, "q": m.group(3).strip(), "opts": [], "reco": None, "chosen": None,
+                   "fact": False}
             qs.append(cur)
             continue
         if cur is None:
@@ -550,6 +559,10 @@ def discovery_lint(root, st, label):
             cur = None
             continue
         o = OPTION.match(ln)
+        if FACT.match(ln):
+            # 0.6.4 (F-4): a question of fact has no recommendation; recommending a fact would invent it.
+            cur["fact"] = True
+            continue
         r = RECO.match(ln)
         c = CHOSEN.match(ln)
         if r:
@@ -577,15 +590,21 @@ def discovery_lint(root, st, label):
             fails.append("%s lists an option letter twice" % where)
         if not 2 <= len(set(opts)) <= 4:
             fails.append("%s has %d options; a question offers 2-4" % (where, len(set(opts))))
-        if q["reco"] is None:
-            fails.append("%s has no `Recommendation: <letter>`" % where)
+        if q["fact"] and q["reco"] is not None:
+            fails.append("%s is marked a question of fact and also recommends %s; a question has one or the other" % (
+                where, q["reco"]))
+        elif q["fact"]:
+            pass
+        elif q["reco"] is None:
+            fails.append("%s has no `Recommendation: <letter>` (for a question of fact, write "
+                         "`Recommendation: none (question of fact)`)" % where)
         elif q["reco"] not in opts:
             fails.append("%s recommends %s, which is not one of its options" % (where, q["reco"]))
         if q["chosen"] is None:
             fails.append("%s has no chosen option (`Chosen: <letter>`): the operator's answer is not logged" % where)
         elif q["chosen"] not in opts:
             fails.append("%s: chosen %s is not one of its options" % (where, q["chosen"]))
-    return fails, [], {"questions": len(qs)}
+    return fails, [], {"questions": len(qs), "facts": sum(1 for q in qs if q["fact"])}
 
 
 # ------------------------------------------------------------------ adr-lint
@@ -1297,10 +1316,21 @@ def coverage_doc():
          "---",
          "<!-- Generated from gate/config/coverage-topics.yaml by gate/contract.py coverage_doc(). Do not edit. -->",
          "Every phase (Baseline and feature cycles too) leaves three things beside its documents, in `sdlc/<label>/` "
-         "(`sdlc/features/<id>/<label>/` in a feature cycle). The gate checks them; your own runs are feedback only.",
+         "(`sdlc/features/<id>/<label>/` in a feature cycle). The gate checks them. For feedback before you commit, "
+         "run a linter from the product root: `python3 -I \"${CLAUDE_PLUGIN_ROOT}/gate/contract.py\" <lint> . <phase>` "
+         "(`${CLAUDE_PLUGIN_ROOT}` is the moadix plugin directory; <lint> is coverage, discovery, adr, trace, ears or "
+         "cite). It prints FAIL and MINOR lines; only the gate's own run counts.",
          "",
-         "1. **Discovery, one question at a time.** Ask the operator one question per message, with 2-4 options and "
-         "your recommendation. Log each answer in `DISCOVERY.md`:",
+         "1. **Discovery, in rounds.** Ask the operator in rounds, not one question per message:",
+         "   - A round holds only questions that do not depend on each other. A question whose options depend on "
+         "another answer waits for the next round.",
+         "   - Each question has 2-4 lettered options (A-D) and your recommendation with one line of why. A question "
+         "of fact (the operator's tax status, where they deliver) has options but no recommendation: say so.",
+         "   - The operator answers the whole round in one line, for example `Q-4 B, Q-5 A, Q-6 C`.",
+         "   - Ask as many rounds as the phase needs. Never guess an answer to avoid asking; an assumption the "
+         "operator did not confirm is a question for the next round.",
+         "",
+         "   Log each answer in `DISCOVERY.md` (the format is the same whatever the round):",
          "",
          "   ```",
          "   ## Q-1: <the question>",
@@ -1310,7 +1340,8 @@ def coverage_doc():
          "   Chosen: B",
          "   ```",
          "",
-         "   If the phase raises no question, write `No questions: <why>`. Q-n IDs are never reused.",
+         "   For a question of fact, the recommendation line is `Recommendation: none (question of fact)`. If the "
+         "phase raises no question, write `No questions: <why>`. Q-n IDs are never reused.",
          "2. **Coverage.** `COVERAGE.md` lists every topic ID of the phase (below), each as `- <ID>: [title](../NN-doc.md"
          "#section)` pointing at the section that covers it, or `- <ID>: N/A: <reason>`. coverage-lint refuses a "
          "missing or duplicated ID, an anchor that does not resolve, a hollow section, and an empty, boilerplate or "
@@ -1334,8 +1365,9 @@ def coverage_doc():
          "",
          "**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its "
          "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until the operator types "
-         "`WAIVE gap-critic.<topic> owner=... expiry=... reason=...`) or MINOR (a file for the operator). Fix the "
-         "documents, commit, and launch it again. It never passes a phase.",
+         "`WAIVE gap-critic.<topic> owner=... expiry=... reason=...`; one WAIVE may name several, comma-separated: "
+         "`WAIVE gap-critic.B9,gap-critic.B12 ...`) or MINOR (a file for the operator). Fix the documents, commit, "
+         "and launch it again. It never passes a phase.",
          "",
          "**The size rule.** The size and platform ruling come from B19 (the BRD's `- **Size:**` and `- **Target "
          "Platform Ruling:**`). Topics N/A by default at that size may stay `N/A: size-default` (the skeleton fills "
@@ -1378,9 +1410,20 @@ def main(argv):
         print("usage: contract.py <coverage|discovery|adr|trace|ears|cite|skeleton> <product-root> <phase-label>")
         return 2
     lint, root, label = argv
+    if lint.endswith("-lint"):
+        lint = lint[:-len("-lint")]
+    if lint not in ("coverage", "discovery", "adr", "trace", "ears", "cite", "skeleton"):
+        print("usage: contract.py <coverage|discovery|adr|trace|ears|cite|skeleton> <product-root> <phase-label>")
+        return 2
     sys.path.insert(0, os.path.dirname(GATE_DIR))
     from gate import state
-    st, problems = state.current_state(root)
+    try:
+        st, problems = state.current_state(root)
+    except state.GateError as e:
+        # 0.6.4 (F-1): the plugin directory has no checker program, so a feedback run cannot verify
+        # the ledger. It replays it unverified; only the gate's own run (verified) counts.
+        st, problems = state.unverified_state(root), []
+        print("NOTE feedback run: the ledger was not verified here (%s); only the gate's run counts" % e)
     if problems:
         print("UNKNOWN gate state failed its integrity check: %s" % "; ".join(problems))
         return 2

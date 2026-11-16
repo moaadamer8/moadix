@@ -158,8 +158,8 @@ def schedule(root, st):
         if st.get("current_phase") != PHASE:
             return "not phase 9"
         head = _git(root, "rev-parse", "--verify", "HEAD")
-        dirty = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude).sdlc",
-                     ":(exclude).sdlc-proposals")
+        from gate import validation
+        dirty = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *validation.status_pathspec())
         if dirty:
             return "tree is dirty; no scan"
         s, h = status(root)

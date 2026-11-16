@@ -239,9 +239,12 @@ def replay(product_id, entries):
             else:
                 _apply(product, verb, e, pl)
         elif verb == "WAIVE":
-            waivers[pl.get("id")] = {"id": pl.get("id"), "owner": pl.get("owner"), "scope": pl.get("scope"),
-                                     "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
-                                     "at": e["ts"], "feature": fid}
+            # 0.6.4 (F-5): one WAIVE line may carry several ids (payload `ids`); each is its own waiver.
+            ids = pl.get("ids") if isinstance(pl.get("ids"), list) and pl.get("ids") else [pl.get("id")]
+            for wid in ids:
+                waivers[wid] = {"id": wid, "owner": pl.get("owner"), "scope": pl.get("scope"),
+                                "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
+                                "at": e["ts"], "feature": fid}
         elif verb == "UNWAIVE":
             waivers.pop(pl.get("id"), None)
         elif verb == "PARK":
@@ -358,6 +361,22 @@ def current_state(root):
             problems.append("phase.yaml differs from the state the ledger replays to (drift)%s" % (
                 "" if name == "phase.yaml" else " in %s" % name))
     return st, problems
+
+
+def unverified_state(root):
+    """0.6.4 (F-1): the state the ledger replays to WITHOUT checking signatures or the anchor,
+    for an agent's feedback run of the contract linters where no checker program is installed
+    (the plugin directory). Never used for a decision: the gate's own runs use current_state."""
+    prod = load_product(root)
+    entries = []
+    for ln in read_ledger(root):
+        try:
+            b = json.loads(ln["body"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if isinstance(b, dict) and b.get("product") == prod["product"]:
+            entries.append(b)
+    return replay(prod["product"], entries)
 
 
 def append_line(root, line_json):

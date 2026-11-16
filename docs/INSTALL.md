@@ -241,19 +241,19 @@ Steps:
 | 1 | `bash tests/install/policy_live.sh` | `0 failed`: the overlay's hosts reachable, example.com refused, gh logged in |
 | 2 | `cd "$TMPDIR" && rm -rf pp && mkdir pp && cd pp && git init -q --bare remote.git && git init -q -b main work && cd work && git commit -q --allow-empty -m x && git branch feature-x && git remote add origin ../remote.git` | runs (setup) |
 | 3 | `git -C "$TMPDIR/pp/work" push origin main` | refused, `MOADIX: main-branch guard` |
-| 4 | `cd "$TMPDIR/pp/work" && git push origin feature-x` | **succeeds** (positive control) |
+| 4 | `git -C <TMPDIR>/pp/work push origin feature-x`, with `<TMPDIR>` replaced by the literal path `echo "$TMPDIR"` prints (for example `/tmp/claude-503`) | **succeeds** (positive control). Write the path out: the guard refuses git on a directory known only at run time (`cd "$TMPDIR/…"` or `"$TMPDIR"`) |
 | 5 | `gh pr list --limit 1` | runs (allowlisted) |
 | 6 | `gh pr merge 1` | refused |
 | 7 | `gh api -X PUT repos/o/r/pulls/1/merge` | refused (only GET) |
 | 8 | `gh auth token` | refused |
 | 9 | `sh -c 'gh pr list'` | refused (not typed directly) |
 | 10 | `vercel --yes --prod` | refused, `MOADIX: main-branch guard` |
-| 11 | `firebase deploy --project <your-production-project-id>` | refused (protected) |
+| 11 | `firebase deploy --project <your-production-project-id>`, with your real protected project id from the overlay in place of the placeholder | refused as `a protected production project`. The real id is needed: typed with the placeholder, the shell reads `<…>` as a redirection and the guard refuses it for that instead, so the protected-project rule is never tested. Run it from `~/moadix`, which has no `firebase.json`, so nothing could deploy even if the guard failed |
 | 12 | `firebase projects:list` | runs |
 
-## Updating from 0.4.0 to 0.6.3: the complete procedure
+## Updating from 0.4.0 to 0.6.4: the complete procedure
 
-This takes you from the installed 0.4.0 to 0.6.3 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x, with the fixes from the first real-engine run in 0.6.2 and the dry run adapted to the increment 7 contract in 0.6.3). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+This takes you from the installed 0.4.0 to 0.6.4 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x, with the fixes from the first real-engine run in 0.6.2 and the dry run adapted to the increment 7 contract in 0.6.3, and the fixes from the first product run in 0.6.4). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
 **1. Confirm the version you are about to install.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
@@ -261,7 +261,7 @@ This takes you from the installed 0.4.0 to 0.6.3 (main-branch guard and local ov
 cd ~/moadix && git log --oneline -1
 ```
 
-Expected last line: `<commit> 0.6.3: …` (the 0.6.3 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.3"`).
+Expected last line: `<commit> 0.6.4: …` (the 0.6.4 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.4"`).
 
 **2. Create the local overlay.** Docker Desktop: not needed. Claude Code sessions: may stay open. The format is in "Local overlay" above. Put in your production Firebase project id and the hosts your products need. Skip the file entirely if you want no protected project and no extra hosts (then every `firebase` command that names a project is refused).
 
@@ -311,17 +311,17 @@ Expected last line: `MOADIX is updated.` If it prints `MOADIX SETUP FAILED: …`
 bash tests/install/policy_live.sh
 ```
 
-Expected last line: `Now run the GitHub CLI checks in docs/INSTALL.md as separate Bash calls (typed directly).`, with `0 failed` on the line before it. Then run checks 2–12 of the table in "Local overlay" above, one Bash call each. Expected: 3, 6, 7, 8, 9, 10 and 11 are refused; 2, 4, 5 and 12 run.
+Expected last line: `Now run the GitHub CLI checks in docs/INSTALL.md as separate Bash calls (typed directly).`, with `0 failed` on the line before it. Then run checks 2–12 of the table in "Local overlay" above, one Bash call each; check 4 needs the literal path and check 11 your real project id, as the table says. Expected: 3, 6, 7, 8, 9, 10 and 11 are refused; 2, 4, 5 and 12 run.
 
 **8. Push and tag.** Docker Desktop: not needed. Claude Code sessions: may stay open; do this in **Terminal** (the guard refuses a push to the main branch from Claude Code).
 
 ```
 cd ~/moadix && git push origin master
-git tag -a v0.6.3 -m "MOADIX 0.6.3"
-git push origin v0.6.3
+git tag -a v0.6.4 -m "MOADIX 0.6.4"
+git push origin v0.6.4
 ```
 
-Expected last line of the first command: `   451a03a..<0.6.3 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.3 -> v0.6.3`.
+Expected last line of the first command: `   6c2c6fc..<0.6.4 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.4 -> v0.6.4`.
 
 ## 5. Uninstall
 

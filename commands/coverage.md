@@ -2,9 +2,15 @@
 description: How the MOADIX cross-phase contract works in every phase (COVERAGE.md, DISCOVERY.md, ADRs, the gap critic, the size rule) and the coverage topics of each phase. Changes no gate state.
 ---
 <!-- Generated from gate/config/coverage-topics.yaml by gate/contract.py coverage_doc(). Do not edit. -->
-Every phase (Baseline and feature cycles too) leaves three things beside its documents, in `sdlc/<label>/` (`sdlc/features/<id>/<label>/` in a feature cycle). The gate checks them; your own runs are feedback only.
+Every phase (Baseline and feature cycles too) leaves three things beside its documents, in `sdlc/<label>/` (`sdlc/features/<id>/<label>/` in a feature cycle). The gate checks them. For feedback before you commit, run a linter from the product root: `python3 -I "${CLAUDE_PLUGIN_ROOT}/gate/contract.py" <lint> . <phase>` (`${CLAUDE_PLUGIN_ROOT}` is the moadix plugin directory; <lint> is coverage, discovery, adr, trace, ears or cite). It prints FAIL and MINOR lines; only the gate's own run counts.
 
-1. **Discovery, one question at a time.** Ask the operator one question per message, with 2-4 options and your recommendation. Log each answer in `DISCOVERY.md`:
+1. **Discovery, in rounds.** Ask the operator in rounds, not one question per message:
+   - A round holds only questions that do not depend on each other. A question whose options depend on another answer waits for the next round.
+   - Each question has 2-4 lettered options (A-D) and your recommendation with one line of why. A question of fact (the operator's tax status, where they deliver) has options but no recommendation: say so.
+   - The operator answers the whole round in one line, for example `Q-4 B, Q-5 A, Q-6 C`.
+   - Ask as many rounds as the phase needs. Never guess an answer to avoid asking; an assumption the operator did not confirm is a question for the next round.
+
+   Log each answer in `DISCOVERY.md` (the format is the same whatever the round):
 
    ```
    ## Q-1: <the question>
@@ -14,7 +20,7 @@ Every phase (Baseline and feature cycles too) leaves three things beside its doc
    Chosen: B
    ```
 
-   If the phase raises no question, write `No questions: <why>`. Q-n IDs are never reused.
+   For a question of fact, the recommendation line is `Recommendation: none (question of fact)`. If the phase raises no question, write `No questions: <why>`. Q-n IDs are never reused.
 2. **Coverage.** `COVERAGE.md` lists every topic ID of the phase (below), each as `- <ID>: [title](../NN-doc.md#section)` pointing at the section that covers it, or `- <ID>: N/A: <reason>`. coverage-lint refuses a missing or duplicated ID, an anchor that does not resolve, a hollow section, and an empty, boilerplate or copied reason. The gate keeps a pre-filled skeleton at `.sdlc/coverage/<scope>-<label>-COVERAGE.md`: copy it and fill it in.
 3. **Decision records.** Each decision is `adr/ADR-nnn-<slug>.md` (MADR): `# ADR-nnn: <decision>`, then `## Context`, `## Alternatives` (at least two), `## Criteria`, `## Decision`, `## Consequences`, `## Sources` (each with a URL and a date, YYYY-MM-DD). A superseding record says `Supersedes: ADR-nnn`.
 
@@ -22,7 +28,7 @@ Every phase (Baseline and feature cycles too) leaves three things beside its doc
 
 **Phase 2** (ears-lint): each acceptance criterion is EARS (`The <system> shall ...`, `When <trigger>, the <system> shall ...`, `While <state>, ...`, `If <condition>, then the <system> shall ...`, `Where <feature>, ...`), one `shall`, no vague words (fast, user-friendly, appropriate, etc., TBD, should, ...); every story has an `If ..., then ...` AC; every NFR has a number and a unit; the role x action matrix (P3) marks every cell allow or deny and denies something. **Phase 1** (cite-lint): every URL carries a retrieval date on its line, every research claim has a source, and every link resolves.
 
-**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until the operator types `WAIVE gap-critic.<topic> owner=... expiry=... reason=...`) or MINOR (a file for the operator). Fix the documents, commit, and launch it again. It never passes a phase.
+**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until the operator types `WAIVE gap-critic.<topic> owner=... expiry=... reason=...`; one WAIVE may name several, comma-separated: `WAIVE gap-critic.B9,gap-critic.B12 ...`) or MINOR (a file for the operator). Fix the documents, commit, and launch it again. It never passes a phase.
 
 **The size rule.** The size and platform ruling come from B19 (the BRD's `- **Size:**` and `- **Target Platform Ruling:**`). Topics N/A by default at that size may stay `N/A: size-default` (the skeleton fills in the canned reason); `partial` defaults still need a section. The operator can turn a default back on or rule a topic N/A through `ADOPT` of `.sdlc-proposals/config/coverage-overrides.yaml` (`turn_on: [ID]`, `na: [{topic: ID, reason: ...}]`); then write `N/A: operator`.
 

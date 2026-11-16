@@ -168,8 +168,8 @@ def head(root):
 
 
 def dirty(root):
-    out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ".", ":(exclude).sdlc",
-               ":(exclude).sdlc-proposals")
+    from . import validation  # late: validation imports this module late too
+    out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *validation.status_pathspec())
     return [ln[3:] for ln in out.splitlines() if ln.strip()]
 
 
