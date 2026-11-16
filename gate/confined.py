@@ -145,6 +145,13 @@ def _refuse_host_mounts(options):
         raise Refused("a confined run may not mount a host path or the Docker socket")
 
 
+RUN_PATH = "/usr/local/bin:/usr/bin:/bin"
+RUN_PATH_RE = re.compile(r"^/[\w./-]+(:/[\w./-]+)*$")
+# The runner's fixed environment: these names and nothing else, plus the image's own variables (which the
+# engine keeps unless one of these replaces it) and what the gate passes for one run (never a secret).
+RUN_ENV_NAMES = ("PATH", "HOME", "LANG", "CI", "TZ")
+
+
 def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env=None, deps_volume=None):
     """The exact `docker run` argv (section 3.2). Volumes are named volumes the gate created for this
     run; a host path is refused, and so is anything naming the Docker socket."""
@@ -154,7 +161,7 @@ def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env
     if network != "none" and not re.match(r"^moadix-[a-z0-9-]+$", network):
         raise Refused("network %r is not the run's internal network" % (network,))
     uid = int(config().get("uid") or 65534)
-    e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp",  # noqa: S108 (inside the container: a tmpfs)
+    e = {"PATH": RUN_PATH, "HOME": "/tmp",  # noqa: S108 (inside the container: a tmpfs)
          "LANG": "C.UTF-8", "CI": "1", "NODE_ENV": "test", "TZ": "UTC"}
     for k, val in (env or {}).items():
         if SECRETISH.search(k) or not re.match(r"^[A-Z][A-Z0-9_]*$", k):
@@ -531,15 +538,21 @@ class Run(object):
         return name
 
     def execute(self, img, argv, tier, mounts, network="none", env=None, user=None, aliases=(), name=None,
-                detach=False, tmpfs=()):
+                detach=False, tmpfs=(), path=None):
         """Run argv confined (3.2). mounts: [(volume, path, readonly)]; /out is the only writable one."""
+        # 0.7.5: a gate-owned service (confinement.yaml services.<name>.path) may name the image's own tool
+        # directory; the PATH is never taken from the product or the host, and is checked before the engine is called
+        if path is not None and not RUN_PATH_RE.match(path):
+            raise Refused("PATH %r is not a list of absolute directories" % (path,))
         lim = limits(tier, self.pt)
         self.check_user(img, user or "%d:%d" % (self.uid, self.uid))
         name = name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower()))
         # 0.7.4 (the 0.7.3 engine run): HOME is the run's own tmpfs /tmp, which exists and is writable by any uid
         # (mode 1777). It was /tmp/home, which nothing created, so a tool writing to $HOME (zap-baseline.py's
         # zap.yaml) failed before it started.
-        e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+        e = {"PATH": RUN_PATH, "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+        if path is not None:
+            e["PATH"] = path
         for k, v in (env or {}).items():
             if SECRETISH.search(k) or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", k):
                 raise Refused("environment variable %s may not be passed into a confined run" % k)

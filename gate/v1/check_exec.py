@@ -415,20 +415,32 @@ def tool_script(gate, root, pt, files=None):
     raise ValueError(gate)
 
 
-def wait_for(port):
-    """A bash loop (the live scripts run under bash -c: /dev/tcp is a bash feature, not dash's)."""
-    return ("i=0; until (echo > /dev/tcp/%s/%d) 2>/dev/null; do i=$((i+1)); [ $i -gt 90 ] && echo 'the app never "
-            "listened on port %d' > /out/wait.log && exit 3; sleep 1; done; " % (confined.SUT_ALIAS, port, port))
+def wait_for(port, out="/out"):
+    """A bash loop (the live scripts run under bash -c: /dev/tcp is a bash feature, not dash's).
+    0.7.5: the note goes to the gate's own output folder (/zap/wrk for ZAP: there is no /out in that run, and
+    on the read-only root the failed write used to skip the exit, so the loop ran to the wall clock), and the
+    exit no longer depends on the note being written."""
+    return ("i=0; until (echo > /dev/tcp/%s/%d) 2>/dev/null; do i=$((i+1)); if [ $i -gt 90 ]; then echo 'the app "
+            "never listened on port %d' > %s/wait.log; exit 3; fi; sleep 1; done; " % (confined.SUT_ALIAS, port, port, out))
 
 
-def live_script(gate, port, spec_rel, paths):
+# 0.7.5 (the 0.7.4 engine run): the runner's PATH is fixed (/usr/local/bin:/usr/bin:/bin) and replaces the
+# image's own, so a tool outside it is named by its absolute path. zap-baseline.py lives in /zap (the image's
+# PATH adds /zap; the runner's does not); it starts ZAP as /zap/zap-x.sh and java is /usr/bin/java, so nothing
+# else needs /zap on PATH. Its log zap.out goes to the working directory, so the script runs from /tmp (the
+# image's /zap is on the read-only root). ZAP's start script sizes the Java heap from the host's memory, not
+# the run's limit, so the heap is set to half the run's memory.
+ZAP_BASELINE = "/zap/zap-baseline.py"
+
+
+def live_script(gate, port, spec_rel, paths, memory_mb=2048):
     url = "http://%s:%d" % (confined.SUT_ALIAS, port)
     if gate == "schemathesis":
         return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s --report junit "
                 "--report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url))
     if gate == "zap":
-        return (wait_for(port) + "zap-baseline.py -t %s -c zap-rules.tsv -J zap.json -I -m 1 -z '-dir /tmp/zaphome' > /zap/wrk/run.log 2>&1; "
-                "echo $? > /zap/wrk/run.rc" % url)
+        return (wait_for(port, "/zap/wrk") + "cd /tmp && %s -t %s -c zap-rules.tsv -J zap.json -I -m 1 -z '-dir /tmp/zaphome "
+                "-Xmx%dm' > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % (ZAP_BASELINE, url, max(256, memory_mb // 2)))
     if gate == "lhci":
         return (wait_for(port) + "export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -1) && "
                 "cd /tmp && node /deps/tool/node_modules/@lhci/cli/src/cli.js collect --url=%s/ --numberOfRuns=1 "
@@ -598,7 +610,8 @@ def start_services(r, pt, net):
             r.own(dv, img, uid=int(str(svc.get("user") or str(confined.config().get("uid") or 65534)).split(":")[0]))
             mounts.append((dv, svc["data"], False))
         r.execute(img, [], "L", mounts, network=net, env=senv, user=svc.get("user"), aliases=[svc["alias"]],
-                  name="moadix-%s-svc-%s" % (r.id, name), detach=True, tmpfs=svc.get("tmpfs") or [])
+                  name="moadix-%s-svc-%s" % (r.id, name), detach=True, tmpfs=svc.get("tmpfs") or [],
+                  path=svc.get("path"))
         env[svc["env_url"]] = "postgres://%s@%s:%d/%s" % (senv.get("POSTGRES_USER"), svc["alias"], svc["port"],
                                                           senv.get("POSTGRES_DB"))
     return env
@@ -807,7 +820,8 @@ def run_gate(root, st, gate, label, run_id=None):
                 r.load(gx, _write(tmp, "gx.tar", _tar_of({"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
                                                           "paths.json": json.dumps(paths).encode()})), img)
                 mounts.append((gx, "/gx", True))
-            script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"])
+            script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"],
+                                 confined.limits(g["tier"], pt)["memory_mb"])
         else:
             if gate == "tests" and (pt.get("tests") or {}).get("services"):
                 net = r.network("svc")

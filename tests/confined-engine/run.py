@@ -21,7 +21,9 @@ It refuses to start, and says what it found, when:
   * an image it needs is still `status: blocked` in gate/config/confinement.yaml (the licence ruling).
 
 What it proves, each with a hostile fixture, through gate/confined.py exactly as the gates call it:
-  secrets   the host's environment and files never reach the container; a secret-named variable is refused
+  secrets   the host's environment and files never reach the container (a property: every variable is the
+            runner's or the image's own; a deliberately unconfined control run fails it); a secret-named
+            variable is refused
   host      no host path and no Docker socket inside; the root filesystem is read-only
   network   product code runs with no network at all (no interface but lo, no DNS, no connect)
   egress    the live network is internal: no route out; the install proxy refuses a host off its allowlist
@@ -50,6 +52,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
 
+import env_leak  # noqa: E402
 import no_prune  # noqa: E402
 from gate import confined  # noqa: E402  (the repository's runner and configuration, never a fixture copy)
 
@@ -96,12 +99,16 @@ def ours(run_label):
     return bool(run_label) and bool(OWN.match(run_label))
 
 
+def inspect_pinned(name, fmt):
+    """The suite's only inspect: a pinned image of its own, named as in confinement.yaml (never a foreign object)."""
+    return docker(["image", "inspect", "--format", fmt, confined.image(name)]).stdout
+
+
 def own_images():
     """Ids of the pinned images the suite pulls (its own); every other image is foreign."""
     ids = set()
     for name in NEEDED:
-        p = docker(["image", "inspect", "--format", "{{.Id}}", confined.image(name)])
-        ids.update(p.stdout.split())
+        ids.update(inspect_pinned(name, "{{.Id}}").split())
     return ids
 
 
@@ -176,6 +183,10 @@ def sh(r, img, script, tier="E-lint", mounts=(), network="none", env=None, name=
 
 # ------------------------------------------------------------------ the tests
 def test_secrets(node):
+    # 0.7.5 (the 0.7.4 engine run): the first check asserts the property (tests/lib/env_leak.py), not an exact
+    # string; 0.7.4 also required HOME to be the old /tmp/home and failed once HOME moved to /tmp. A control
+    # run that deliberately lets the host in (the canary variable passed through, the canary folder mounted)
+    # shows the same check then fails, so it is not weaker than before.
     G = "secrets"
     canary = "moadix-canary-" + secrets.token_hex(8)
     os.environ["MOADIX_ENGINE_CANARY"] = canary
@@ -183,14 +194,27 @@ def test_secrets(node):
     with open(os.path.join(host_dir, "canary-file"), "w") as f:
         f.write(canary)
     r = confined.Run(rid())
+    runner_env = {"PATH": confined.RUN_PATH, "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+    assert sorted(runner_env) == sorted(confined.RUN_ENV_NAMES)
+    image_names = [x.split("=", 1)[0] for x in (json.loads(inspect_pinned("node", "{{json .Config.Env}}") or "null") or [])]
     try:
-        rc, out, err = sh(r, node, "env; cat /proc/1/environ 2>/dev/null | tr '\\0' '\\n'; "
-                                   "ls -la /root /home /run/secrets 2>&1; "
-                                   "grep -rs %s / --exclude-dir=proc --exclude-dir=sys 2>/dev/null | head -3; true" % canary)
-        record(G, "the host's environment (a canary variable) and files (a canary file) are not in the container",
-               rc == 0 and canary not in out + err and "HOME=/tmp/home" in out, out[-800:] + err[-300:])
+        rc, out, err = sh(r, node, env_leak.probe(canary))
+        found = env_leak.problems(out, err, canary, runner_env, image_names)
+        record(G, "the host's environment (a canary variable) and files (a canary file) are not in the container, "
+                  "and every variable is the runner's (with its value) or the image's own",
+               rc == 0 and image_names and not found, "; ".join(found) or out[-800:] + err[-300:])
         record(G, "only the runner's fixed environment reaches the run (no HOME of the host, no SSH agent, no tokens)",
                "SSH_AUTH_SOCK" not in out and "/Users/" not in out and "GH_TOKEN" not in out, out[-800:])
+        # control: the same check over a run that is deliberately NOT confined. It is the suite's own labelled
+        # container, removed with --rm and by the run's cleanup; nothing of the gate starts it.
+        c = docker(["run", "--rm", "--label", r.label, "--name", "moadix-%s-control" % r.id, "--network", "none",
+                    "--env", "MOADIX_ENGINE_CANARY", "--volume", "%s:/hostcanary:ro" % host_dir, node, "sh", "-c",
+                    env_leak.probe(canary)])
+        cfound = env_leak.problems(c.stdout, c.stderr, canary, runner_env, image_names)
+        record(G, "control: on a deliberately unconfined run (the host's canary variable passed through, the canary "
+                  "folder mounted) the same check fails, naming the variable and the file",
+               c.returncode == 0 and any("MOADIX_ENGINE_CANARY" in x for x in cfound)
+               and any("file holding the canary" in x for x in cfound), "; ".join(cfound) or c.stderr[-300:])
         try:
             sh(r, node, "true", env={"NPM_TOKEN": "x"})
             refused = None
@@ -491,7 +515,7 @@ def test_smoke(_node):
 
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
-PLAN = {"test_secrets": ("secrets", 4), "test_host": ("host paths", 6), "test_network": ("network", 7),
+PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks

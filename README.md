@@ -100,6 +100,7 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/rel072/run.py       # 0.7.2: substitution read-deny and reader proofs, critic section 10 (A1-A5)
 /usr/bin/python3 tests/rel073/run.py       # 0.7.3: runner uid, kept run logs, read protection, APPROVE WITH-WAIVERS
 /usr/bin/python3 tests/rel074/run.py       # 0.7.4: build context on stdin, the stricter engine double, live gates
+/usr/bin/python3 tests/rel075/run.py       # 0.7.5: secrets check as a property, commands on the run's PATH (ZAP, postgres)
 /usr/bin/python3 tests/install/no_product_strings.py   # before a push: no overlay value or home path in new commits
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)

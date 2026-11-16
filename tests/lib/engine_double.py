@@ -8,6 +8,7 @@ logged to calls.log so a test can check the argv the runner built (no host path,
 """
 import json
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -82,6 +83,56 @@ def plain_tar_head(h):
     except ValueError:
         return False
     return want == sum(h[:148]) + 8 * 32 + sum(h[156:])
+
+
+# 0.7.5 (the 0.7.4 engine run): the runner replaces the image's PATH with its own fixed one
+# (/usr/local/bin:/usr/bin:/bin). The pinned images that keep tools elsewhere, measured on the real images
+# with `type -a` under the runner's PATH; every other command the gates use is in /usr/local/bin, /usr/bin
+# or /bin in its image. A command named by a bare word resolves only when its directory is on the run's PATH;
+# the engine-run shell then fails with 127, as bash and the postgres entrypoint did on the real engine.
+OFF_PATH = {
+    "zaproxy": {"zap-baseline.py": "/zap", "zap-full-scan.py": "/zap", "zap-api-scan.py": "/zap",
+                "zap-x.sh": "/zap", "zap.sh": "/zap"},
+    "postgres": {"postgres": "/usr/lib/postgresql/17/bin", "initdb": "/usr/lib/postgresql/17/bin",
+                 "pg_ctl": "/usr/lib/postgresql/17/bin"},
+}
+IMAGE_PATH = {"zaproxy": "/usr/lib/jvm/java-17-openjdk-arm64/bin:/zap/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+              "postgres": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/17/bin"}
+KEYWORDS = ("do", "then", "else", "until", "while", "if", "!", "{", "exec", "time")
+
+
+def command_words(script):
+    """The words in command position of a shell script (enough for the gates' own scripts)."""
+    words = []
+    for seg in re.split(r"[;&|()\n]+", re.sub(r"'[^']*'", "''", script)):
+        toks = seg.split()
+        while toks and (toks[0] in KEYWORDS or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0])):
+            toks.pop(0)
+        if toks and not toks[0].startswith((">", "<", "2>", "[", "$")):
+            words.append(toks[0])
+    return words
+
+
+def off_path(a):
+    """None, or the bash message for the first command the run cannot find on its PATH."""
+    ref = next((x for x in a if "@sha256:" in x), "")  # the image: the gate names every image by digest
+    key = next((k for k in OFF_PATH if "/%s" % k in ref), None)
+    if not key:
+        return None
+    path = next((x.split("=", 1)[1] for x in opt(a, "--env") + opt(a, "-e") if x.startswith("PATH=")), IMAGE_PATH[key])
+    dirs = {d.rstrip("/") for d in path.split(":")}
+    if "-c" in a and a.index("-c") + 1 < len(a):
+        cmds = command_words(a[a.index("-c") + 1])
+    elif key == "postgres":
+        cmds = ["initdb", "postgres"]  # the image's entrypoint runs both by name
+    else:
+        cmds = []
+    for c in cmds:
+        if "/" not in c and c in OFF_PATH[key] and OFF_PATH[key][c] not in dirs:
+            if key == "postgres":
+                return "/usr/local/bin/docker-entrypoint.sh: line 92: %s: command not found" % c
+            return "bash: line 1: %s: command not found" % c
+    return None
 
 
 def network_ok(s, net):
@@ -182,6 +233,9 @@ def main():
         if "sh" in a and "-c" in a and "/dev/tcp/" in a[a.index("-c") + 1 if a.index("-c") + 1 < len(a) else -1]:
             # the pinned images' /bin/sh is dash, which has no /dev/tcp: the wait never succeeds
             return refuse("sh: 1: cannot create /dev/tcp/sut.moadix.test/3000: Directory nonexistent", 3)
+        missing = off_path(a)
+        if missing:
+            return refuse(missing, 127)
         name = (opt(a, "--name") or ["anon"])[0]
         m = mounts(a)
         if "-d" in a or "--rm" not in a:
