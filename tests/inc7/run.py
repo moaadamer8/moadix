@@ -441,6 +441,14 @@ def finding(p, label, tid, sev, cid="C1"):
             "fix": "cover %s in the BRD" % tid}
 
 
+def gc_of(p, label, cid):
+    """0.7.0: the stable GC id the gate gave finding `cid` of the phase's current critic evidence."""
+    from gate import state as gs, verify as gv
+    st, _probs = gs.current_state(p)
+    _ev, run, _sch = gv.current_critic(p, st, label)
+    return (run or {}).get("map", {}).get(cid, "GC-unknown-0")
+
+
 def waive(p, wid, reason="accepted for the toy run"):
     exp = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
     return E.prompt(p, "WAIVE %s owner=moad scope=phase-0 expiry=%s reason=%s %s" % (wid, exp, reason, E.fresh()))
@@ -482,16 +490,22 @@ def test_critic():
     rv, ctx = approve(p, "1")
     record(G, "an open BLOCKER -> APPROVE 1 refused, the finding named", "NOT recorded" in ctx and "BLOCKER C1 (R4)" in ctx,
            short(ctx, 400))
-    ctx = waive(p, "gap-critic.R4")
-    record(G, "WAIVE of a BLOCKER (gap-critic.R4) -> refused: a BLOCKER cannot be waived",
+    ctx = waive(p, "gap-critic." + gc_of(p, "1", "C1"))
+    record(G, "WAIVE of a BLOCKER (gap-critic.<its GC id>) -> refused: a BLOCKER cannot be waived",
            "NOT recorded" in ctx and "cannot be waived" in ctx, short(ctx, 300))
     contract_fixture.critic(E, p, "1", findings=[finding(p, "1", "R7", "MAJOR")])
     rv, ctx = approve(p, "1")
     record(G, "an unwaived MAJOR -> APPROVE 1 refused, saying how to waive it",
-           "NOT recorded" in ctx and "MAJOR C1 (R7)" in ctx and "WAIVE gap-critic.R7" in ctx, short(ctx, 400))
+           "NOT recorded" in ctx and "MAJOR C1 (R7) [GC-1-" in ctx and "WAIVE gap-critic.GC-1-" in ctx, short(ctx, 400))
+    r7 = gc_of(p, "1", "C1")
     ctx = waive(p, "gap-critic.R7", "cost model deferred to phase 3 by the operator")
-    record(G, "WAIVE gap-critic.R7 with a reason -> recorded", "recorded" in ctx and "NOT" not in ctx, short(ctx, 300))
-    contract_fixture.critic(E, p, "1", findings=[finding(p, "1", "R7", "MAJOR"), finding(p, "1", "R13", "MINOR", "C2")])
+    record(G, "0.7.0: a topic waiver (gap-critic.R7) is refused for a new waiver; it names the GC-id form",
+           "NOT recorded" in ctx and "binds one finding" in ctx, short(ctx, 300))
+    ctx = waive(p, "gap-critic." + r7, "cost model deferred to phase 3 by the operator")
+    record(G, "WAIVE gap-critic.<GC id> of the MAJOR with a reason -> recorded", "recorded" in ctx and "NOT" not in ctx,
+           short(ctx, 300))
+    contract_fixture.critic(E, p, "1", findings=[dict(finding(p, "1", "R7", "MAJOR"), same_as=r7),
+                                                 finding(p, "1", "R13", "MINOR", "C2")])
     rv, ctx = approve(p, "1")
     minor = os.path.join(p, ".sdlc", "cache", "minor", "product-1.md")
     record(G, "with the MAJOR waived and one MINOR -> APPROVE 1 recorded; the MINOR is not in the summary",
@@ -596,6 +610,7 @@ def test_phase7():
     rcp = re.search(r"^receipt: (\w+)$", prompt, re.M).group(1)
     ev = {"role": "code-reviewer", "source_commit": git(p, "rev-parse", "HEAD").stdout.strip(), "brief_sha256": bh,
           "receipt": rcp, "reviewed": ["src/notes.py"],
+          "docset_sha256": re.search(r'docset_sha256: "([0-9a-f]{64})"', prompt).group(1),
           "findings": [{"id": "S1", "severity": "medium", "rule": "R7-3", "summary": "unused_extra was not asked for",
                         "citations": ["src/notes.py:5-6"]}]}
     edir = os.path.join(p, ".sdlc", "cache", "verify", "7", "code-reviewer", "evidence")
@@ -798,28 +813,30 @@ def test_v064():
     contract_fixture.critic(E, p, "0", findings=[finding(p, "0", "B9", "MAJOR"), finding(p, "0", "B12", "MAJOR", "C2"),
                                                  finding(p, "0", "B4", "BLOCKER", "C3")])
     n0 = len(E.ledger(p))
-    ctx = waive(p, "gap-critic.B9,gap-critic.B4", "carried to phase 2")
+    b9, b12, b4 = gc_of(p, "0", "C1"), gc_of(p, "0", "C2"), gc_of(p, "0", "C3")
+    ctx = waive(p, "gap-critic.%s,gap-critic.%s" % (b9, b4), "carried to phase 2")
     record(G, "F-5: a WAIVE naming a MAJOR and a BLOCKER -> refused whole, nothing recorded",
            "NOT recorded" in ctx and "cannot be waived" in ctx and "no id of this WAIVE was recorded" in ctx and
            len(E.ledger(p)) == n0, short(ctx, 300))
-    ctx = waive(p, "gap-critic.B9,gap-critic.B9", "carried to phase 2")
+    ctx = waive(p, "gap-critic.%s,gap-critic.%s" % (b9, b9), "carried to phase 2")
     record(G, "F-5: a WAIVE naming the same id twice -> refused", "NOT recorded" in ctx and "more than once" in ctx,
            short(ctx, 300))
-    contract_fixture.critic(E, p, "0", findings=[finding(p, "0", "B9", "MAJOR"), finding(p, "0", "B12", "MAJOR", "C2")])
-    ctx = waive(p, "gap-critic.B9,gap-critic.B12", "carried to phase 2")
+    contract_fixture.critic(E, p, "0", findings=[dict(finding(p, "0", "B9", "MAJOR"), same_as=b9),
+                                                 dict(finding(p, "0", "B12", "MAJOR", "C2"), same_as=b12)])
+    ctx = waive(p, "gap-critic.%s,gap-critic.%s" % (b9, b12), "carried to phase 2")
     body, pl = E.payload(p, len(E.ledger(p)))
     record(G, "F-5: one WAIVE naming two MAJORs with one code -> recorded as one ledger line carrying both ids",
            "recorded" in ctx and "NOT" not in ctx and len(E.ledger(p)) == n0 + 1 and
-           pl.get("ids") == ["gap-critic.B9", "gap-critic.B12"], short(ctx, 300) + " " + short(pl))
+           pl.get("ids") == ["gap-critic." + b9, "gap-critic." + b12], short(ctx, 300) + " " + short(pl))
     from gate import state as gstate
     st = gstate.replay("dssfx", [json.loads(x["body"]) for x in E.ledger(p)])["waivers"]
     record(G, "F-5: each id is its own waiver (same owner, expiry and reason)",
-           sorted(w["id"] for w in st) == ["gap-critic.B12", "gap-critic.B9"] and
+           sorted(w["id"] for w in st) == sorted(["gap-critic." + b9, "gap-critic." + b12]) and
            len({(w["owner"], w["expiry"], w["reason"]) for w in st}) == 1, st)
     ctx = E.prompt(p, "STATUS")
-    record(G, "F-5: STATUS lists both waivers", "gap-critic.B9 (owner" in ctx and "gap-critic.B12 (owner" in ctx,
+    record(G, "F-5: STATUS lists both waivers", "gap-critic.%s (owner" % b9 in ctx and "gap-critic.%s (owner" % b12 in ctx,
            short(ctx, 400))
-    ctx = waive(p, "gap-critic.B12", "again")
+    ctx = waive(p, "gap-critic." + b12, "again")
     record(G, "F-5: waiving one of them again -> refused (already exists)", "NOT recorded" in ctx and "already exist" in ctx,
            short(ctx, 300))
     rv, ctx = approve(p, "0")

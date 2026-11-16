@@ -146,6 +146,9 @@ def good_evidence(p, role, prompt, **over):
           "receipt": receipt_of(prompt), "reviewed": ["src/notes.ts", "tests/notes.test.ts"],
           "findings": [{"id": "S1", "severity": "low", "summary": "save() mutates nothing but is untyped at the "
                                                                   "call site", "citations": ["src/notes.ts:1-3"]}]}
+    ds = re.search(r'docset_sha256: "([0-9a-f]{64})"', prompt)
+    if ds:  # 0.7.0: a verifier not tied to HEAD echoes its document set's digest
+        ev["docset_sha256"] = ds.group(1)
     if role == "ac-coverage-critic":
         ev["reviewed"] = ["tests/notes.test.ts"]
         ev["coverage"] = [{"ac": "US-001/AC-1", "tests": ["tests/notes.test.ts:3-5"]},
@@ -397,7 +400,7 @@ def group_evidence(p):
     rc, out = run_check(p, "7")
     record(G, "control: good evidence from both scheduled verifiers -> validator passes", rc == 0, short(out, 300))
     bad = [
-        ("a wrong commit", dict(source_commit="0" * 40), "does not match HEAD"),
+        ("a wrong commit", dict(source_commit="0" * 40), "does not match the reviewed commit"),
         ("a wrong brief hash", dict(brief_sha256="f" * 64), "does not match the gate's brief"),
         ("a wrong receipt (not the briefed verifier)", dict(receipt="deadbeef"), "receipt does not match"),
         ("a dead citation (no such file)", dict(findings=[{"id": "S1", "severity": "low", "summary": "x",

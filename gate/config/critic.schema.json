@@ -2,18 +2,20 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/moaadamer8/moadix/gate/config/critic.schema.json",
   "title": "MOADIX gap critic evidence (CRITIC.json)",
-  "description": "Increment 7 (docs/AMENDMENT-3.md section 1). Written by moadix:gap-critic into .sdlc/cache/verify/<phase>/gap-critic/evidence/CRITIC.json; checked by the gate (gate/contract.py critic_check). Findings only: there is no verdict, pass or approval field, and none may be added.",
+  "description": "Increment 7 (docs/AMENDMENT-3.md section 1), 0.7.0 (docs/critic-convergence-design.md). Written by moadix:gap-critic into .sdlc/cache/verify/<phase>/gap-critic/evidence/CRITIC.json; checked by the gate (gate/contract.py critic_check, gate/critic.py). Findings only: there is no verdict, pass or approval field, and none may be added. A CARRY finding names the defers rule of the phase it falls under (defer_rule), the phase it goes to (to) and its class; the gate checks the hard rules. same_as / regression_of name an earlier finding's GC id; the gate checks the claim.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["role", "phase", "source_commit", "brief_sha256", "receipt", "reviewed", "topics_checked", "findings"],
+  "required": ["role", "phase", "source_commit", "brief_sha256", "docset_sha256", "receipt", "reviewed", "topics_checked", "findings"],
   "properties": {
     "role": {"type": "string", "enum": ["gap-critic"]},
     "phase": {"type": "string", "pattern": "^(?:[0-9]{1,2}[a-c]?|B)$"},
     "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "brief_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "docset_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "receipt": {"type": "string", "minLength": 1},
     "reviewed": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-    "topics_checked": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{1,2}$"},
+    "topics_checked": {"type": "array",
+                       "items": {"type": "string", "pattern": "^(?:[A-Z]{1,3}[0-9]{1,2}|CARRY-[A-Za-z0-9_.-]+-[0-9]{1,4})$"},
                        "uniqueItems": true},
     "findings": {
       "type": "array",
@@ -24,11 +26,17 @@
         "required": ["id", "topic", "severity", "quote", "citation", "fix"],
         "properties": {
           "id": {"type": "string", "pattern": "^C[0-9]{1,4}$"},
-          "topic": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{1,2}$"},
-          "severity": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR"]},
+          "topic": {"type": "string", "pattern": "^(?:[A-Z]{1,3}[0-9]{1,2}|CARRY-[A-Za-z0-9_.-]+-[0-9]{1,4})$"},
+          "severity": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "CARRY"]},
           "quote": {"type": "string", "minLength": 1, "maxLength": 600},
           "citation": {"type": "string", "pattern": "^[^:\\s][^:]*:[0-9]+(?:-[0-9]+)?$"},
-          "fix": {"type": "string", "minLength": 1, "maxLength": 1000}
+          "fix": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "defer_rule": {"type": "string", "pattern": "^X[0-9A-Za-z]{1,3}\\.[0-9]{1,2}$"},
+          "to": {"type": "string", "pattern": "^(?:[0-9]{1,2}[a-c]?|feature)$"},
+          "class": {"type": "string", "enum": ["security", "privacy", "tenant-isolation", "other"]},
+          "ac": {"type": "string", "maxLength": 200},
+          "same_as": {"type": "string", "pattern": "^GC-[A-Za-z0-9_.-]+-[0-9]{1,4}$"},
+          "regression_of": {"type": "string", "pattern": "^GC-[A-Za-z0-9_.-]+-[0-9]{1,4}$"}
         }
       }
     },

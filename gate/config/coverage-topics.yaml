@@ -23,6 +23,45 @@ phases:
   "0":
     name: "BRD"
     role: "senior business analyst / product strategist"
+    depth:
+      decides:
+        - id: D0.1
+          what: "a business promise to a customer or partner"
+          keywords: ["guarantee", "guaranteed", "we promise", "money-back", "warranty"]
+        - id: D0.2
+          what: "a role's permissions (who may do what, in business terms)"
+          keywords: ["who may", "is allowed to", "is not allowed to", "must not be able to", "permission"]
+        - id: D0.3
+          what: "a money flow (who pays whom and when, refunds, chargebacks, payouts, commission, tax)"
+          keywords: ["refund policy", "payout", "chargeback", "commission", "who pays", "vat", "sales tax", "pricing model"]
+        - id: D0.4
+          what: "a legal or privacy duty (the named regime and what it requires of the business)"
+          keywords: ["gdpr", "ccpa", "pci dss", "lawful basis", "consent", "data protection", "regulation"]
+        - id: D0.5
+          what: "data ownership and the retention policy"
+          keywords: ["retention policy", "data owner", "owns the data", "kept for", "deleted after"]
+        - id: D0.6
+          what: "release scope (each feature in, later or rejected)"
+          keywords: ["out of scope", "in scope", "later release", "rejected", "mvp"]
+        - id: D0.7
+          what: "the existence of a lifecycle state"
+          keywords: ["lifecycle state", "new state", "state machine"]
+        - id: D0.B
+          what: "the phase's BLOCKER rules: a missing money flow or legal regime, generic personas, invented statistics, everything rated Must"
+          keywords: ["money flow", "legal regime", "generic persona", "statistic"]
+      defers:
+        - id: X0.1
+          what: "behaviour detail one story's acceptance criteria can settle (field lists, sorting, exact wording, exact table rows)"
+          to: "2"
+        - id: X0.2
+          what: "attack defences and abuse limits beyond the business rule"
+          to: "4"
+        - id: X0.3
+          what: "schema and API detail, including the mechanics of retention per record type"
+          to: "5"
+        - id: X0.4
+          what: "screen layout and copy"
+          to: "6"
     blockers: "missing money flow or legal regime; attacks generic personas, invented statistics, everything rated Must."
     topics:
       - id: B1
@@ -82,6 +121,30 @@ phases:
   "1":
     name: "Research"
     role: "research analyst / technical due diligence"
+    depth:
+      decides:
+        - id: D1.1
+          what: "a fact that changes a phase 0 decision (a regime applies or does not, a market or vendor exists, a cost's order of magnitude)"
+          keywords: ["applies to", "does not apply", "required by law", "market size", "order of magnitude"]
+        - id: D1.2
+          what: "a feasibility claim"
+          keywords: ["feasible", "infeasible", "not possible", "cannot be done"]
+        - id: D1.3
+          what: "a citation for every claim"
+          keywords: ["studies show", "statistic", "according to"]
+        - id: D1.B
+          what: "the phase's BLOCKER rules: an uncited legal or cost claim"
+          keywords: ["uncited", "per month", "legal requirement"]
+      defers:
+        - id: X1.1
+          what: "vendor or library choice among options already shown feasible"
+          to: "3"
+        - id: X1.2
+          what: "exact pricing tiers, quotas and rate limits"
+          to: "5"
+        - id: X1.3
+          what: "operational cost tuning"
+          to: "11"
     blockers: "uncited legal or cost claim."
     gate: "`cite-lint` (every claim has URL and date; links resolve)."
     topics:
@@ -120,6 +183,42 @@ phases:
   "2":
     name: "PRD"
     role: "senior PM / requirements engineer"
+    depth:
+      decides:
+        - id: D2.1
+          what: "every story and its acceptance criteria (EARS, testable)"
+          keywords: ["acceptance criterion", "acceptance criteria", "untestable"]
+        - id: D2.2
+          what: "the role x action matrix, including who must not"
+          keywords: ["role x action", "role × action", "is denied", "must not be able to"]
+        - id: D2.3
+          what: "every NFR, with a number and a unit"
+          keywords: ["nfr", "response time", "availability", "uptime", "p95", "p99"]
+        - id: D2.4
+          what: "the per-story mapping from business rule to acceptance criterion"
+          keywords: ["business rule", "br-"]
+        - id: D2.5
+          what: "per-story release scope (release slicing, walking skeleton)"
+          keywords: ["release slice", "walking skeleton", "mvp"]
+        - id: D2.6
+          what: "business validation rules (topic P6): what counts as valid input or a valid state, in business terms"
+          keywords: ["is valid", "is invalid", "must be at least", "must not exceed", "allowed values"]
+        - id: D2.B
+          what: "the phase's BLOCKER rules: an untestable AC or a missing authorization rule"
+          keywords: ["authorization rule", "untestable"]
+      defers:
+        - id: X2.1
+          what: "component, technology or integration pattern"
+          to: "3"
+        - id: X2.2
+          what: "attack defences beyond the authorization rule"
+          to: "4"
+        - id: X2.3
+          what: "how a business validation rule decided in P6 is encoded: field types, formats, patterns, endpoints and error codes (never what counts as valid)"
+          to: "5"
+        - id: X2.4
+          what: "screens, screen states and copy"
+          to: "6"
     blockers: "untestable AC or missing authorization rule."
     gate: "`ears-lint` (each AC matches an EARS template; no vague terms such as fast, user-friendly, appropriate, etc., TBD; no compound requirements; every NFR has number and unit; role × action matrix complete)."
     notes: "Evidence: PRD, AC.json."
@@ -173,6 +272,39 @@ phases:
   "3":
     name: "HLD"
     role: "staff architect"
+    depth:
+      decides:
+        - id: D3.1
+          what: "components and their boundaries"
+          keywords: ["component boundary", "bounded context"]
+        - id: D3.2
+          what: "data stores and data ownership per component"
+          keywords: ["data store", "source of truth", "owns the data"]
+        - id: D3.3
+          what: "the tenant-isolation design"
+          keywords: ["tenant isolation", "tenant-isolation", "multi-tenant"]
+        - id: D3.4
+          what: "integration and deployment topology"
+          keywords: ["deployment topology", "integration pattern", "region"]
+        - id: D3.5
+          what: "every H1 trade-off and the tactic for each top quality"
+          keywords: ["trade-off", "tradeoff", "quality attribute"]
+        - id: D3.B
+          what: "the phase's BLOCKER rules: no tenant-isolation design, or an unaddressed H1 trade-off"
+          keywords: ["tenant isolation", "unaddressed"]
+      defers:
+        - id: X3.1
+          what: "threat-specific controls"
+          to: "4"
+        - id: X3.2
+          what: "tables, columns, endpoints and state machines"
+          to: "5"
+        - id: X3.3
+          what: "environments, accounts, instance sizes and the secrets layout"
+          to: "6b"
+        - id: X3.4
+          what: "the library choice inside one component"
+          to: "7"
     blockers: "no tenant-isolation design, or an unaddressed H1 trade-off."
     gate: "LikeC4 build exits 0 (JSON configuration only); `.dependency-cruiser.json` rules name the H4 modules (JSON only); every container appears in H4/H13; every H1 attribute has a measurable scenario."
     topics:
@@ -225,6 +357,33 @@ phases:
   "4":
     name: "Threat Model"
     role: "security architect"
+    depth:
+      decides:
+        - id: D4.1
+          what: "the threats at each trust boundary"
+          keywords: ["trust boundary", "unmitigated"]
+        - id: D4.2
+          what: "a mitigation for each high-impact threat (control type and where it sits)"
+          keywords: ["no mitigation", "high-impact", "high impact"]
+        - id: D4.3
+          what: "abuse limits as numbers"
+          keywords: ["rate limit", "lockout", "attempts per", "requests per"]
+        - id: D4.4
+          what: "the SEC-n security requirements (SR- is shared resources, ruling 1 on increment 7)"
+          keywords: ["sec-"]
+        - id: D4.B
+          what: "the phase's BLOCKER rules: an unmitigated high-impact authz or tenant threat"
+          keywords: ["authz", "cross-tenant"]
+      defers:
+        - id: X4.1
+          what: "how a control is configured at an interface (header values, token lifetimes)"
+          to: "5"
+        - id: X4.2
+          what: "how a control is implemented in code (library, configuration)"
+          to: "7"
+        - id: X4.3
+          what: "how a control is verified"
+          to: "9"
     blockers: "unmitigated high-impact authz or tenant threat."
     gate: "pytm model (`tm/model.py`) runs and exits 0; every T-ID has a SEC-ID or accepted-risk record; SEC-CONTROLS.csv maps SEC-ID → T-ID → ASVS ID → verification method; ASVS IDs exist in 5.0.0."
     topics:
@@ -271,6 +430,36 @@ phases:
   "5":
     name: "LLD"
     role: "staff engineer / API designer"
+    depth:
+      decides:
+        - id: D5.1
+          what: "schema and migrations"
+          keywords: ["column", "migration", "foreign key"]
+        - id: D5.2
+          what: "every API, with its authorization and tenant scope"
+          keywords: ["endpoint", "tenant scope"]
+        - id: D5.3
+          what: "the error model"
+          keywords: ["error code", "error model"]
+        - id: D5.4
+          what: "state machines"
+          keywords: ["state machine", "transition"]
+        - id: D5.5
+          what: "validation rules as encoded (types, formats, patterns)"
+          keywords: ["regex", "pattern", "format"]
+        - id: D5.B
+          what: "the phase's BLOCKER rules: missing authz or tenant scope; an unapproved breaking change"
+          keywords: ["breaking change", "authz"]
+      defers:
+        - id: X5.1
+          what: "screen states and copy"
+          to: "6"
+        - id: X5.2
+          what: "code structure inside a module"
+          to: "7"
+        - id: X5.3
+          what: "test cases"
+          to: "8"
     blockers: "missing authz or tenant scope; unapproved breaking change."
     gate: "Redocly exits 0; vacuum OWASP ruleset clean; oasdiff against the last released spec shows no ERR without an approving ADR; squawk clean on Postgres migrations (N/A for SQLite); every operation has security, operationId, problem+json errors and an L15 row."
     topics:
@@ -321,6 +510,33 @@ phases:
   "6":
     name: "UX"
     role: "design lead"
+    depth:
+      decides:
+        - id: D6.1
+          what: "every P1 screen and its states"
+          keywords: ["empty state", "error state", "loading state"]
+        - id: D6.2
+          what: "flows"
+          keywords: ["user flow", "journey"]
+        - id: D6.3
+          what: "copy"
+          keywords: ["copy", "wording"]
+        - id: D6.4
+          what: "WCAG AA obligations"
+          keywords: ["wcag", "contrast", "screen reader", "keyboard"]
+        - id: D6.5
+          what: "tokens, motion and assets"
+          keywords: ["design token", "motion", "animation"]
+        - id: D6.B
+          what: "the phase's BLOCKER rules: a WCAG AA failure on a core journey, a missing state on a P1 screen"
+          keywords: ["wcag", "missing state"]
+      defers:
+        - id: X6.1
+          what: "component implementation"
+          to: "7"
+        - id: X6.2
+          what: "visual regression"
+          to: "10b"
     blockers: "WCAG AA failure on a core journey or a missing state on a P1 screen."
     gate: "tokens.json schema; own contrast script (body text ≥ 4.5:1); screen × state matrix CSV complete and covering every PRD screen; stylelint logical-properties rule in the product."
     topics:
@@ -367,6 +583,27 @@ phases:
   "6b":
     name: "Provisioning"
     role: "platform engineer"
+    depth:
+      decides:
+        - id: D6b.1
+          what: "environments, accounts and MFA"
+          keywords: ["mfa", "environment", "account"]
+        - id: D6b.2
+          what: "secrets handling"
+          keywords: ["secret", "credential"]
+        - id: D6b.3
+          what: "infrastructure as code"
+          keywords: ["terraform", "infrastructure as code", "iac"]
+        - id: D6b.B
+          what: "the phase's BLOCKER rules: a production credential reachable by the agent, or MFA missing"
+          keywords: ["production credential", "mfa"]
+      defers:
+        - id: X6b.1
+          what: "release gates and rollback"
+          to: "11"
+        - id: X6b.2
+          what: "SLOs and alerting"
+          to: "11"
     blockers: "a production credential reachable by the agent, or MFA missing."
     gate: "dotenvx check; .env.example lists every key the code reads; gitleaks clean; Trivy config scan. The agent never holds live credentials."
     topics:
@@ -403,6 +640,24 @@ phases:
   "7":
     name: "Implementation"
     role: "tech lead"
+    depth:
+      decides:
+        - id: D7.1
+          what: "the code matches the LLD and the tasks"
+          keywords: ["does not match the lld", "task"]
+        - id: D7.2
+          what: "code standards and the phase-7 rules"
+          keywords: ["r7-"]
+        - id: D7.B
+          what: "the phase's BLOCKER rules: a security or tenant defect; a test weakened or skipped to pass"
+          keywords: ["weakened", "skipped", "tenant"]
+      defers:
+        - id: X7.1
+          what: "test coverage completeness"
+          to: "8"
+        - id: X7.2
+          what: "security verification"
+          to: "9"
     blockers: "security or tenant defect; a test weakened or skipped to pass."
     gate: "`tsc --noEmit`, ESLint JSON, dependency-cruiser JSON (0 errors), knip JSON (0 or allow-listed with reason); every P1 AC has a T- task; every closed T- task links its tests."
     topics:
@@ -439,6 +694,24 @@ phases:
   "8":
     name: "Testing"
     role: "SDET / QA lead"
+    depth:
+      decides:
+        - id: D8.1
+          what: "a test per acceptance criterion"
+          keywords: ["untested", "no test"]
+        - id: D8.2
+          what: "thresholds set before the results"
+          keywords: ["threshold"]
+        - id: D8.B
+          what: "the phase's BLOCKER rules: an untested P1 AC, a missing cross-tenant deny test, a lowered threshold"
+          keywords: ["cross-tenant", "lowered"]
+      defers:
+        - id: X8.1
+          what: "exploratory and live checks"
+          to: "10a"
+        - id: X8.2
+          what: "load and concurrency"
+          to: "10c"
     blockers: "untested P1 AC, missing cross-tenant deny test, lowered threshold."
     gate: "JUnit, coverage JSON, ac-trace.json (no AC without a passing test), Stryker mutation.json threshold by size, Schemathesis report, axe JSON, no skipped test without waiver."
     topics:
@@ -477,6 +750,12 @@ phases:
   "9":
     name: "Security Verification"
     role: "AppSec engineer"
+    depth:
+      decides:
+        - id: D9.1
+          what: "everything in the phase's scope; security is never carried past phase 9"
+          keywords: []
+      defers: []
     blockers: "unresolved Critical/High; unverified authz or tenant control."
     gate: "SARIF from Semgrep, gitleaks, Trivy, ZAP, Claude Security; OSV JSON; sbom.cdx.json; SEC-VERIFICATION.csv; tool versions recorded; no open High/Critical without recorded acceptance. ZAP: passive baseline via Docker CLI against a disposable environment only."
     topics:
@@ -517,6 +796,16 @@ phases:
   "10a":
     name: "Live Verification"
     role: "QA lead / exploratory tester"
+    depth:
+      decides:
+        - id: D10a.1
+          what: "everything in the phase's scope"
+          keywords: ["p1"]
+      defers:
+        - id: X10a.1
+          what: "a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect)"
+          to: "11"
+          known_issue: true
     blockers: "unexercised P1 AC or element; \"verified\" by reading code."
     gate: "LV-INVENTORY.csv covers 100% of U13; every P1 AC has a trace; LHCI JSON; axe JSON."
     topics:
@@ -549,6 +838,16 @@ phases:
   "10b":
     name: "Regression"
     role: "SDET"
+    depth:
+      decides:
+        - id: D10b.1
+          what: "everything in the phase's scope"
+          keywords: ["p1"]
+      defers:
+        - id: X10b.1
+          what: "a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect)"
+          to: "11"
+          known_issue: true
     blockers: "uncovered critical journey; flaky gate test."
     topics:
       - id: RG1
@@ -574,6 +873,16 @@ phases:
   "10c":
     name: "Concurrency and Load"
     role: "SRE / performance engineer"
+    depth:
+      decides:
+        - id: D10c.1
+          what: "everything in the phase's scope"
+          keywords: ["p1"]
+      defers:
+        - id: X10c.1
+          what: "a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect)"
+          to: "11"
+          known_issue: true
     blockers: "invariant violation; SLO miss without ADR; thresholds set after seeing results."
     gate: "k6 JUnit and summary; thresholds in the script equal CL2; invariant output shows 0 violations. k6 is AGPL: run the unmodified binary, never vendor or patch it."
     topics:
@@ -600,6 +909,15 @@ phases:
   "11":
     name: "Release"
     role: "release manager / SRE"
+    depth:
+      decides:
+        - id: D11.1
+          what: "everything in the phase's scope"
+          keywords: []
+      defers:
+        - id: X11.1
+          what: "a process lesson"
+          to: "12"
     blockers: "no rehearsed rollback or restore; unpinned or injectable workflow."
     topics:
       - id: RL1
@@ -641,6 +959,15 @@ phases:
   "11b":
     name: "Store Release"
     role: "mobile release manager"
+    depth:
+      decides:
+        - id: D11b.1
+          what: "everything in the phase's scope"
+          keywords: []
+      defers:
+        - id: X11b.1
+          what: "a process lesson"
+          to: "12"
     blockers: "privacy-label mismatch."
     topics:
       - id: SR1
@@ -672,6 +999,12 @@ phases:
   "12":
     name: "Retro"
     role: "engineering manager"
+    depth:
+      decides:
+        - id: D12.1
+          what: "everything in the phase's scope"
+          keywords: []
+      defers: []
     blockers: "a change to MOADIX rules without approval."
     topics:
       - id: RT1
@@ -697,6 +1030,15 @@ phases:
   "B":
     name: "Baseline"
     role: "staff engineer doing technical due diligence on an existing codebase"
+    depth:
+      decides:
+        - id: DB.1
+          what: "what exists today, as the code shows it"
+          keywords: []
+      defers:
+        - id: XB.1
+          what: "anything to-be (a change, not a description of what exists): carried to the next feature cycle's phase 0"
+          to: "feature"
     blockers: "inferred behaviour presented as fact."
     topics:
       - id: BL1
@@ -729,6 +1071,18 @@ phases:
         title: "characterization tests for top hotspots"
       - id: BL15
         title: "frozen baseline tag. Also: the gate runs the product's existing test suite in the declared non-production environment"
+carry:
+  # 0.7.0 (docs/critic-convergence-design.md): the hard rules every CARRY finding is held to. A gap that
+  # matches no `defers` rule of its phase is judged at the current phase exactly as before 0.7.0
+  # (BLOCKER, MAJOR or MINOR); `decides` wins every overlap.
+  classes: ["security", "privacy", "tenant-isolation", "other"]
+  protected: ["security", "privacy", "tenant-isolation"]
+  protected_last_phase: "9"
+  class_keywords:
+    security: ["authentication", "authorization", "authz", "csrf", "xss", "injection", "password", "session token", "encryption", "rate limit", "brute force", "vulnerab"]
+    privacy: ["personal data", "pii", "consent", "gdpr", "privacy", "data subject", "erasure"]
+    tenant-isolation: ["tenant", "cross-tenant", "isolation"]
+  carry_note_ratio: 0.5
 feature_topics:
   blockers: "frozen-document change without a superseding ADR."
   topics:

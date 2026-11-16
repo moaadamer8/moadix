@@ -317,3 +317,8 @@ exemptions:
     token: 10b
     reason: "Increment 7d: the executing gates' phase-to-coverage-topic map (confinement-design section 3.7, Amendment 3); each gate's evidence is filed under the phase that owns its topic"
     owner: operator
+  - file: gate/config/coverage-topics.yaml
+    axis: phase
+    token: 9
+    reason: "0.7.0 ruling (docs/critic-convergence-design.md, section 2): security, privacy and tenant-isolation gaps are never carried past phase 9. This file is the declaring source of that rule (carry.protected_last_phase); gate/critic.py reads it from here"
+    owner: operator

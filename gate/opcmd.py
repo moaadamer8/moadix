@@ -50,6 +50,7 @@ COMMANDS = [
                          r"scope=(?P<scope>[A-Za-z0-9_./:*@-]{1,128}) "
                          r"expiry=(?P<expiry>\d{4}-\d{2}-\d{2}) reason=(?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("UNWAIVE", re.compile(r"^UNWAIVE " + PID + CODE + r"$")),
+    ("UNCARRY", re.compile(r"^UNCARRY (?P<id>(?:GC|CARRY)-[A-Za-z0-9_.-]{1,64})" + CODE + r"$")),
     ("PROCEED-PAST", re.compile(r"^PROCEED-PAST " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("PARK", re.compile(r"^PARK" + CODE + r"$")),
     ("INIT", re.compile(r"^INIT " + PID + CODE + r"$")),
@@ -65,6 +66,7 @@ USAGE = {
     "REOPEN": "REOPEN <phase> <reason> <code>",
     "WAIVE": "WAIVE <id>[,<id>...] owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>",
     "UNWAIVE": "UNWAIVE <id> <code>",
+    "UNCARRY": "UNCARRY <GC id or CARRY id> <code>",
     "PROCEED-PAST": "PROCEED-PAST <phase> <reason> <code>",
     "PARK": "PARK <code>",
     "INIT": "INIT <product-id> <code>",
@@ -145,6 +147,99 @@ def _summary(st):
         scope, st["current_phase"], st["ledger_seq"], w, parked, "; ".join(rows))
 
 
+def proceeded_phases(st):
+    """0.7.0 (Addition 2): [(label, reason, [still-open passed findings])] for every phase of the
+    scope closed by PROCEED-PAST. A passed finding is still open unless a waiver now covers it
+    (gap-critic.<GC id>, or a pre-0.7.0 topic waiver)."""
+    from . import verify
+    aw = verify.active_waivers(st)
+    out = []
+    for p in st.get("phases") or []:
+        if p.get("status") != "PROCEED-PAST":
+            continue
+        pl = {}
+        for e in reversed(st.get("_entries") or []):
+            if e["action"].split(" ", 1)[0] == "PROCEED-PAST":
+                x = state.decode_payload(e)
+                if x.get("phase") == p["label"] and x.get("feature") == st.get("feature"):
+                    pl = x
+                    break
+        still = [f for f in pl.get("passed_findings") or []
+                 if not ((f.get("gc") and "gap-critic.%s" % f["gc"] in aw) or
+                         (not f.get("gc") and "gap-critic.%s" % f.get("topic") in aw and f.get("severity") == "MAJOR"))]
+        out.append((p["label"], p.get("note") or pl.get("reason") or "", still))
+    return out
+
+
+def proceeded_summary(st):
+    from . import critic, verify
+    rows = proceeded_phases(st)
+    over = critic.overdue_carries(st, verify.active_waivers(st))
+    if not rows and not over:
+        return ""
+    t = ""
+    if rows:
+        t += " Phases closed by PROCEED-PAST (reported, not blocking): %s." % "; ".join(
+            "phase %s (%s)%s" % (lab, why[:160], ": still-open findings it passed: %s" % ", ".join(
+                "%s %s%s (%s)" % (f.get("severity"), f.get("id"), " [%s]" % f["gc"] if f.get("gc") else "",
+                                  f.get("topic")) for f in still[:8]) if still else ", no finding it passed is open")
+            for lab, why, still in rows)
+    if over:
+        t += " Open carried items whose target phase is closed (release blockers until settled or WAIVEd): %s." % (
+            ", ".join("%s (to phase %s, %s)" % (cid, c.get("to"), c.get("class")) for cid, c in over[:12]))
+    return t
+
+
+def carry_text(st2, payload, name, label):
+    from . import critic, verify
+    t = ""
+    if payload.get("carries"):
+        t += " Carried to later phases (recorded in this ledger line): %s." % ", ".join(
+            "%s -> phase %s (%s, %s)" % (c["id"], c["to"], c["rule"], c["class"]) for c in payload["carries"][:12])
+    if payload.get("carries_closed"):
+        t += " Settled here and closed: %s." % ", ".join(payload["carries_closed"])
+    if name == "PROCEED-PAST":
+        left = [cid for cid, c in critic.overdue_carries(st2, verify.active_waivers(st2)) if str(c.get("to")) == label]
+        if left:
+            t += (" Carried items addressed to phase %s stay OPEN and block the release until settled (REOPEN) or "
+                  "closed by WAIVE <carry id>: %s." % (label, ", ".join(left)))
+    return t
+
+
+def contract_status(root, st):
+    """0.7.0: STATUS lines for the critic's runs, carries, lapsed waivers and standing instructions."""
+    from . import critic, verify
+    aw = verify.active_waivers(st)
+    t = ""
+    label = st.get("current_phase")
+    if label and label != "done":
+        _run, reg = critic.latest_run(root, st, label)
+        if reg["runs"]:
+            t += " Gap critic on phase %s: %d run(s); findings per run %s; late findings %d; regressions %d." % (
+                label, len(reg["runs"]),
+                ", ".join(str(sum((r.get("counts") or {}).values())) for r in reg["runs"]),
+                sum(len(r.get("late") or []) for r in reg["runs"]),
+                sum(len(r.get("regressions") or []) for r in reg["runs"]))
+        cin = critic.carries_in(st, label, aw)
+        if cin:
+            t += " Carried into phase %s: %s." % (label, ", ".join(c for c, _x in cin))
+    allc = critic.carries(st)
+    if allc:
+        n_open = len(critic.open_carries(st, aw))
+        over = critic.overdue_carries(st, aw)
+        t += " Carries: %d recorded, %d open%s." % (len(allc), n_open, "; release blockers: %s" % ", ".join(
+            c for c, _x in over) if over else "")
+    hd = _git_head(root)
+    lapsed = critic.lapsed_waivers(root, st, hd, aw) if hd else []
+    if lapsed:
+        t += " Lapsed waivers (the cited text changed; the finding is judged afresh): %s." % ", ".join(
+            "%s (%s)" % (w, p) for w, p in lapsed)
+    si = adopt.standing_status(root, st)
+    if si:
+        t += " %s." % si
+    return t
+
+
 def _approval_digest(st, label):
     """The validator-result digest recorded by the APPROVE that approved `label`, if any."""
     for e in reversed(st.get("_entries") or []):
@@ -188,6 +283,8 @@ def _precheck(name, g, st):
         have = [i for i in ids if any(w["id"] == i for w in st["waivers"])]
         if have:
             return "waiver %s already exist%s" % (", ".join(have), "s" if len(have) == 1 else "")
+    if name == "UNCARRY":
+        return _uncarry_precheck(g["id"], st)
     if name == "UNWAIVE" and not any(w["id"] == g["id"] for w in st["waivers"]):
         return "there is no active waiver %s" % g["id"]
     if name == "PARK" and st["parked"]:
@@ -369,10 +466,10 @@ def _finding_severities(root):
     return out
 
 
-VERIFIER_FINDING = re.compile(r"^(?P<role>[a-z][a-z0-9-]*)\.(?P<fid>[A-Za-z0-9_-]{1,32})$")
+VERIFIER_FINDING = re.compile(r"^(?P<role>[a-z][a-z0-9-]*)\.(?P<fid>[A-Za-z0-9_.-]{1,64})$")
 
 
-def _verifier_finding(root, wid):
+def _verifier_finding(root, wid, extra=None):
     """Increment 5: a verifier finding id is `<role>.<finding id>` (code-reviewer.S2,
     live-verifier.F1), and Claude Security's are SF-n from the gate's register.
     Returns None when wid is neither; else (severity or None, where/why). The severity
@@ -380,7 +477,7 @@ def _verifier_finding(root, wid):
     from . import secscan, verify
     m = VERIFIER_FINDING.match(wid)
     if m and m.group("role") in verify.roles() and verify.roles()[m.group("role")].get("critic"):
-        return _critic_finding(root, m.group("role"), m.group("fid"))
+        return _critic_finding(root, m.group("role"), m.group("fid"), extra)
     if m and m.group("role") in verify.roles():
         role = verify.roles()[m.group("role")]
         ef = verify.evidence_file(root, str(role["phase"]), m.group("role"))
@@ -419,29 +516,92 @@ def _verifier_finding(root, wid):
     return None
 
 
-def _critic_finding(root, role, topic):
-    """Increment 7: a gap-critic waiver id is `gap-critic.<topic>` (stable across critic runs).
-    It may waive the critic's MAJOR findings on that topic in the current phase's evidence;
-    a BLOCKER is never waivable. Returns (severity or None, where)."""
-    from . import verify
+def _critic_finding(root, role, fid, extra=None):
+    """0.7.0: a gap-critic waiver binds ONE finding, `gap-critic.<GC id>` (the stable id the gate
+    gave it, shown in REVIEW and the brief). It may waive a MAJOR in the current phase's current
+    evidence; a BLOCKER is never waivable and a CARRY is not waived (it carries, or the operator
+    UNCARRYs it). The finding's fingerprint (topic, path, section, sha256 of the cited text) goes
+    in the ledger line through `extra`, so the waiver lapses when that text changes. A topic id
+    (`gap-critic.B9`, the pre-0.7.0 form) is refused for new waivers. Returns (severity or None, where)."""
+    from . import critic, verify
     st, problems = state.current_state(root)
     if problems:
         return None, "gate state failed its integrity check"
     label = st["current_phase"]
-    ef = verify.evidence_file(root, label, role)
-    try:
-        with open(ef) as f:
-            ev = json.load(f)
-    except (OSError, ValueError):
-        return None, "%s has no evidence for phase %s at %s" % (role, label, os.path.relpath(ef, root))
-    sevs = {str(fd.get("severity")) for fd in ev.get("findings") or []
-            if isinstance(fd, dict) and str(fd.get("topic")) == topic}
+    if not critic.GC_ID.match(fid):
+        return None, ("since 0.7.0 a gap-critic waiver binds one finding: name it by its id, gap-critic.GC-<phase>-<n> "
+                      "(REVIEW %s lists them), not by topic" % label)
+    ev, run, _sch = verify.current_critic(root, st, label)
+    if not ev:
+        return None, "%s has no current evidence for phase %s (launch it again)" % (role, label)
+    inv = {g: c for c, g in (run or {}).get("map", {}).items()}
+    cid = inv.get(fid)
+    fd = next((x for x in ev.get("findings") or [] if isinstance(x, dict) and str(x.get("id")) == cid), None)
     where = "phase %s evidence of %s" % (label, role)
-    if not sevs:
-        return None, "%s's evidence has no finding on topic %s" % (role, topic)
-    if "BLOCKER" in sevs:
+    if fd is None:
+        return None, "%s's current evidence has no finding %s" % (role, fid)
+    sev = str(fd.get("severity"))
+    if sev == "BLOCKER":
         return "blocker", where
-    return ("major" if "MAJOR" in sevs else "minor"), where
+    if sev == "CARRY" and fid not in (st.get("_uncarried") or []):
+        return None, ("%s is a CARRY, which is not waived: it carries to phase %s, or the operator pulls it back with "
+                      "UNCARRY %s <code>" % (fid, fd.get("to"), fid))
+    fp = (run.get("prints") or {}).get(fid) or {}
+    if extra is not None:
+        extra.setdefault("fingerprints", {})["%s.%s" % (role, fid)] = {
+            "gc": fid, "topic": str(fd.get("topic")), "path": fp.get("path"), "section": fp.get("section"),
+            "text": fp.get("text"), "text_sha": fp.get("text_sha"), "commit": run.get("commit"), "phase": label}
+    return ("major" if sev in ("MAJOR", "CARRY") else "minor"), where
+
+
+def _uncarry_precheck(fid, st):
+    return None  # judged with the evidence in _uncarry_gate
+
+
+def _uncarry_gate(root, st, fid):
+    """Ruling Q2: the operator pulls a carry back to the current phase. A GC id: a CARRY finding of
+    the current phase's current evidence then counts as a MAJOR. A CARRY id: an open carry in the
+    register is readdressed to the current phase, whose COVERAGE.md must then settle it. Reason or None."""
+    from . import critic, verify
+    label = st["current_phase"]
+    if critic.GC_ID.match(fid):
+        if fid in (st.get("_uncarried") or []):
+            return "%s was already uncarried" % fid
+        ev, run, _sch = verify.current_critic(root, st, label)
+        if not ev:
+            return "the gap critic has no current evidence for phase %s" % label
+        cid = {g: c for c, g in (run or {}).get("map", {}).items()}.get(fid)
+        fd = next((x for x in ev.get("findings") or [] if isinstance(x, dict) and str(x.get("id")) == cid), None)
+        if not fd or fd.get("severity") != "CARRY":
+            return "%s is not a CARRY finding in phase %s's current evidence" % (fid, label)
+        return None
+    c = critic.carries(st).get(fid)
+    if not c or c.get("status") != "open":
+        return "%s is not an open carried item" % fid
+    if str(c.get("to")) == str(label) and c.get("scope") == (st.get("feature") or "product"):
+        return "%s is already addressed to the current phase %s" % (fid, label)
+    return None
+
+
+def _carry_waive(root, cid, extra):
+    """Ruling Q5: an open carry whose target phase is already closed (approved, proceeded past or
+    collapsed) may be closed with WAIVE and a reason, one item at a time; the ledger line carries the
+    carry's text. A security, privacy or tenant-isolation carry cannot be waived. Reason or None."""
+    from . import critic, verify
+    st, problems = state.current_state(root)
+    if problems:
+        return "gate state failed its integrity check"
+    c = critic.carries(st).get(cid)
+    if c is None or c.get("status") != "open":
+        return "%s is not an open carried item" % cid
+    if cid not in {x for x, _c in critic.overdue_carries(st, verify.active_waivers(st))}:
+        return ("%s is addressed to phase %s, which is still to come or still open: settle it there. A WAIVE closes "
+                "only a carry whose target phase was closed without settling it" % (cid, c.get("to")))
+    if c.get("class") in critic.rules()["protected"]:
+        return "%s is a %s carry and CANNOT be waived; settle it (REOPEN its target phase)" % (cid, c.get("class"))
+    extra.setdefault("carries_waived", {})[cid] = {k: c.get(k) for k in (
+        "from", "to", "rule", "class", "topic", "quote", "citation", "fix", "commit", "gc")}
+    return None
 
 
 def _waiver_policy():
@@ -458,7 +618,7 @@ def _waiver_policy():
     return out
 
 
-def _waive_gate(root, g):
+def _waive_gate(root, g, extra=None):
     pol = _waiver_policy()
     try:
         exp = datetime.date(*(int(x) for x in g["expiry"].split("-")))
@@ -470,7 +630,10 @@ def _waive_gate(root, g):
     if days > pol["max_expiry_days"]:
         return "expiry %s is %d days out, beyond the %d-day maximum (gate/config/waivers.yaml)" % (
             g["expiry"], days, pol["max_expiry_days"])
-    vf = _verifier_finding(root, g["id"])
+    from . import critic
+    if critic.CARRY_ID.match(g["id"]):
+        return _carry_waive(root, g["id"], extra if extra is not None else {})
+    vf = _verifier_finding(root, g["id"], extra)
     if vf is not None:
         sev, where = vf
         if sev is None:
@@ -700,6 +863,9 @@ def handle(hook_input):
             except (adopt.ProposalError, OSError) as e:
                 verdict = "NOT adoptable as they stand: %s" % e
             val += " Pending proposals in %s/: %s (%s)." % (adopt.DIR, ", ".join(props[:10]), verdict)
+        if not problems:
+            with contextlib.suppress(Exception):  # STATUS always answers
+                val += contract_status(root, st)
         return _ctx("STATUS. %s. %s.%s Relay this to the operator verbatim." % (integrity, _summary(st), val))
     if name == "REVIEW":
         ph = _phase(st, g["phase"])
@@ -733,7 +899,8 @@ def handle(hook_input):
     payload = dict(g, source_commit=_git_head(root))
     if name == "FEATURE":
         payload["feature"] = g["id"]
-    elif st.get("feature") and name in ("APPROVE", "REOPEN", "PROCEED-PAST", "COLLAPSE", "WAIVE", "UNWAIVE"):
+    elif st.get("feature") and name in ("APPROVE", "REOPEN", "PROCEED-PAST", "COLLAPSE", "WAIVE", "UNWAIVE",
+                                         "UNCARRY"):
         payload["feature"] = st["feature"]  # Amendment 2 §6: ledger lines carry the feature id
     if not why and name == "COLLAPSE":
         extra, why = _collapse_gate(root, st, g["phase"])
@@ -771,11 +938,27 @@ def handle(hook_input):
             payload["ids"] = ids
         # Each id is judged as if waived alone; one refusal refuses the whole message (nothing is recorded).
         for i in ids:
-            why = _waive_gate(root, dict(g, id=i))
+            why = _waive_gate(root, dict(g, id=i), payload)
             if why:
                 if len(ids) > 1:
                     why = "%s (no id of this WAIVE was recorded)" % why
                 break
+    if not why and name == "UNCARRY":
+        why = _uncarry_gate(root, st, g["id"])
+        payload["phase"] = st["current_phase"]  # the phase the carry is pulled back to
+    if not why and name in ("APPROVE", "PROCEED-PAST"):
+        # 0.7.0: the phase's carries go in the ledger line (the register is the ledger), and an APPROVE
+        # closes the carries addressed to this phase that the critic raised nothing on.
+        from . import critic, verify
+        aw = verify.active_waivers(st)
+        ev, run, _sch = verify.current_critic(root, st, g["phase"])
+        out = critic.carries_out(root, st, g["phase"], run, ev, aw)
+        if out:
+            payload["carries"] = out
+        if name == "APPROVE" and ev:
+            closing = critic.carries_closing(st, g["phase"], ev, aw)
+            if closing:
+                payload["carries_closed"] = closing
     if not why and name == "PROCEED-PAST" and st.get("feature") and g["phase"] == pathmap.RELEASE:
         why = ("a feature's phase 11 merges its additions into the product documents, so it can only be APPROVED "
                "(on passing validators), never proceeded past")
@@ -802,7 +985,8 @@ def handle(hook_input):
             payload.update(counts=counts, stop=spec["stop"][1:], tag="moadix-parked-%d" % (st["ledger_seq"] + 1))
     if why:
         _burn_all(message)
-        return _ctx("%s NOT recorded: %s. Nothing changed; the code is spent." % (name, why))
+        tail = proceeded_summary(st) if name == "APPROVE" and g.get("phase") == pathmap.RELEASE else ""
+        return _ctx("%s NOT recorded: %s. Nothing changed; the code is spent.%s" % (name, why, tail))
 
     action = message.strip()[: -len(code) - 1]  # the command without its code
     prod = state.load_product(root)
@@ -848,8 +1032,18 @@ def handle(hook_input):
             nxt += " All phases are done."
     if name == "PROCEED-PAST" and payload.get("passed_findings"):
         nxt = " It passes these open gap-critic findings, recorded in the ledger: %s.%s" % (
-            "; ".join("%s %s (%s) at %s" % (f["severity"], f["id"], f["topic"], f["citation"])
+            "; ".join("%s %s%s (%s) at %s" % (f["severity"], f["id"], " [%s]" % f["gc"] if f.get("gc") else "",
+                                               f["topic"], f["citation"])
                       for f in payload["passed_findings"][:8]), nxt)
+    if name in ("APPROVE", "PROCEED-PAST"):
+        nxt += carry_text(st2, payload, name, g["phase"])
+        if g["phase"] == pathmap.RELEASE:
+            nxt += proceeded_summary(st2)
+    if name == "UNCARRY":
+        from . import critic
+        nxt = (" %s now counts as a MAJOR of phase %s: fix it, or WAIVE gap-critic.%s with a reason." % (
+            g["id"], st["current_phase"], g["id"]) if critic.GC_ID.match(g["id"]) else
+            " %s is now addressed to phase %s: its COVERAGE.md must settle it." % (g["id"], st["current_phase"]))
     if name == "COLLAPSE":
         nxt = " Phase %s collapsed by the size-%s profile (recorded ruling; checks not run: %s).%s" % (
             g["phase"], payload["size"], ", ".join(payload["checks_not_run"]) or "none", nxt)

@@ -124,9 +124,13 @@ def critic(E, p, label, findings=(), topics_checked=None, extra=None, agent="moa
     bh = re.search(r"^brief_sha256: ([0-9a-f]+)$", prompt, re.M).group(1)
     rcp = re.search(r"^receipt: ([0-9a-f]+)$", prompt, re.M).group(1)
     hd = re.search(r"^source_commit: ([0-9a-f]+)$", prompt, re.M).group(1)
+    ds = re.search(r"^docset_sha256: ([0-9a-f]{64})\b", prompt, re.M).group(1)
     req = re.findall(r"^- (\S+)$", prompt.split("## Required evidence paths")[1].split("\n## ")[0], re.M)
     tops = re.findall(r"^- ([A-Z]{1,3}\d{1,2}) ", prompt.split("## Topics of phase")[1].split("\n## ")[0], re.M)
-    ev = {"role": "gap-critic", "phase": label, "source_commit": hd, "brief_sha256": bh, "receipt": rcp,
+    if "## Carried into this phase" in prompt:  # 0.7.0: a critic checks every carry addressed to the phase
+        tops += re.findall(r"^- (CARRY-\S+) \(", prompt.split("## Carried into this phase")[1].split("\n## ")[0], re.M)
+    ev = {"role": "gap-critic", "phase": label, "source_commit": hd, "brief_sha256": bh, "docset_sha256": ds,
+          "receipt": rcp,
           "reviewed": req, "topics_checked": tops if topics_checked is None else topics_checked,
           "findings": list(findings)}
     ev.update(extra or {})

@@ -28,7 +28,9 @@ Every phase (Baseline and feature cycles too) leaves three things beside its doc
 
 **Phase 2** (ears-lint): each acceptance criterion is EARS (`The <system> shall ...`, `When <trigger>, the <system> shall ...`, `While <state>, ...`, `If <condition>, then the <system> shall ...`, `Where <feature>, ...`), one `shall`, no vague words (fast, user-friendly, appropriate, etc., TBD, should, ...); every story has an `If ..., then ...` AC; every NFR has a number and a unit; the role x action matrix (P3) marks every cell allow or deny and denies something. **Phase 1** (cite-lint): every URL carries a retrieval date on its line, every research claim has a source, and every link resolves.
 
-**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until the operator types `WAIVE gap-critic.<topic> owner=... expiry=... reason=...`; one WAIVE may name several, comma-separated: `WAIVE gap-critic.B9,gap-critic.B12 ...`) or MINOR (a file for the operator). Fix the documents, commit, and launch it again. It never passes a phase.
+**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until fixed or the operator types `WAIVE gap-critic.<GC id> owner=... expiry=... reason=...`; one WAIVE may name several, comma-separated), MINOR (a file for the operator) or CARRY (below the phase's depth: recorded for the later phase its defers rule names; never blocks this phase). The gate gives every finding a stable id, `GC-<phase>-<n>`, and the next brief lists earlier findings with what happened to each (waived, carried, ruled, fixed?, open), so findings converge. A waiver binds one finding and lapses when the cited text changes. To rule on a finding in the log, write `Rules: GC-<phase>-<n>` in the Q-n or ADR that decides it. Fix the documents, commit, and launch it again. It never passes a phase. A verifier's result stays current while its document set is byte-identical to the commit it reviewed: committing other files does not make it stale.
+
+**Depth and carries.** Each phase below lists what it decides and what it defers (to which phase). A gap that matches no defers rule is judged at the current phase exactly as before; decides wins every overlap; nothing about security, privacy or tenant isolation is carried past phase 9. On APPROVE or PROCEED-PAST the gate records the phase's carries in the ledger as `CARRY-<phase>-<n>`. The target phase's COVERAGE.md lists each one addressed to it (`- CARRY-0-3: [section](../NN-doc.md#anchor)` or `N/A: <reason>`; the gate's skeleton pre-lists them). A carry left open after its target phase closes blocks the release; the operator may close it with `WAIVE CARRY-<phase>-<n> ...` and a reason (never a security, privacy or tenant-isolation one) or pull a carry back with `UNCARRY <GC id or CARRY id> <code>`.
 
 **The size rule.** The size and platform ruling come from B19 (the BRD's `- **Size:**` and `- **Target Platform Ruling:**`). Topics N/A by default at that size may stay `N/A: size-default` (the skeleton fills in the canned reason); `partial` defaults still need a section. The operator can turn a default back on or rule a topic N/A through `ADOPT` of `.sdlc-proposals/config/coverage-overrides.yaml` (`turn_on: [ID]`, `na: [{topic: ID, reason: ...}]`); then write `N/A: operator`.
 
@@ -44,11 +46,17 @@ B1 problem and vision · B2 stakeholders and personas · B3 business model · B4
 
 Critic BLOCKER: missing money flow or legal regime; attacks generic personas, invented statistics, everything rated Must.
 
+Decides: D0.1 a business promise to a customer or partner; D0.2 a role's permissions (who may do what, in business terms); D0.3 a money flow (who pays whom and when, refunds, chargebacks, payouts, commission, tax); D0.4 a legal or privacy duty (the named regime and what it requires of the business); D0.5 data ownership and the retention policy; D0.6 release scope (each feature in, later or rejected); D0.7 the existence of a lifecycle state; D0.B the phase's BLOCKER rules: a missing money flow or legal regime, generic personas, invented statistics, everything rated Must.
+Defers: X0.1 behaviour detail one story's acceptance criteria can settle (field lists, sorting, exact wording, exact table rows) -> phase 2; X0.2 attack defences and abuse limits beyond the business rule -> phase 4; X0.3 schema and API detail, including the mechanics of retention per record type -> phase 5; X0.4 screen layout and copy -> phase 6.
+
 ### Phase 1 Research (role: research analyst / technical due diligence)
 
 R1 open questions · R2 competitor teardown (3–5 real products) · R3 user expectations · R4 legal with dated authoritative sources · R5 technical options compared · R6 third-party providers · R7 cost model at launch/10x/100x · R8 prior art and reuse · R9 decision log (ADRs) · R10 BRD changes · R11 source quality (URL + retrieval date, primary over secondary) · R12 build vs buy, lock-in, exit cost · R13 licence compatibility · R14 provider SLAs, quotas, data residency · R15 feasibility spikes · R16 new risks fed back to B16
 
 Critic BLOCKER: uncited legal or cost claim.
+
+Decides: D1.1 a fact that changes a phase 0 decision (a regime applies or does not, a market or vendor exists, a cost's order of magnitude); D1.2 a feasibility claim; D1.3 a citation for every claim; D1.B the phase's BLOCKER rules: an uncited legal or cost claim.
+Defers: X1.1 vendor or library choice among options already shown feasible -> phase 3; X1.2 exact pricing tiers, quotas and rate limits -> phase 5; X1.3 operational cost tuning -> phase 11.
 
 ### Phase 2 PRD (role: senior PM / requirements engineer)
 
@@ -56,11 +64,17 @@ P1 stories traced to goals · P2 EARS acceptance criteria · P3 role × action m
 
 Critic BLOCKER: untestable AC or missing authorization rule.
 
+Decides: D2.1 every story and its acceptance criteria (EARS, testable); D2.2 the role x action matrix, including who must not; D2.3 every NFR, with a number and a unit; D2.4 the per-story mapping from business rule to acceptance criterion; D2.5 per-story release scope (release slicing, walking skeleton); D2.6 business validation rules (topic P6): what counts as valid input or a valid state, in business terms; D2.B the phase's BLOCKER rules: an untestable AC or a missing authorization rule.
+Defers: X2.1 component, technology or integration pattern -> phase 3; X2.2 attack defences beyond the authorization rule -> phase 4; X2.3 how a business validation rule decided in P6 is encoded: field types, formats, patterns, endpoints and error codes (never what counts as valid) -> phase 5; X2.4 screens, screen states and copy -> phase 6.
+
 ### Phase 3 HLD (role: staff architect)
 
 H1 quality attributes ranked with trade-offs · H2 C4 context and containers as LikeC4 source · H3 architecture style with alternatives · H4 module boundaries · H5 data architecture · H6 performance design and budgets · H7 scalability · H8 concurrency and integrity · H9 integrations and failure behaviour · H10 security architecture · H11 reliability, backups, RTO/RPO · H12 observability · H13 deployment and rollback · H14 cost · H15 technology choices as ADRs · H16 future-proofing · H17 multi-tenancy isolation · H18 privacy and data residency · H19 i18n/RTL architecture · H20 fitness functions as dependency-cruiser rules in `.dependency-cruiser.json` (JSON only) · H21 operability for a solo operator · H22 ATAM risks, sensitivity and trade-off points · H23 readiness for native clients
 
 Critic BLOCKER: no tenant-isolation design, or an unaddressed H1 trade-off.
+
+Decides: D3.1 components and their boundaries; D3.2 data stores and data ownership per component; D3.3 the tenant-isolation design; D3.4 integration and deployment topology; D3.5 every H1 trade-off and the tactic for each top quality; D3.B the phase's BLOCKER rules: no tenant-isolation design, or an unaddressed H1 trade-off.
+Defers: X3.1 threat-specific controls -> phase 4; X3.2 tables, columns, endpoints and state machines -> phase 5; X3.3 environments, accounts, instance sizes and the secrets layout -> phase 6b; X3.4 the library choice inside one component -> phase 7.
 
 ### Phase 4 Threat Model (role: security architect)
 
@@ -68,11 +82,17 @@ T1 assets · T2 data flows and trust boundaries · T3 STRIDE per element · T4 a
 
 Critic BLOCKER: unmitigated high-impact authz or tenant threat.
 
+Decides: D4.1 the threats at each trust boundary; D4.2 a mitigation for each high-impact threat (control type and where it sits); D4.3 abuse limits as numbers; D4.4 the SEC-n security requirements (SR- is shared resources, ruling 1 on increment 7); D4.B the phase's BLOCKER rules: an unmitigated high-impact authz or tenant threat.
+Defers: X4.1 how a control is configured at an interface (header values, token lifetimes) -> phase 5; X4.2 how a control is implemented in code (library, configuration) -> phase 7; X4.3 how a control is verified -> phase 9.
+
 ### Phase 5 LLD (role: staff engineer / API designer)
 
 L1 OpenAPI contract · L2 error model (RFC 9457 problem details) · L3 API conventions · L4 schema, indexes, migrations · L5 state machines · L6 key sequences · L7 concurrency details · L8 module design · L9 background jobs · L10 configuration · L11 test strategy · L12 traceability · L13 idempotency and retries · L14 pagination/filter/sort contract · L15 endpoint authorization map (operation → permission → tenant rule) · L16 versioning and deprecation · L17 zero-downtime expand/contract migrations · L18 caching and ETags · L19 rate limits per endpoint · L20 events and webhooks · L21 tenant scoping in data access · L22 critical invariants and how each is proven
 
 Critic BLOCKER: missing authz or tenant scope; unapproved breaking change.
+
+Decides: D5.1 schema and migrations; D5.2 every API, with its authorization and tenant scope; D5.3 the error model; D5.4 state machines; D5.5 validation rules as encoded (types, formats, patterns); D5.B the phase's BLOCKER rules: missing authz or tenant scope; an unapproved breaking change.
+Defers: X5.1 screen states and copy -> phase 6; X5.2 code structure inside a module -> phase 7; X5.3 test cases -> phase 8.
 
 ### Phase 6 UX (role: design lead)
 
@@ -80,11 +100,17 @@ U1 information architecture · U2 flows · U3 design system · U4 every screen, 
 
 Critic BLOCKER: WCAG AA failure on a core journey or a missing state on a P1 screen.
 
+Decides: D6.1 every P1 screen and its states; D6.2 flows; D6.3 copy; D6.4 WCAG AA obligations; D6.5 tokens, motion and assets; D6.B the phase's BLOCKER rules: a WCAG AA failure on a core journey, a missing state on a P1 screen.
+Defers: X6.1 component implementation -> phase 7; X6.2 visual regression -> phase 10b.
+
 ### Phase 6b Provisioning (role: platform engineer)
 
 V1 accounts · V2 secrets and keys · V3 environments · V4 domains and email · V5 quotas and costs · V6 test data · V7 readiness check · V8 least-privilege IAM and MFA · V9 spend caps · V10 account recovery / break-glass · V11 SPF, DKIM, DMARC · V12 environment parity, no production data elsewhere · V13 infrastructure record · V14 secret rotation · V15 sandbox vs live keys
 
 Critic BLOCKER: a production credential reachable by the agent, or MFA missing.
+
+Decides: D6b.1 environments, accounts and MFA; D6b.2 secrets handling; D6b.3 infrastructure as code; D6b.B the phase's BLOCKER rules: a production credential reachable by the agent, or MFA missing.
+Defers: X6b.1 release gates and rollback -> phase 11; X6b.2 SLOs and alerting -> phase 11.
 
 ### Phase 7 Implementation (role: tech lead)
 
@@ -92,11 +118,17 @@ I1 task breakdown T- → AC · I2 definition of done per task · I3 slice order 
 
 Critic BLOCKER: security or tenant defect; a test weakened or skipped to pass.
 
+Decides: D7.1 the code matches the LLD and the tasks; D7.2 code standards and the phase-7 rules; D7.B the phase's BLOCKER rules: a security or tenant defect; a test weakened or skipped to pass.
+Defers: X7.1 test coverage completeness -> phase 8; X7.2 security verification -> phase 9.
+
 ### Phase 8 Testing (role: SDET / QA lead)
 
 TS1 strategy incl. what is not tested and why · TS2 AC traceability (`@AC-id` tags) · TS3 partitions, boundaries, decision tables, state transitions · TS4 a test per unwanted-behaviour AC · TS5 authz matrix allow and deny incl. cross-tenant · TS6 real-database integration (service containers the gate starts; no Testcontainers) · TS7 HTTP doubles (MSW), no live third-party calls · TS8 contract tests (Schemathesis, ephemeral environment only) · TS9 property tests for L22 invariants (fast-check) · TS10 mutation score (Stryker) · TS11 line/branch coverage · TS12 test-data builders · TS13 zero retries in the gate, quarantine list with expiry · TS14 axe checks · TS15 i18n missing-key and pseudo-locale/RTL checks · TS16 defect register
 
 Critic BLOCKER: untested P1 AC, missing cross-tenant deny test, lowered threshold.
+
+Decides: D8.1 a test per acceptance criterion; D8.2 thresholds set before the results; D8.B the phase's BLOCKER rules: an untested P1 AC, a missing cross-tenant deny test, a lowered threshold.
+Defers: X8.1 exploratory and live checks -> phase 10a; X8.2 load and concurrency -> phase 10c.
 
 ### Phase 9 Security Verification (role: AppSec engineer)
 
@@ -104,11 +136,17 @@ SV1 scope and ASVS level · SV2 SAST · SV3 SCA · SV4 secrets in full history �
 
 Critic BLOCKER: unresolved Critical/High; unverified authz or tenant control.
 
+Decides: D9.1 everything in the phase's scope; security is never carried past phase 9.
+Defers: nothing.
+
 ### Phase 10a Live Verification (role: QA lead / exploratory tester)
 
 LV1 element inventory from U13 · LV2 trace or video per P1 AC · LV3 every role incl. forbidden attempts by UI and URL · LV4 every state observed · LV5 every locale incl. RTL · LV6 all breakpoints + one mobile device or emulation · LV7 axe + keyboard pass · LV8 Lighthouse CI assertions · LV9 no console errors or failed requests · LV10 notifications received · LV11 sandbox payments (success, failure, refund) · LV12 browsers by size · LV13 defects with repro and trace
 
 Critic BLOCKER: unexercised P1 AC or element; "verified" by reading code.
+
+Decides: D10a.1 everything in the phase's scope.
+Defers: X10a.1 a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect) -> phase 11.
 
 ### Phase 10b Regression (role: SDET)
 
@@ -116,11 +154,17 @@ RG1 scope (all P1 ACs, critical journeys) · RG2 Playwright E2E tagged by AC · 
 
 Critic BLOCKER: uncovered critical journey; flaky gate test.
 
+Decides: D10b.1 everything in the phase's scope.
+Defers: X10b.1 a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect) -> phase 11.
+
 ### Phase 10c Concurrency and Load (role: SRE / performance engineer)
 
 CL1 workload model · CL2 p95/p99 and error-rate thresholds from SLOs · CL3 load, stress, spike (+ soak for M/L) · CL4 race tests with SQL invariant checks · CL5 slow queries, EXPLAIN, locks, deadlocks · CL6 fault injection (M/L) · CL7 backpressure and rate limits · CL8 capacity headroom · CL9 results vs H6 budgets · CL10 stated differences from production
 
 Critic BLOCKER: invariant violation; SLO miss without ADR; thresholds set after seeing results.
+
+Decides: D10c.1 everything in the phase's scope.
+Defers: X10c.1 a defect listed in the release notes as a known issue (only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect) -> phase 11.
 
 ### Phase 11 Release (role: release manager / SRE)
 
@@ -128,11 +172,17 @@ RL1 CI re-runs every gate tool at pinned versions · RL2 actions pinned by 40-ch
 
 Critic BLOCKER: no rehearsed rollback or restore; unpinned or injectable workflow.
 
+Decides: D11.1 everything in the phase's scope.
+Defers: X11.1 a process lesson -> phase 12.
+
 ### Phase 11b Store Release (role: mobile release manager)
 
 SR1 human-owned store accounts · SR2 signing-key custody · SR3 versioning · SR4 privacy labels / data-safety form mapped from the SBOM and SDK list · SR5 review pre-check (demo account, in-app account deletion, purchase rules, UGC moderation) · SR6 localized metadata and screenshots incl. RTL · SR7 age rating · SR8 permission purpose strings · SR9 TestFlight/internal tracks · SR10 phased rollout and halt criteria · SR11 crash-free threshold · SR12 OTA policy or N/A · SR13 export compliance
 
 Critic BLOCKER: privacy-label mismatch.
+
+Decides: D11b.1 everything in the phase's scope.
+Defers: X11b.1 a process lesson -> phase 12.
 
 ### Phase 12 Retro (role: engineering manager)
 
@@ -140,11 +190,17 @@ RT1 timeline · RT2 metrics (DORA four keys, phase cycle times, critic findings 
 
 Critic BLOCKER: a change to MOADIX rules without approval.
 
+Decides: D12.1 everything in the phase's scope.
+Defers: nothing.
+
 ### Phase B Baseline (role: staff engineer doing technical due diligence on an existing codebase)
 
 BL1 system inventory · BL2 as-is C4 (LikeC4) · BL3 dependency graph and cycles · BL4 dead code · BL5 as-is schema · BL6 API inventory and drift · BL7 as-is BRD/PRD, each item tagged observed / inferred / unknown · BL8 test inventory (+ mutation on hotspots) · BL9 hotspots (churn × complexity from `git log --numstat`) · BL10 security baseline (phase 9 scanners) · BL11 as-is threat model (pytm) · BL12 ops baseline · BL13 known gaps and risks · BL14 characterization tests for top hotspots · BL15 frozen baseline tag. Also: the gate runs the product's existing test suite in the declared non-production environment
 
 Critic BLOCKER: inferred behaviour presented as fact.
+
+Decides: DB.1 what exists today, as the code shows it.
+Defers: XB.1 anything to-be (a change, not a description of what exists): carried to the next feature cycle's phase 0 -> phase feature.
 
 ### Feature cycles (each in the feature's COVERAGE.md of the phase shown)
 

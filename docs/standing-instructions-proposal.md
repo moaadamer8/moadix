@@ -1,6 +1,8 @@
-# Standing instructions per product: proposal (0.6.4, item 7)
+# Standing instructions per product (proposed in 0.6.4, built in 0.7.0)
 
-Status: **proposal for the operator's review. Nothing here is built.**
+> **Standing instructions cannot change any gate rule.** They never relax or override a check, a path map, a waiver rule, a verifier's brief or an operator command, and the gate never reads them when it decides. They are the operator's standing guidance to the agent, nothing more.
+
+Status: **built in 0.7.0 as proposed** (Addition 3 of the 0.6.4 review). The same statement heads every `.sdlc/standing.md` the gate writes.
 
 ## The problem
 
@@ -12,7 +14,7 @@ The operator gives standing instructions about a product, such as "`reference/` 
 
 As a result, every new session repeats the same correction, and nothing proves which version of an instruction was in force when.
 
-## Proposal
+## How it works
 
 | | |
 |---|---|
@@ -29,6 +31,14 @@ As a result, every new session repeats the same correction, and nothing proves w
 - **Not a machine-wide file** like the local overlay (`~/.config/moadix/`). Instructions are per product. A machine-wide layer could be added later, read the same way.
 - **Not a new operator command carrying the text.** A message is capped at the checker's 512-character action, and editing a list through typed commands is clumsy. ADOPT already gives a reviewed, signed, digest-checked path.
 
-## Open question
+## What ADOPT checks (gate/adopt.py)
 
-**Q1.** Should a standing instruction also be able to bind the agent mechanically, for example "never write under `reference/`" becoming a path-map deny? Recommended: not in this step. Text only, and a path rule stays a path-map change through the maintainer, as today.
+- The file is UTF-8 text, at most 4 KB.
+- Every line is blank, a heading, `- SI-n: <instruction> (since YYYY-MM-DD)` or `- SI-n: withdrawn <why>`.
+- No ID appears twice.
+- Every ID in the adopted file is still there. An instruction is never deleted or renumbered: it is marked withdrawn.
+- The gate writes `.sdlc/standing.md` as its own header followed by the proposal, and the ADOPT line records the result's sha256.
+
+## Mechanical binding
+
+Not built. A standing instruction is text only. Making one bind the agent, for example turning "never write under `reference/`" into a path-map deny, stays a path-map change through the maintainer.

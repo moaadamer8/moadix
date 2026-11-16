@@ -239,7 +239,12 @@ NA_KINDS = [
     ("compromised",    "Compromised -- recorded, not trusted",  "COMP"),
     ("unknown",        "Could not be computed",                 "UNKN"),
     ("unmeasured",     "Declared and not measured",             "UNMS"),
+    ("proceeded-past", "Closed by PROCEED-PAST -- reported, not blocked", "PPST"),
 ]
+# MOADIX 0.7.0 (Addition 2): a phase the operator closed with PROCEED-PAST counts as closed here,
+# like an approval. It is never silent: each one is listed with its reason and every finding it
+# passed that is still open (na_lines "proceeded-past"). Open carried items block (ruling Q5).
+CLOSED = ("APPROVED", "PROCEED-PAST")
 NA_TAG = {k: t for k, _h, t in NA_KINDS}
 
 
@@ -559,7 +564,7 @@ def main():
     release_id = next((int(p["id"]) for p in phases
                        if str(p.get("label")) == RELEASE_LABEL), None)
     not_approved = [p for p in phases
-                    if str(p.get("status")) != "APPROVED"
+                    if str(p.get("status")) not in CLOSED
                     and str(p.get("label")) != RELEASE_LABEL
                     and str(p.get("label")) not in collapsed
                     and not (release_id is not None and int(p["id"]) > release_id)]
@@ -569,7 +574,7 @@ def main():
     # UNKNOWN about the INSTRUMENT (3.10) and fails; it is raised only when some
     # phase is actually unapproved, because that is the only state in which the
     # answer changes anything.
-    if collapse_unknown and any(str(p.get("status")) != "APPROVED" for p in phases):
+    if collapse_unknown and any(str(p.get("status")) not in CLOSED for p in phases):
         blockers.append(
             B("the size profile could not be determined (%s), so an unapproved phase "
             "cannot be told apart from a phase collapsed on purpose. Not knowing "
@@ -1025,6 +1030,23 @@ def main():
                             % (na.get("id"), profile),
                         kind='INSTRUMENT_ABSENT'))
 
+    for p in phases:
+        if str(p.get("status")) == "PROCEED-PAST":
+            _still = p.get("proceeded_open_findings") or []
+            na_lines.append(("proceeded-past", "phase %s closed by PROCEED-PAST: %s. %s" % (
+                p.get("label"), str(p.get("proceeded_reason") or "(no reason recorded)")[:300],
+                ("Findings it passed that are still open: %s" % "; ".join(
+                    "%s %s%s (%s) at %s" % (f.get("severity"), f.get("id"),
+                                            " [%s]" % f["gc"] if f.get("gc") else "", f.get("topic"),
+                                            f.get("citation")) for f in _still))
+                 if _still else "No finding it passed is still open.")))
+    for c in phase_doc.get("open_carries") or []:
+        blockers.append(B("carried item %s (from phase %s to phase %s, %s, class %s) is still open although "
+                          "phase %s is closed: \"%s\". Settle it (REOPEN phase %s) or, unless it is a security, "
+                          "privacy or tenant-isolation item, close it with WAIVE %s and a reason."
+                          % (c.get("id"), c.get("from"), c.get("to"), c.get("rule"), c.get("class"),
+                             c.get("to"), str(c.get("quote"))[:160], c.get("to"), c.get("id")),
+                          kind='PRODUCT_DEFECT'))
     if not_approved:
         blockers.append(B("phase(s) not APPROVED: %s"
                         % ", ".join(str(p.get("label")) for p in not_approved),
@@ -1055,7 +1077,7 @@ def main():
     pending = []
     for p in ordered:
         lbl, st = str(p.get("label")), str(p.get("status"))
-        if st == "APPROVED" and pending:
+        if st in CLOSED and pending:
             blockers.append(
                 B("phase %s is APPROVED but its predecessor(s) %s are not. That approval was "
                 "granted against a lifecycle that had not completed, and approving %s now "
@@ -1063,7 +1085,7 @@ def main():
                 "the earliest of them (`gate.sh reopen %s --cascade`) and re-approve in "
                 "order." % (lbl, ", ".join(pending), pending[0], lbl, pending[0], pending[0]),
                         kind='INTEGRITY'))
-        elif st != "APPROVED":
+        elif st not in CLOSED:
             pending.append(lbl)
 
     # ---------- 4-and-2, step 2: the recognition boundary ------------------
@@ -1182,7 +1204,7 @@ def main():
     # still unknown" is already in hand: no new signature, and no second source
     # that could disagree with the first.
     _unapproved = {str(q.get("label")) for q in phases
-                   if str(q.get("status")) != "APPROVED"}
+                   if str(q.get("status")) not in CLOSED}
     _still_unknown = {getattr(b, "phase", None) for b in _rec_blockers
                       if getattr(b, "kind", None) == "INSTRUMENT_ABSENT"}
     _all_resolved = bool(_unapproved) and not (_unapproved & _still_unknown)

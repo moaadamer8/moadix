@@ -145,6 +145,9 @@ def plan(root):
             raise ProposalError("%s/%s is %d bytes; the limit is %d" % (DIR, rel, st.st_size, MAX_BYTES))
         with open(full, "rb") as f:
             raw = f.read()
+        if rel == STANDING:
+            out.append((rel, standing_path(root), standing_result(root, raw), {"kind": "standing"}))
+            continue
         try:
             text = raw.decode("utf-8")
             doc = hlib.parse_yaml(text)
@@ -181,9 +184,101 @@ def plan(root):
                 raise ProposalError("product.yaml: the merge would change the product id")
             out.append((rel, target, merged.encode("utf-8"), {"kind": "product", "keys": sorted(doc)}))
         else:
-            raise ProposalError("%s/%s is not adoptable. Allowed: product.yaml (keys %s) and config/<name> for %s" % (
-                DIR, rel, ", ".join(PRODUCT_KEYS), ", ".join(sorted(hlib.PRODUCT_CONFIG))))
+            raise ProposalError("%s/%s is not adoptable. Allowed: product.yaml (keys %s), %s and config/<name> for "
+                                "%s" % (DIR, rel, ", ".join(PRODUCT_KEYS), STANDING, ", ".join(sorted(hlib.PRODUCT_CONFIG))))
     return out
+
+
+# ---------------------------------------------------------------- standing instructions (0.7.0)
+STANDING = "standing.md"
+STANDING_MAX = 4096
+STANDING_HEADER = (
+    "<!-- MOADIX standing instructions for this product. Written only by the gate, from "
+    ".sdlc-proposals/standing.md, when the operator types ADOPT <code>. -->\n"
+    "> **Standing instructions cannot change any gate rule.** They never relax or override a check, a path map, "
+    "a waiver rule, a verifier's brief or an operator command, and the gate does not read them when it decides. "
+    "They are the operator's standing guidance to the agent, shown at the start of each session.\n\n")
+SI_LINE = re.compile(r"^- (?P<id>SI-\d{1,4}): (?P<text>\S.*?)\s*$")
+SI_SINCE = re.compile(r"\(since (\d{4}-\d{2}-\d{2})\)\s*$")
+
+
+def standing_path(root):
+    return os.path.join(root, state.SDLC, STANDING)
+
+
+def _si_ids(text):
+    return [m.group("id") for m in (SI_LINE.match(ln) for ln in text.splitlines()) if m]
+
+
+def standing_body(text):
+    """The proposal without the gate's header (a copy of an adopted file may carry it)."""
+    return text[len(STANDING_HEADER):] if text.startswith(STANDING_HEADER) else text
+
+
+def standing_result(root, raw):
+    """Validate a standing-instructions proposal; return the bytes .sdlc/standing.md will hold."""
+    try:
+        text = standing_body(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        raise ProposalError("%s/%s is not UTF-8 text" % (DIR, STANDING)) from None
+    if len(text.encode("utf-8")) > STANDING_MAX:
+        raise ProposalError("%s/%s is longer than %d bytes" % (DIR, STANDING, STANDING_MAX))
+    ids = []
+    for n, ln in enumerate(text.splitlines(), 1):
+        if not ln.strip() or ln.startswith("#"):
+            continue
+        m = SI_LINE.match(ln)
+        if not m:
+            raise ProposalError("%s/%s line %d: each instruction is one bullet, `- SI-n: <instruction> (since "
+                                "YYYY-MM-DD)` or `- SI-n: withdrawn <why>`" % (DIR, STANDING, n))
+        if not m.group("text").lower().startswith("withdrawn") and not SI_SINCE.search(m.group("text")):
+            raise ProposalError("%s/%s line %d: %s has no `(since YYYY-MM-DD)`" % (DIR, STANDING, n, m.group("id")))
+        ids.append(m.group("id"))
+    if not ids:
+        raise ProposalError("%s/%s holds no instruction (`- SI-n: ...`)" % (DIR, STANDING))
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        raise ProposalError("%s/%s uses %s more than once" % (DIR, STANDING, ", ".join(dup)))
+    try:
+        with open(standing_path(root), encoding="utf-8") as f:
+            before = _si_ids(f.read())
+    except OSError:
+        before = []
+    gone = [i for i in before if i not in ids]
+    if gone:
+        raise ProposalError("%s/%s drops %s; an instruction is never deleted or renumbered, mark it `withdrawn`" % (
+            DIR, STANDING, ", ".join(gone)))
+    return (STANDING_HEADER + text.lstrip("\n")).encode("utf-8")
+
+
+def standing(root, st, problems=()):
+    """(text or None, note). The adopted standing instructions, shown only when the file is exactly
+    what its last ADOPT recorded; on drift, a note instead of the text."""
+    p = standing_path(root)
+    if not os.path.exists(p):
+        return None, None
+    if any(STANDING in x for x in problems or ()):
+        return None, ("%s/%s was changed outside ADOPT, so it is not shown as the operator's standing instructions; "
+                      "the operator re-adopts it (ADOPT <code>)" % (state.SDLC, STANDING))
+    seq = None
+    for e in (st or {}).get("_entries") or []:
+        files = state.decode_payload(e).get("files") or [] if e["action"].split(" ", 1)[0] == "ADOPT" else []
+        if any(f.get("target") == "%s/%s" % (state.SDLC, STANDING) for f in files):
+            seq = e["seq"]
+    if seq is None:
+        return None, ("%s/%s exists but no ADOPT recorded it, so it is not shown as the operator's" % (
+            state.SDLC, STANDING))
+    with open(p, encoding="utf-8") as f:
+        return f.read(), "adopted at ledger seq %d" % seq
+
+
+def standing_status(root, st):
+    text, note = standing(root, st)
+    if text is None:
+        return "standing instructions: %s" % note if note else ""
+    active = [ln for ln in text.splitlines() if SI_LINE.match(ln) and
+              not SI_LINE.match(ln).group("text").lower().startswith("withdrawn")]
+    return "standing instructions: %d active (%s)" % (len(active), note)
 
 
 def _validate_overrides(doc):

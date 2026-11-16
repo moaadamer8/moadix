@@ -388,14 +388,16 @@ def test_proceed_past():
     contract_fixture.critic(E, p, "1", findings=[blocker])
     E.review_until_fresh(p, "1", contract=False)
     exp = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
-    w = E.prompt(p, "WAIVE gap-critic.R4 owner=moad scope=phase-1 expiry=%s reason=let it through %s" % (exp, E.fresh()))
+    # 0.7.0: a waiver binds one finding by its stable id; the first finding of phase 1 is GC-1-1
+    w = E.prompt(p, "WAIVE gap-critic.GC-1-1 owner=moad scope=phase-1 expiry=%s reason=let it through %s" % (
+        exp, E.fresh()))
     record(G, "WAIVE never passes a BLOCKER", "NOT recorded" in w and "cannot be waived" in w, short(w))
     n0 = len(E.ledger(p))
     ctx = E.prompt(p, "PROCEED-PAST 1 the operator accepts the legal gap for the toy %s" % E.fresh())
     body, pl = E.payload(p, n0 + 1) if len(E.ledger(p)) > n0 else ({}, {})
     pf = pl.get("passed_findings") or []
     record(G, "PROCEED-PAST (operator, with code) passes the BLOCKER: recorded, and the reply names the finding",
-           "recorded" in ctx and "BLOCKER C1 (R4)" in ctx, short(ctx))
+           "recorded" in ctx and "BLOCKER C1 [GC-1-1] (R4)" in ctx, short(ctx))
     record(G, "the ledger line records the finding it passed: topic, severity, quote, citation, evidence sha256, commit",
            len(pf) == 1 and pf[0]["topic"] == "R4" and pf[0]["severity"] == "BLOCKER" and pf[0]["citation"] == blocker["citation"]
            and re.match(r"^[0-9a-f]{64}$", pf[0]["evidence_sha256"]) and "check-verifiers-1" in (pl.get("failing") or []),

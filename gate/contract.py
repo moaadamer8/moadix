@@ -54,7 +54,8 @@ SIZE_DEFAULT = "size-default"
 OPERATOR_NA = "operator"
 CRITIC = "gap-critic"
 CRITIC_FILE = "CRITIC.json"
-CRITIC_SEVERITIES = ("BLOCKER", "MAJOR", "MINOR")
+CRITIC_SEVERITIES = ("BLOCKER", "MAJOR", "MINOR", "CARRY")
+CARRY_SEV = "CARRY"
 _CACHE: dict = {}
 
 # ------------------------------------------------------------------ catalogue
@@ -298,8 +299,9 @@ def hollow(body):
 
 # ------------------------------------------------------------------ coverage-lint
 
-ENTRY = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\**(?P<id>[A-Z]{1,3}\d{1,2})\**\s*(?::|—|–|-)\s*(?P<rest>.*)$")
-TABLE_ENTRY = re.compile(r"^\s*\|\s*\**(?P<id>[A-Z]{1,3}\d{1,2})\**\s*\|(?P<rest>.*)$")
+_TOPIC_OR_CARRY = r"(?P<id>[A-Z]{1,3}\d{1,2}|CARRY-[A-Za-z0-9_.-]+-\d{1,4})"  # 0.7.0: carried items too
+ENTRY = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\**" + _TOPIC_OR_CARRY + r"\**\s*(?::|—|–|-)\s*(?P<rest>.*)$")
+TABLE_ENTRY = re.compile(r"^\s*\|\s*\**" + _TOPIC_OR_CARRY + r"\**\s*\|(?P<rest>.*)$")
 LINK = re.compile(r"\[[^\]]*\]\((?P<target>[^)\s]+)\)")
 NA = re.compile(r"^\s*\**N/?A\**\s*(?:(?::|—|–|-|\()\s*(?P<reason>.*?)\)?)?\s*$", re.I)
 BOILERPLATE = {"", "n/a", "na", "none", "not applicable", "not relevant", "irrelevant", "not needed", "tbd", "todo",
@@ -395,9 +397,31 @@ def coverage_lint(root, st, label):
     ov = overrides(root)
     dfl = defaults(label, size, ruling, ov, feature)
     ids = [t for t, _ in want]
+    from . import critic, verify
+    cin = critic.carries_in(st, label, verify.active_waivers(st))
     for tid in ents:
-        if tid not in ids:
-            fails.append("%s line %d: %s is not a topic of phase %s" % (rel, ents[tid]["line"], tid, label))
+        if tid not in ids and tid not in {c for c, _x in cin}:
+            fails.append("%s line %d: %s is not a topic of phase %s%s" % (
+                rel, ents[tid]["line"], tid, label, " nor an open carry addressed to it" if tid.startswith("CARRY-")
+                else ""))
+    for cid, c in cin:  # 0.7.0: every open carry addressed to the phase is settled here
+        e = ents.get(cid)
+        if e is None:
+            fails.append("%s: carried item %s (from phase %s, rule %s: \"%s\") is missing; settle it with a section "
+                         "anchor, or `N/A: <reason>`" % (rel, cid, c.get("from"), c.get("rule"),
+                                                         str(c.get("quote"))[:80]))
+            continue
+        for p in e["problems"]:
+            fails.append("%s line %d: %s: %s" % (rel, e["line"], cid, p))
+        if e["na"] is not None:
+            if _norm(e["na"]) in BOILERPLATE or len(re.findall(r"[A-Za-z]{2,}", e["na"])) < 4:
+                fails.append("%s: %s N/A reason %r is empty or boilerplate; say why the carried item needs nothing "
+                             "here" % (rel, cid, e["na"]))
+        else:
+            for frel, sec in e["sections"]:
+                if hollow(sec[3]):
+                    fails.append("%s: %s anchors %s#%s (line %d), which is hollow" % (
+                        rel, cid, frel, slug(sec[1]), sec[2]))
     reasons = {}
     na_count = anchored = 0
     for tid, title in want:
@@ -497,6 +521,10 @@ def skeleton(root, st, label):
             L.append("- %s: TODO  <!-- %s; %s -->" % (tid, title, d["reason"]))
         else:
             L.append("- %s: TODO  <!-- %s -->" % (tid, title))
+    from . import critic, verify
+    for cid, c in critic.carries_in(st, label, verify.active_waivers(st)):
+        L.append("- %s: TODO  <!-- carried from phase %s (%s): %s -->" % (
+            cid, c.get("from"), c.get("rule"), str(c.get("quote"))[:120].replace("--", "-")))
     return "\n".join(L) + "\n"
 
 
@@ -1223,28 +1251,43 @@ def _quote_in(root, hd, citation, quote):
     return norm(quote) in norm(win)
 
 
-def critic_check(root, st, label, ev, hd, citation_problem, active_waivers):
+def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=None):
     """(problems, blocking, info) for the gap critic's CRITIC.json: the schema, every topic of
-    the phase checked, each finding's topic one of them, its citation resolving at HEAD and
-    its quote found there. BLOCKERs block; MAJORs block unless WAIVEd (`gap-critic.<topic>`);
-    MINORs go to the operator's file."""
+    the phase (and every carry addressed to it) checked, each finding's topic one of them, its
+    citation resolving at the reviewed commit and its quote found there. BLOCKERs block; MAJORs
+    block unless the finding is WAIVEd (`gap-critic.<GC id>`, 0.7.0); a CARRY must meet the hard
+    rules (gate/critic.py) and blocks only when the operator UNCARRYs it; MINORs go to the
+    operator's file. `run` is the gate's archive of this evidence (critic.ingest): stable ids,
+    late findings, regressions."""
+    from . import critic
     probs = validate_schema(ev, schema())
     feature = bool(st and st.get("feature"))
     want = {t for t, _ in topics(label, feature)}
+    cin = {cid for cid, _c in critic.carries_in(st, label, active_waivers)}
     if ev.get("phase") != str(label):
         probs.append("phase %r, expected %r" % (ev.get("phase"), str(label)))
     checked = set(ev.get("topics_checked") or []) if isinstance(ev.get("topics_checked"), list) else set()
     miss = sorted(want - checked)
     if miss:
         probs.append("topics_checked misses %s: a gap critic checks every topic of the phase" % ", ".join(miss))
-    blocking, majors, minors, waived = [], [], [], []
+    miss = sorted(cin - checked)
+    if miss:
+        probs.append("topics_checked misses the carried item(s) %s: a gap critic checks every carry addressed to the "
+                     "phase" % ", ".join(miss))
+    run = run or {"map": {}, "late": [], "regressions": [], "problems": [], "prints": {}}
+    probs += list(run.get("problems") or [])
+    uncarried = set((st or {}).get("_uncarried") or [])
+    prios = None
+    blocking, majors, minors, waived, carried, lapsed = [], [], [], [], [], []
     for i, f in enumerate(ev.get("findings") or []):
         if not isinstance(f, dict):
             continue
         fid = str(f.get("id") or "#%d" % (i + 1))
         tid = str(f.get("topic") or "")
-        if tid not in want:
-            probs.append("finding %s: topic %r is not a topic of phase %s" % (fid, tid, label))
+        gid = run["map"].get(fid)
+        if tid not in want and tid not in cin:
+            probs.append("finding %s: topic %r is not a topic of phase %s nor a carry addressed to it" % (
+                fid, tid, label))
         why = citation_problem(f.get("citation"))
         if why:
             probs.append("finding %s: %s" % (fid, why))
@@ -1252,22 +1295,50 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers):
             probs.append("finding %s: its quote is not at %s (evidence must quote the document)" % (
                 fid, f.get("citation")))
         sev = f.get("severity")
-        line = "%s %s (%s): %s" % (sev, fid, tid, str(f.get("quote") or "")[:100])
+        tags = []
+        if gid in (run.get("late") or []):
+            tags.append("late")
+        if gid in (run.get("regressions") or []):
+            tags.append("regression")
+        line = "%s %s (%s)%s%s: %s" % (sev, fid, tid, " [%s]" % gid if gid else "",
+                                       " [%s]" % ", ".join(tags) if tags else "", str(f.get("quote") or "")[:100])
         if f.get("fix"):
             line += " -> fix: %s" % str(f["fix"])[:120]
+        fp = (run.get("prints") or {}).get(gid)
+        if sev == CARRY_SEV:
+            if prios is None:
+                prios = critic.story_priorities(root, st)
+            cp = critic.carry_problems(root, st, label, f, prios)
+            probs += cp
+            if gid and gid in uncarried:
+                sev = "MAJOR"
+                line = "MAJOR (uncarried by the operator) " + line[len(CARRY_SEV) + 1:]
+            elif not cp:
+                carried.append("%s -> phase %s (%s, %s)" % (line, f.get("to"), f.get("defer_rule"), f.get("class")))
+                continue
         if sev == "BLOCKER":
             blocking.append(line)
         elif sev == "MAJOR":
-            if "%s.%s" % (CRITIC, tid) in active_waivers:
+            covered, lapse = critic.waiver_covers(root, st, label, gid, tid, fp, active_waivers) if gid else (False, None)
+            if lapse:
+                lapsed.append(lapse)
+            if covered:
                 waived.append(line)
             else:
-                majors.append(line)
+                majors.append((line, gid))
         elif sev == "MINOR":
             minors.append(line)
-    info = {"blockers": blocking, "majors": majors, "minors": minors, "waived": waived,
+    big = len(blocking) + len(majors) + len(waived) + len(carried)
+    note = None
+    if carried and big and len(carried) / float(big) > critic.rules()["carry_note_ratio"]:
+        note = ("this run carries %d of its %d MAJOR-or-worse findings (more than %d%%); the operator may UNCARRY any "
+                "of them" % (len(carried), big, int(critic.rules()["carry_note_ratio"] * 100)))
+    info = {"blockers": blocking, "majors": [m for m, _g in majors], "minors": minors, "waived": waived,
+            "carried": carried, "lapsed": sorted(set(lapsed)), "late": list(run.get("late") or []),
+            "regressions": list(run.get("regressions") or []), "carry_note": note,
             "topics": len(want), "findings": len(ev.get("findings") or [])}
-    return probs, blocking + ["%s (WAIVE %s.%s with a reason, or fix it)" % (m, CRITIC, m.split("(", 1)[1].split(")")[0])
-                              for m in majors], info
+    return probs, blocking + ["%s (WAIVE %s.%s with a reason, or fix it)" % (
+        m, CRITIC, g or "<GC id>") for m, g in majors], info
 
 
 # ------------------------------------------------------------------ the phase's lints
@@ -1364,10 +1435,25 @@ def coverage_doc():
          "line, every research claim has a source, and every link resolves.",
          "",
          "**The gap critic.** When the phase is committed, launch `moadix:gap-critic` (the gate writes its brief). Its "
-         "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until the operator types "
-         "`WAIVE gap-critic.<topic> owner=... expiry=... reason=...`; one WAIVE may name several, comma-separated: "
-         "`WAIVE gap-critic.B9,gap-critic.B12 ...`) or MINOR (a file for the operator). Fix the documents, commit, "
-         "and launch it again. It never passes a phase.",
+         "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until fixed or the operator "
+         "types `WAIVE gap-critic.<GC id> owner=... expiry=... reason=...`; one WAIVE may name several, "
+         "comma-separated), MINOR (a file for the operator) or CARRY (below the phase's depth: recorded for the later "
+         "phase its defers rule names; never blocks this phase). The gate gives every finding a stable id, "
+         "`GC-<phase>-<n>`, and the next brief lists earlier findings with what happened to each (waived, carried, "
+         "ruled, fixed?, open), so findings converge. A waiver binds one finding and lapses when the cited text "
+         "changes. To rule on a finding in the log, write `Rules: GC-<phase>-<n>` in the Q-n or ADR that decides it. "
+         "Fix the documents, commit, and launch it again. It never passes a phase. A verifier's result stays current "
+         "while its document set is byte-identical to the commit it reviewed: committing other files does not make "
+         "it stale.",
+         "",
+         "**Depth and carries.** Each phase below lists what it decides and what it defers (to which phase). A gap "
+         "that matches no defers rule is judged at the current phase exactly as before; decides wins every overlap; "
+         "nothing about security, privacy or tenant isolation is carried past phase 9. On APPROVE or PROCEED-PAST "
+         "the gate records the phase's carries in the ledger as `CARRY-<phase>-<n>`. The target phase's COVERAGE.md "
+         "lists each one addressed to it (`- CARRY-0-3: [section](../NN-doc.md#anchor)` or `N/A: <reason>`; the "
+         "gate's skeleton pre-lists them). A carry left open after its target phase closes blocks the release; the "
+         "operator may close it with `WAIVE CARRY-<phase>-<n> ...` and a reason (never a security, privacy or "
+         "tenant-isolation one) or pull a carry back with `UNCARRY <GC id or CARRY id> <code>`.",
          "",
          "**The size rule.** The size and platform ruling come from B19 (the BRD's `- **Size:**` and `- **Target "
          "Platform Ruling:**`). Topics N/A by default at that size may stay `N/A: size-default` (the skeleton fills "
@@ -1395,6 +1481,11 @@ def coverage_doc():
         L += ["", " · ".join("%s %s" % (t["id"], t["title"]) for t in e.get("topics") or []), ""]
         if e.get("blockers"):
             L += ["Critic BLOCKER: %s" % e["blockers"], ""]
+        dep = e.get("depth") or {}
+        if dep:
+            L += ["Decides: %s." % "; ".join("%s %s" % (r["id"], r.get("what")) for r in dep.get("decides") or []),
+                  "Defers: %s." % ("; ".join("%s %s -> phase %s" % (r["id"], r.get("what"), r.get("to"))
+                                             for r in dep.get("defers") or []) or "nothing"), ""]
     ft = cat.get("feature_topics") or {}
     L += ["### Feature cycles (each in the feature's COVERAGE.md of the phase shown)", "",
           " · ".join("%s %s (phase %s)" % (t["id"], t["title"], t["phase"]) for t in ft.get("topics") or []), "",

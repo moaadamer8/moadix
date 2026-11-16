@@ -1,6 +1,6 @@
 # Gap-critic convergence: design (F-3)
 
-Status: **design for the operator's review. Nothing here is built.** Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
+Status: **approved by the operator with the rulings in §8, and built in 0.7.0.** Where the build differs from the text below, §9 says so. Written for 0.6.4 from finding F-3 of the first product run (onlineMarket, size L). That run needed 7 gap-critic runs on phase 0, with totals of 19, 17, 15, 15, 8, 12 and 13 findings, and closed with PROCEED-PAST.
 
 ## 1. Why the critic does not converge
 
@@ -36,20 +36,20 @@ The phase 0 rule is the operator's ruling recorded in F-3. The rules for the oth
 |---|---|---|
 | **0 BRD** | D0.1 a business promise; D0.2 a role's permissions (who may do what, in business terms); D0.3 a money flow (who pays whom, when, refunds, payouts, tax); D0.4 a legal or privacy duty (named regime and what it requires of the business); D0.5 data ownership and the retention *policy*; D0.6 release scope (each feature in, later or rejected); D0.7 the existence of a lifecycle state | X0.1 behaviour detail one story's ACs can settle (field lists, sorting, exact wording, table rows) → **2**; X0.2 attack defences and abuse limits beyond the business rule → **4**; X0.3 schema and API detail, including per-record-type retention mechanics → **5**; X0.4 screen layout and copy → **6** |
 | **1 Research** | D1.1 a fact that changes a phase 0 decision (a regime applies or does not, a market or vendor exists, a cost's order of magnitude); D1.2 a feasibility claim; D1.3 a citation for every claim | X1.1 vendor or library choice among feasible options → **3**; X1.2 exact pricing tiers, quotas, rate limits → **5**; X1.3 operational cost tuning → **11** |
-| **2 PRD** | D2.1 every story and its ACs (EARS, testable); D2.2 the role × action matrix; D2.3 every NFR with a number and a unit; D2.4 the per-story mapping from business rule to AC; D2.5 per-story release scope | X2.1 component, technology or integration pattern → **3**; X2.2 attack defences beyond the authorization rule → **4**; X2.3 field types, validation patterns, endpoints, error codes → **5**; X2.4 screens, states, copy → **6** |
+| **2 PRD** | D2.1 every story and its ACs (EARS, testable); D2.2 the role × action matrix; D2.3 every NFR with a number and a unit; D2.4 the per-story mapping from business rule to AC; D2.5 per-story release scope; D2.6 business validation rules: what counts as valid (P6) | X2.1 component, technology or integration pattern → **3**; X2.2 attack defences beyond the authorization rule → **4**; X2.3 how a P6 rule is encoded (field types, formats, patterns, endpoints, error codes; never what counts as valid) → **5**; X2.4 screens, states, copy → **6** |
 | **3 HLD** | D3.1 components and their boundaries; D3.2 data stores and data ownership per component; D3.3 the tenant-isolation design; D3.4 integration and deployment topology; D3.5 every H1 trade-off and the tactic for each top quality | X3.1 threat-specific controls → **4**; X3.2 tables, columns, endpoints, state machines → **5**; X3.3 environments, accounts, sizes, secrets layout → **6b**; X3.4 library choice inside one component → **7** |
-| **4 Threat Model** | D4.1 threats per trust boundary; D4.2 a mitigation per high-impact threat (control type and where it sits); D4.3 abuse limits as numbers; D4.4 the SR-n security requirements | X4.1 how a control is implemented (header values, library, configuration) → **5** or **7**; X4.2 how a control is verified → **9** |
+| **4 Threat Model** | D4.1 threats per trust boundary; D4.2 a mitigation per high-impact threat (control type and where it sits); D4.3 abuse limits as numbers; D4.4 the SEC-n security requirements | X4.1 how a control is configured at an interface (header values, token lifetimes) → **5**; X4.2 how it is implemented in code → **7**; X4.3 how it is verified → **9** |
 | **5 LLD** | D5.1 schema and migrations; D5.2 every API with authz and tenant scope; D5.3 the error model; D5.4 state machines; D5.5 validation rules | X5.1 screen states and copy → **6**; X5.2 code structure inside a module → **7**; X5.3 test cases → **8** |
 | **6 UX** | D6.1 every P1 screen and its states; D6.2 flows; D6.3 copy; D6.4 WCAG AA obligations; D6.5 tokens, motion, assets | X6.1 component implementation → **7**; X6.2 visual regression → **10b** |
 | **6b Provisioning** | D6b.1 environments, accounts, MFA; D6b.2 secrets handling; D6b.3 IaC | X6b.1 release gates and rollback → **11**; X6b.2 SLOs and alerting → **11** |
 | **7 Implementation** | D7.1 the code matches the LLD and the tasks; D7.2 code standards and the phase-7 rules | X7.1 coverage completeness → **8**; X7.2 security verification → **9** |
 | **8 Testing** | D8.1 a test per AC; D8.2 thresholds set before results | X8.1 exploratory and live checks → **10a**; X8.2 load and concurrency → **10c** |
 | **9 Security Verification** | everything in scope | nothing (security is never carried past 9) |
-| **10a / 10b / 10c** | everything in scope | X10.1 known issues for the release notes → **11** only |
+| **10a / 10b / 10c** | everything in scope | X10a.1 / X10b.1 / X10c.1 a known issue for the release notes → **11** only, and only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect (hard rule) |
 | **11 / 11b Release** | everything in scope | X11.1 process lessons → **12** |
 | **12 Retro**, **B Baseline** | everything in scope | B: X B.1 anything "to-be" → a feature cycle (FC topics); 12: nothing |
 
-Every phase also gets four hard rules:
+A gap that matches no defers rule is judged at the current phase exactly as before (ruling Q1d). Every phase also gets four hard rules:
 
 - A carry's target must be later than the current phase and not yet approved or proceeded past.
 - Nothing in the phase's `blockers` string or its `decides` list can be carried.
@@ -133,11 +133,23 @@ The risk is that a real gap gets labelled "later phase" and is never closed. The
   - a carry that is never settled blocks the target phase;
   - "decided too late" at the target phase.
 
-## 8. Open questions for the operator
+## 8. The operator's rulings
 
-- **Q1. The depth table (§2).** Accept it as written, or amend rows? Phase 0 is your F-3 ruling. The other phases are my proposal.
-- **Q2. UNCARRY.** Add an operator command to pull a carry back as a MAJOR? Recommended. Without it, the only lever is REOPEN, after the fact.
-- **Q3. Old topic waivers.** Honour them only for the findings that existed when they were recorded (recommended), until expiry? Or end them at the update?
-- **Q4. The carry threshold in §6.7.** Is "more than half of the MAJOR-or-worse findings" right, and should it only inform (proposed) or refuse?
-- **Q5. Proceeding past a target phase.** Its carries stay open and block phase 11 (proposed). Or should the PROCEED-PAST itself be refused while carries addressed to that phase are open?
-- **Q6. Late findings.** Only counted (proposed), or should a late MAJOR on unchanged text drop to MINOR after N runs (for example from run 4)? Dropping it would converge faster but could hide a real gap the critic missed earlier.
+- **Q1. The depth table.** Accepted, with four corrections. All four are in `gate/config/coverage-topics.yaml`.
+  - a. D4.4 names the security requirements **SEC-n**. SR- means shared resources (ruling 1 of increment 7).
+  - b. Phase 2 decides business validation rules: what counts as valid (D2.6, topic P6). X2.3 defers only how such a rule is encoded (formats, patterns, field types, endpoints, error codes), never what counts as valid, to phase 5.
+  - c. 10a/10b/10c defer a defect to the release notes as a known issue (X10a.1, X10b.1, X10c.1 → 11) only if it breaks no P1 acceptance criterion and is not a security, privacy or tenant-isolation defect. This is a hard rule. The carry must name the affected AC in `ac` (or `none`), and the gate reads each story's `**Priority:**` (must or P1) from the PRD.
+  - d. A gap that matches no defers rule is judged at the current phase exactly as before. The brief, the catalogue and `/moadix:coverage` say so.
+- **Q2. UNCARRY.** Yes, with a code: `UNCARRY <GC id or CARRY id> <code>`.
+- **Q3. Old topic waivers.** As recommended.
+- **Q4. The carry threshold.** It only informs.
+- **Q5. Proceeding past a target phase.** Carries stay open after PROCEED-PAST of their target phase and count as release blockers. The exit: the operator may close one open carry with `WAIVE CARRY-<phase>-<n> …` and a reason, one item at a time. The waiver is recorded in the ledger with the carry's text. A security, privacy or tenant-isolation carry cannot be waived.
+- **Q6. Late findings.** They are counted and shown, never downgraded. A late BLOCKER or MAJOR blocks at its severity.
+
+## 9. Where the build differs from the text above
+
+- **The register is the ledger, not a separate file.** §3 proposed `.sdlc/carry/<scope>.json`. Instead, each APPROVE or PROCEED-PAST line carries the phase's carries (`carries`, with their text) and the carries it closed (`carries_closed`), and `state.replay` rebuilds the register from the verified ledger. There is no second copy that could drift from it, and `phase.yaml` does not change (the register lives under unrendered keys).
+- **Archived runs and stable ids** live in `.sdlc/critic/<scope>-<label>.json`, which is gate-owned. A run is archived when the gate first checks stamped evidence, or before a relaunch supersedes it.
+- **Old topic waivers (Q3).** A 0.6.x waiver ledger line does not say which findings were open when it was recorded, and the evidence of that time was overwritten. So "only the findings that existed when they were recorded" is implemented as: only a MAJOR on that topic, in the phase where the waiver was recorded, whose cited text already existed at the waiver's commit. A finding on text written later is not covered.
+- **A WAIVE of a finding needs current evidence.** If the documents changed since the critic ran, the operator waits for the next run and waives the finding by its (unchanged) GC id.
+- **Two kinds of rule check.** The tripwires that test a carry against a phase's `decides` rules and the security, privacy and tenant classes are lexical: lists of words in the catalogue. They refuse a carry that names them, and do not judge meaning. The other hard rules (rule, target, order, closed phase, P1 AC) are exact.

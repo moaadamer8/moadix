@@ -474,7 +474,7 @@ def rel_to_root(path, root, cwd=None):
 # Phase model
 # --------------------------------------------------------------------------
 
-STATUSES = ("draft", "in-review", "APPROVED")
+STATUSES = ("draft", "in-review", "APPROVED", "PROCEED-PAST")  # 0.7.0: PROCEED-PAST closes a phase
 
 
 def load_phase_doc(root):
@@ -563,7 +563,7 @@ def v1_phase_doc(st):
         status = str(p.get("status") or "draft")
         ph = {"id": int(p.get("id", i)), "label": str(p.get("label")), "name": p.get("name"),
               "status": "APPROVED" if status == "APPROVED" else
-                        ("in-review" if status == "PROCEED-PAST" else "draft"),
+                        ("PROCEED-PAST" if status == "PROCEED-PAST" else "draft"),
               "approver": "operator" if status == "APPROVED" else None,
               "timestamp": p.get("at"), "evidence": []}
         if status == "APPROVED" and str(p.get("label")) in facts:

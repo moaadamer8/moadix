@@ -92,6 +92,7 @@ def handle(hook_input):
             note = bmadcore.ensure(root)
             if note:
                 notes.append(note)
+            notes += standing_notes(root)
     except Exception as e:  # never block a session from starting
         notes.append("BMad core could not be checked (%s)" % type(e).__name__)
     due = pins_due()
@@ -104,6 +105,21 @@ def handle(hook_input):
     if extra or due:
         out["systemMessage"] = text
     return out
+
+
+def standing_notes(root):
+    """0.7.0: the operator's standing instructions for this product (.sdlc/standing.md, adopted
+    through ADOPT), shown in full at session start. They cannot change any gate rule."""
+    from . import adopt, state
+    try:
+        st, problems = state.current_state(root)
+    except Exception as e:
+        return ["Standing instructions could not be read (%s)" % type(e).__name__]
+    text, note = adopt.standing(root, st, problems)
+    if text is None:
+        return [note] if note else []
+    return ["Operator's standing instructions for %s (%s). They cannot change any gate rule; follow them unless an "
+            "operator command or gate refusal says otherwise:\n%s" % (st.get("product"), note, text)]
 
 
 PIN_REVIEW_DAYS = 30

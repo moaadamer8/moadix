@@ -251,9 +251,79 @@ Steps:
 | 11 | `firebase deploy --project <your-production-project-id>`, with your real protected project id from the overlay in place of the placeholder | refused as `a protected production project`. The real id is needed: typed with the placeholder, the shell reads `<…>` as a redirection and the guard refuses it for that instead, so the protected-project rule is never tested. Run it from `~/moadix`, which has no `firebase.json`, so nothing could deploy even if the guard failed |
 | 12 | `firebase projects:list` | runs |
 
-## Updating from 0.4.0 to 0.6.4: the complete procedure
+## Updating from 0.6.3 to 0.7.0
 
-This takes you from the installed 0.4.0 to 0.6.4 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x, with the fixes from the first real-engine run in 0.6.2 and the dry run adapted to the increment 7 contract in 0.6.3, and the fixes from the first product run in 0.6.4). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+0.7.0 includes 0.6.4, which was committed but never installed. Nothing changes in the checker program, the Keychain, the overlay or the shape of the managed policy, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+
+**1. Confirm the version.** Docker Desktop: not needed. Claude Code sessions: may stay open.
+
+```
+cd ~/moadix && git log --oneline -2
+```
+
+Expected: the 0.7.0 commit on the first line and the 0.6.4 commit on the second. `cat .claude-plugin/plugin.json` shows `"version": "0.7.0"`.
+
+**2. Run the attack corpus.** Docker Desktop: not needed. Claude Code sessions: may stay open. It takes about 4–6 minutes.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/corpus/run.py
+```
+
+Expected last line: `128 checks, 128 passed, 0 failed`.
+
+**3. Run the install dry run.** Docker Desktop: not needed. Claude Code sessions: may stay open.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py
+```
+
+Expected last line: `19 checks, 19 passed`.
+
+**4. Run the real-engine suite of the confined gates.** Docker Desktop: **must be running**, with no other container running. 0.7.0 does not change the confined runner, and this step confirms that.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `31 checks, 31 passed, 0 failed (<seconds> s)`.
+
+**5. Reinstall.** Docker Desktop: not needed. Claude Code sessions: **must all be closed**. It asks for your macOS password once and shows the overlay: answer `y`.
+
+```
+cd ~/moadix && managed/install.sh
+```
+
+Expected last line: `MOADIX is updated.`
+
+**6. Refresh the plugin.** Open **one new** Claude Code session in `~/moadix` and type these two commands there, not in Terminal:
+
+```
+/plugin marketplace update moadix
+/reload-plugins
+```
+
+**7. Run the live policy check** in that session, one Bash tool call per line, exactly as in "Local overlay" above. Run `bash tests/install/policy_live.sh`, then checks 2–12. Check 4 needs the literal path and check 11 your real project id. Expected: `0 failed`; checks 3, 6, 7, 8, 9, 10 and 11 refused; checks 2, 4, 5 and 12 run.
+
+**8. In each product, the gap critic's memory starts with its next run.** Nothing to do by hand:
+
+- The first critic run on 0.7.0 is run 1 of its phase.
+- Findings now have ids, `GC-<phase>-<n>`, and a waiver names one of them: `WAIVE gap-critic.GC-1-4 …`.
+- A topic waiver (`gap-critic.B9`) is refused for new waivers. Waivers recorded before 0.7.0 keep working until they expire (ruling Q3).
+- Critic evidence written before the update must be produced again: the evidence now carries `docset_sha256`.
+
+**9. Push and tag.** Do this in **Terminal**.
+
+```
+cd ~/moadix && git push origin master
+git tag -a v0.7.0 -m "MOADIX 0.7.0"
+git push origin v0.7.0
+```
+
+Expected last line of the first command: `   6c2c6fc..<0.7.0 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.7.0 -> v0.7.0`.
+
+## Updating from 0.4.0 to 0.7.0: the complete procedure
+
+If 0.6.3 is installed, use "Updating from 0.6.3 to 0.7.0" above instead. This takes you from the installed 0.4.0 to 0.7.0 (main-branch guard and local overlay from 0.5.2, the contract and tool gates from 0.5.x, the confined executing gates from 0.6.x, with the fixes from the first real-engine run in 0.6.2 and the dry run adapted to the increment 7 contract in 0.6.3, the fixes from the first product run in 0.6.4, and gap-critic convergence, PROCEED-PAST at the release gate and standing instructions in 0.7.0). The checker program has not changed since 0.4.0, so this is an ordinary update: your Authenticator entry, Keychain secrets and ledgers are kept. Run every command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
 **1. Confirm the version you are about to install.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
@@ -261,7 +331,7 @@ This takes you from the installed 0.4.0 to 0.6.4 (main-branch guard and local ov
 cd ~/moadix && git log --oneline -1
 ```
 
-Expected last line: `<commit> 0.6.4: …` (the 0.6.4 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.6.4"`).
+Expected last line: `<commit> 0.7.0: …` (the 0.7.0 commit; `cat .claude-plugin/plugin.json` shows `"version": "0.7.0"`).
 
 **2. Create the local overlay.** Docker Desktop: not needed. Claude Code sessions: may stay open. The format is in "Local overlay" above. Put in your production Firebase project id and the hosts your products need. Skip the file entirely if you want no protected project and no extra hosts (then every `firebase` command that names a project is refused).
 
@@ -317,11 +387,11 @@ Expected last line: `Now run the GitHub CLI checks in docs/INSTALL.md as separat
 
 ```
 cd ~/moadix && git push origin master
-git tag -a v0.6.4 -m "MOADIX 0.6.4"
-git push origin v0.6.4
+git tag -a v0.7.0 -m "MOADIX 0.7.0"
+git push origin v0.7.0
 ```
 
-Expected last line of the first command: `   6c2c6fc..<0.6.4 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.6.4 -> v0.6.4`.
+Expected last line of the first command: `   6c2c6fc..<0.7.0 commit>  master -> master`. The tag command prints nothing. Expected last line of the third: ` * [new tag]         v0.7.0 -> v0.7.0`.
 
 ## 5. Uninstall
 

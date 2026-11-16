@@ -41,6 +41,22 @@ TIMEOUT = 180
 UV_PACKAGES = {"check_lld": ["pyyaml", "openapi-spec-validator"]}
 
 
+
+def phase_doc(st):
+    """v1's phase doc plus, since 0.7.0 (Addition 2), each phase closed by PROCEED-PAST with its reason
+    and the findings it passed that are still open, and the carried items whose target phase is
+    closed (release blockers, ruling Q5). Read by build-scorecard."""
+    from gate import critic, opcmd, verify
+    doc = hlib.v1_phase_doc(st)
+    pp = {lab: (why, still) for lab, why, still in opcmd.proceeded_phases(st)}
+    for p in doc.get("phases") or []:
+        if str(p.get("label")) in pp:
+            why, still = pp[str(p["label"])]
+            p["proceeded_reason"] = why
+            p["proceeded_open_findings"] = still
+    doc["open_carries"] = [dict(c, id=cid) for cid, c in critic.overdue_carries(st, verify.active_waivers(st))]
+    return doc
+
 def now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -146,7 +162,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="moadix-validate-") as tmp:
             doc_path = os.path.join(tmp, "phase-doc.json")
             with open(doc_path, "w") as f:
-                json.dump(hlib.v1_phase_doc(st), f)
+                json.dump(phase_doc(st), f)
             env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": os.environ.get("HOME", "/var/empty"),
                    "LANG": "en_US.UTF-8", "TMPDIR": tmp, "MOADIX_PRODUCT_ROOT": root,
                    "MOADIX_PHASE_DOC": doc_path, "MOADIX_GATE_RUN": "yes", "MOADIX_FEATURE": st.get("feature") or ""}

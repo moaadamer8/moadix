@@ -206,6 +206,33 @@ def replay(product_id, entries):
     product = _fresh_phases(pathmap.PHASES)
     features, order, active = {}, [], None
     waivers, parked = {}, None
+    # 0.7.0 (docs/critic-convergence-design.md): the carry register, UNCARRY rulings and the waivers'
+    # fingerprints. Kept under underscore keys: never rendered, so phase.yaml does not change.
+    carries, uncarried, wpay = {}, set(), {}
+
+    def _carry_lines(scope_name, phases, verb, pl, e):
+        ids = {p["label"]: p["id"] for p in phases}
+        if verb == "REOPEN":
+            at = ids.get(pl.get("phase"))
+            for c in carries.values():
+                if c["scope"] != scope_name or at is None:
+                    continue
+                if ids.get(c["from"], -1) >= at and c["status"] != "voided":
+                    c.update(status="voided", voided_seq=e["seq"])  # its phase will be approved again
+                elif c["status"] == "closed" and ids.get(c.get("closed_by"), -1) >= at:
+                    c.update(status="open", closed_seq=None, closed_by=None)
+            return
+        if verb not in ("APPROVE", "PROCEED-PAST"):
+            return
+        for item in pl.get("carries") or []:
+            if isinstance(item, dict) and item.get("id"):
+                carries[str(item["id"])] = dict(item, scope=scope_name, status="open", seq=e["seq"])
+        if verb == "APPROVE":
+            for cid in pl.get("carries_closed") or []:
+                c = carries.get(str(cid))
+                if c and c["status"] == "open" and c["scope"] == scope_name:
+                    c.update(status="closed", closed_seq=e["seq"], closed_by=pl.get("phase"))
+
     for e in entries:
         verb = e["action"].split(" ", 1)[0]
         pl = decode_payload(e)
@@ -222,12 +249,23 @@ def replay(product_id, entries):
                                  "merged": None}
                 order.append(fid)
                 active = fid
+                for c in carries.values():  # a baseline's to-be items go to the next feature's phase 0
+                    if c["scope"] == "product" and c["status"] == "open" and c.get("to") == "feature":
+                        c.update(scope=fid, to=pathmap.PHASES[0][1], bound_seq=e["seq"])
             continue
         fid = pl.get("feature")
+        if verb == "UNCARRY":
+            cid = str(pl.get("id") or "")
+            if cid.startswith("GC-"):
+                uncarried.add(cid)
+            elif cid in carries and carries[cid]["status"] == "open":
+                carries[cid].update(to=pl.get("phase"), scope=fid or "product", uncarried_seq=e["seq"])
+            continue
         if verb in PHASE_VERBS:
             if fid:
                 if fid not in features or features[fid]["status"] != "active":
                     continue  # a line for a feature that is not running applies to nothing
+                _carry_lines(fid, features[fid]["phases"], verb, pl, e)
                 _apply(features[fid]["phases"], verb, e, pl)
                 if verb == "APPROVE" and pl.get("merge"):
                     features[fid]["merged"] = {"seq": e["seq"], "at": e["ts"],
@@ -237,14 +275,20 @@ def replay(product_id, entries):
                     if active == fid:
                         active = None
             else:
+                _carry_lines("product", product, verb, pl, e)
                 _apply(product, verb, e, pl)
         elif verb == "WAIVE":
             # 0.6.4 (F-5): one WAIVE line may carry several ids (payload `ids`); each is its own waiver.
             ids = pl.get("ids") if isinstance(pl.get("ids"), list) and pl.get("ids") else [pl.get("id")]
+            cur = _current(features[fid]["phases"] if fid in features else product)
             for wid in ids:
                 waivers[wid] = {"id": wid, "owner": pl.get("owner"), "scope": pl.get("scope"),
                                 "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
                                 "at": e["ts"], "feature": fid}
+                wpay[wid] = {"seq": e["seq"], "source_commit": pl.get("source_commit"),
+                             "phase_at": cur["label"] if cur else None, "feature": fid,
+                             "fingerprints": {k: v for k, v in (pl.get("fingerprints") or {}).items() if k == wid},
+                             "carry": (pl.get("carries_waived") or {}).get(wid)}
         elif verb == "UNWAIVE":
             waivers.pop(pl.get("id"), None)
         elif verb == "PARK":
@@ -276,6 +320,9 @@ def replay(product_id, entries):
         "_feature_merged": {fid: features[fid]["merged"] for fid in order},
         "_head_ts": head["ts"] if head else None,
         "_entries": list(entries),  # verified ledger bodies (not rendered): payload digests, scorecard
+        "_carries": carries,
+        "_uncarried": sorted(uncarried),
+        "_waiver_payload": wpay,
     }
 
 

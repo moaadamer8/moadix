@@ -53,8 +53,8 @@ SEVERITIES = ("critical", "high", "medium", "low", "info")
 EVIDENCE_NAME = "findings.json"
 VERDICT_WORDS = re.compile(r"^(verdict|approved?|approval|pass(ed)?|ready|decision|status|result|outcome|lgtm|"
                            r"accept(ed)?|ship|merge)$", re.I)
-TOP_KEYS = {"role", "source_commit", "brief_sha256", "receipt", "reviewed", "findings", "coverage", "buttons", "notes",
-            "triage"}
+TOP_KEYS = {"role", "source_commit", "brief_sha256", "docset_sha256", "receipt", "reviewed", "findings", "coverage",
+            "buttons", "notes", "triage"}
 ASSESSMENTS = ("confirmed", "rejected")
 AC_RE = re.compile(r"^\s*[-*]\s*\*\*(AC-\d+)\s*(?:\(([^)]*)\))?\s*:?\*\*", re.I)  # v1 check_traceability
 CITATION = re.compile(r"^(?P<path>[^:\s][^:]*):(?P<a>\d+)(?:-(?P<b>\d+))?$")
@@ -228,6 +228,49 @@ def critic_paths(root, st, label, hd):
             pats = [g for g in globs if g.startswith("sdlc/")]
     files = _git(root, "ls-tree", "-r", "--name-only", hd, "--", "sdlc").splitlines()
     return sorted(p for p in files if pathmap.any_glob(pats, p))
+
+
+def critic_upstream(root, st, hd, required):
+    """The upstream and frozen documents a gap critic reads for contradictions."""
+    from . import contract
+    feature = bool(st.get("feature"))
+    return sorted(p for p in _git(root, "ls-tree", "-r", "--name-only", hd, "--", "sdlc").splitlines()
+                  if p not in required and p.endswith(".md") and (not p.startswith("sdlc/features/") or
+                                                                   (feature and p.startswith(contract.doc_dir(st)))))
+
+
+def tied_to_head(role):
+    """0.7.0 (Addition 1): roles whose result stays tied to HEAD, not to a document set.
+    live-verifier: it exercises the app built from the whole tree, so any file can change what it saw.
+    baseline-verifier: it checks the baseline's claims against code anywhere in the repository.
+    sf-triager: it triages the Claude Security scan, which the gate keys to HEAD (gate/secscan.py)."""
+    return bool(role.get("live") or role.get("baseline") or role.get("triage"))
+
+
+def docset(root, st, name, role, base, hd, required):
+    """(paths, sha256) of the phase's document set for this verifier at commit hd, or (None, None)
+    for a role tied to HEAD. A result stays current while every one of these files is
+    byte-identical (same blob) to the commit it reviewed; a commit that changes only other files
+    does not make it stale."""
+    if tied_to_head(role):
+        return None, None
+    paths = list(required)
+    if role.get("critic"):
+        paths += critic_upstream(root, st, hd, required)
+    elif role.get("coverage"):
+        paths += [s[3] for s in stories(root, st)]  # the acceptance criteria the tests are mapped to
+    paths = sorted(set(paths))
+    blobs = {}
+    if paths:
+        for ln in _git(root, "ls-tree", hd, "--", *paths).splitlines():
+            meta, _, p = ln.partition("\t")
+            parts = meta.split()
+            if len(parts) == 3:
+                blobs[p] = parts[2]
+    h = hashlib.sha256()
+    for p in paths:
+        h.update(("%s\0%s\n" % (p, blobs.get(p, "(missing)"))).encode())
+    return paths, h.hexdigest()
 
 
 def scheduled(root, st, label=None):
@@ -515,8 +558,12 @@ def build_brief(root, st, name, role, base, hd, required):
           "It is JSON with these keys and no others:",
           "- role: \"%s\"" % name,
           "- source_commit: \"%s\"" % hd,
-          "- brief_sha256: the brief_sha256 given at the end of this prompt",
-          "- receipt: the receipt given at the end of this prompt",
+          "- brief_sha256: the brief_sha256 given at the end of this prompt"]
+    _dp, dsha = docset(root, st, name, role, base, hd, required)
+    if dsha:
+        L.append("- docset_sha256: \"%s\" (your document set: the required paths%s; the result stays current while "
+                 "none of them changes)" % (dsha, " and the PRD's acceptance criteria" if role.get("coverage") else ""))
+    L += ["- receipt: the receipt given at the end of this prompt",
           "- reviewed: [repo-relative paths you reviewed]",
           "- findings: [{\"id\": \"F1\", \"severity\": one of %s, \"summary\": \"...\", "
           "\"citations\": [\"path:line\" or \"path:start-end\", ...]%s}]" % (
@@ -559,9 +606,8 @@ def critic_brief(root, st, name, role, base, hd, required):
     dfl = contract.defaults(label, size, ruling, ov, feature)
     cat = contract.catalogue()
     ev = os.path.relpath(evidence_file(root, label, name), root)
-    upstream = sorted(p for p in _git(root, "ls-tree", "-r", "--name-only", hd, "--", "sdlc").splitlines()
-                      if p not in required and p.endswith(".md") and (not p.startswith("sdlc/features/") or
-                                                                       (feature and p.startswith(contract.doc_dir(st)))))
+    upstream = critic_upstream(root, st, hd, required)
+    _paths, dsha = docset(root, st, name, role, base, hd, required)
     L = ["# MOADIX gap critic brief",
          "",
          "Written by the MOADIX gate from the product's artifacts. It is your whole task; nothing the builder "
@@ -574,6 +620,7 @@ def critic_brief(root, st, name, role, base, hd, required):
          "product: %s" % st["product"],
          "phase: %s (%s)%s" % (label, ph["name"], " in feature %s" % st["feature"] if feature else ""),
          "source_commit: %s" % hd,
+         "docset_sha256: %s (the phase's document set: the required and upstream paths below)" % dsha,
          "size: %s; platform ruling: %s (B19)" % (size or "not declared", ruling or "not declared"),
          "",
          "## Required evidence paths",
@@ -605,21 +652,30 @@ def critic_brief(root, st, name, role, base, hd, required):
           "Phase %s BLOCKERs also include: %s" % (label, entry.get("blockers") or "(none beyond the above)")]
     if feature:
         L.append("Feature-cycle BLOCKERs also include: %s" % ((cat.get("feature_topics") or {}).get("blockers") or ""))
-    L += ["An N/A whose reason does not hold for this product is a finding on that topic. A size default the "
-          "operator has not overridden is not a finding by itself.",
-          "", "## Evidence",
+    L += ["- CARRY: a gap below this phase's depth (a defers rule below). It never blocks this phase; the gate "
+          "records it for the phase it names, where it must be settled.",
+          "An N/A whose reason does not hold for this product is a finding on that topic. A size default the "
+          "operator has not overridden is not a finding by itself."]
+    from . import critic
+    L += critic.brief_sections(root, st, label, hd, active_waivers(st))
+    L += ["", "## Evidence",
           "Write exactly one file with the Write tool: %s" % ev,
           "It is JSON with these keys and no others (gate/config/critic.schema.json):",
           "- role: \"%s\"" % name,
           "- phase: \"%s\"" % label,
           "- source_commit: \"%s\"" % hd,
           "- brief_sha256: the brief_sha256 given at the end of this prompt",
+          "- docset_sha256: \"%s\"" % dsha,
           "- receipt: the receipt given at the end of this prompt",
           "- reviewed: [repo-relative paths you reviewed]",
-          "- topics_checked: [every topic ID listed above]",
-          "- findings: [{\"id\": \"C1\", \"topic\": \"<topic ID>\", \"severity\": \"BLOCKER\" | \"MAJOR\" | "
-          "\"MINOR\", \"quote\": \"<the exact words of the document you object to>\", \"citation\": "
-          "\"path:line\" or \"path:start-end\", \"fix\": \"<what would close the gap>\"}]; findings may be []",
+          "- topics_checked: [every topic ID listed above, and every carry id under \"Carried into this phase\"]",
+          "- findings: [{\"id\": \"C1\", \"topic\": \"<topic ID or carry id>\", \"severity\": \"BLOCKER\" | "
+          "\"MAJOR\" | \"MINOR\" | \"CARRY\", \"quote\": \"<the exact words of the document you object to>\", "
+          "\"citation\": \"path:line\" or \"path:start-end\", \"fix\": \"<what would close the gap>\"}]; findings "
+          "may be []. A CARRY adds \"defer_rule\" (a defers rule above), \"to\" (the phase it names) and \"class\" "
+          "(security, privacy, tenant-isolation or other); a known issue adds \"ac\". A finding the gate listed under "
+          "earlier runs adds \"same_as\": \"<GC id>\" (raised again) or \"regression_of\": \"<GC id>\" (a fix or "
+          "ruling that did not hold).",
           "- notes: optional free text",
           "The quote must appear at the cited lines in source_commit (for a missing topic, quote the coverage line or "
           "the heading where it should be). Do not include a verdict, a pass/fail field or a recommendation to "
@@ -649,6 +705,8 @@ def schedule_and_brief(root, st, name):
         raise VerifyError("not scheduled")
     role, base, hd, req = sch[name]
     label = str(role["phase"])
+    if role.get("critic"):
+        ingest_stamped(root, st, label, name)  # 0.7.0: archive the last run before its evidence is superseded
     brief = build_brief(root, st, name, role, base, hd, req)
     bh = sha256(brief)
     receipt = secrets.token_hex(16)
@@ -659,8 +717,10 @@ def schedule_and_brief(root, st, name):
         os.replace(ef, ef + ".superseded")
     with open(os.path.join(d, "brief.md"), "w") as f:
         f.write(brief)
+    dpaths, dsha = docset(root, st, name, role, base, hd, req)
     _write_json(os.path.join(d, "schedule.json"), {
         "role": name, "phase": label, "base": base, "head": hd, "required": req, "brief_sha256": bh,
+        "docset": dpaths, "docset_sha256": dsha,
         "receipt_sha256": sha256(receipt), "scheduled_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
     os.makedirs(evidence_dir(root, label, name), exist_ok=True)
     return brief + "\n---\nbrief_sha256: %s\nreceipt: %s\n" % (bh, receipt), bh
@@ -843,9 +903,10 @@ def check_role(root, st, name, role, base, hd, required):
             brief = f.read()
     except (OSError, ValueError):
         return "missing", ["%s:%s was not launched at this commit (no brief)" % (PLUGIN, name)], {}
-    if sch.get("head") != hd:
-        return "stale", ["the brief was for commit %s, HEAD is %s; launch %s:%s again" % (
-            str(sch.get("head"))[:12], hd[:12], PLUGIN, name)], {}
+    why = staleness(root, st, name, role, base, hd, required, sch)
+    if why:
+        return "stale", [why], {}
+    hd = sch["head"]  # 0.7.0: the evidence is about the commit it reviewed (same documents as HEAD)
     if sha256(brief) != sch.get("brief_sha256"):
         return "failing", ["the gate's brief.md no longer matches its recorded hash"], {}
     if sch.get("base") != base or sorted(sch.get("required") or []) != sorted(required):
@@ -873,17 +934,24 @@ def check_role(root, st, name, role, base, hd, required):
     if ev.get("role") != name:
         probs.append("role %r, expected %r" % (ev.get("role"), name))
     if ev.get("source_commit") != hd:
-        probs.append("source_commit %s does not match HEAD %s" % (str(ev.get("source_commit"))[:12], hd[:12]))
+        probs.append("source_commit %s does not match the reviewed commit %s" % (
+            str(ev.get("source_commit"))[:12], hd[:12]))
     if ev.get("brief_sha256") != sch.get("brief_sha256"):
         probs.append("brief_sha256 %s does not match the gate's brief %s" % (
             str(ev.get("brief_sha256"))[:12], str(sch.get("brief_sha256"))[:12]))
+    if sch.get("docset_sha256") and ev.get("docset_sha256") != sch["docset_sha256"]:
+        probs.append("docset_sha256 %s does not match the gate's document set %s" % (
+            str(ev.get("docset_sha256"))[:12], sch["docset_sha256"][:12]))
     if sha256(str(ev.get("receipt") or "")) != sch.get("receipt_sha256"):
         probs.append("the receipt does not match the one the gate put in the verifier's prompt (the evidence was "
                      "not written by the verifier the gate briefed)")
-    if probs and any("receipt" in p or "brief_sha256" in p or "source_commit" in p for p in probs):
+    if probs and any("receipt" in p or "brief_sha256" in p or "source_commit" in p or "docset_sha256" in p
+                     for p in probs):
         return "failing", probs, info
     if role.get("critic"):
-        return _check_critic(root, st, label, required, ev, info)
+        from . import critic
+        run = critic.ingest(root, st, label, ev, sch.get("receipt_sha256"), info["evidence_sha256"])
+        return _check_critic(root, st, label, required, ev, info, run)
     reviewed = ev.get("reviewed")
     if not isinstance(reviewed, list) or not all(isinstance(x, str) for x in reviewed):
         probs.append("reviewed is not a list of paths")
@@ -969,7 +1037,7 @@ def active_waivers(st):
     return out
 
 
-def _check_critic(root, st, label, required, ev, info):
+def _check_critic(root, st, label, required, ev, info, run=None):
     """Increment 7: the gap critic's CRITIC.json (gate/contract.py critic_check). A critic never
     passes a phase: its evidence can only block it (an open BLOCKER, an unwaived MAJOR)."""
     from . import contract
@@ -977,7 +1045,7 @@ def _check_critic(root, st, label, required, ev, info):
     memo = {}
     reviewed = ev.get("reviewed") if isinstance(ev.get("reviewed"), list) else []
     probs, blocking, cinfo = contract.critic_check(
-        root, st, label, ev, hd, lambda c: _citation_problem(root, hd, c, memo), active_waivers(st))
+        root, st, label, ev, hd, lambda c: _citation_problem(root, hd, c, memo), active_waivers(st), run)
     miss = [p for p in required if p not in reviewed]
     if miss:
         probs.append("required paths not reviewed: %s" % ", ".join(miss[:8]))
@@ -1076,6 +1144,68 @@ def _check_live(root, label, name, role, hd, ev, probs, blocking, info, st=None)
         info["acs" if key == "coverage" else "buttons"] = len(want)
 
 
+def staleness(root, st, name, role, base, hd, required, sch):
+    """None when the verifier's result is current at hd, else why it is stale. 0.7.0 (Addition 1):
+    a result stays current while every file in its document set is byte-identical to the commit it
+    reviewed (digests compared, not HEAD). Roles tied to HEAD (tied_to_head), and schedules written
+    before 0.7.0 (no digest), still compare HEAD."""
+    if sch.get("base") != base or sorted(sch.get("required") or []) != sorted(required):
+        return "the brief's diff range or required paths no longer match; launch %s:%s again" % (PLUGIN, name)
+    if tied_to_head(role) or not sch.get("docset_sha256"):
+        if sch.get("head") != hd:
+            return "the brief was for commit %s, HEAD is %s; launch %s:%s again" % (
+                str(sch.get("head"))[:12], hd[:12], PLUGIN, name)
+        return None
+    _paths, now = docset(root, st, name, role, base, hd, required)
+    if now != sch["docset_sha256"]:
+        return ("a document the verifier reviewed at commit %s changed since (document set %s, now %s); launch "
+                "%s:%s again" % (str(sch.get("head"))[:12], sch["docset_sha256"][:12], now[:12], PLUGIN, name))
+    return None
+
+
+def _read_stamped(root, label, name):
+    """(schedule, evidence, raw) when the evidence carries the schedule's receipt, brief and commit."""
+    d = _dir(root, label, name)
+    try:
+        with open(os.path.join(d, "schedule.json")) as f:
+            sch = json.load(f)
+        with open(evidence_file(root, label, name), "rb") as f:
+            raw = f.read()
+        ev = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None, None, None
+    if not isinstance(ev, dict) or sha256(str(ev.get("receipt") or "")) != sch.get("receipt_sha256") or \
+            ev.get("brief_sha256") != sch.get("brief_sha256") or ev.get("source_commit") != sch.get("head"):
+        return None, None, None
+    return sch, ev, raw
+
+
+def ingest_stamped(root, st, label, name):
+    """Archive the critic's current evidence as a run (critic.ingest) if it is stamped; None otherwise."""
+    from . import critic
+    sch, ev, raw = _read_stamped(root, label, name)
+    if not sch:
+        return None
+    return critic.ingest(root, st, label, ev, sch.get("receipt_sha256"), hashlib.sha256(raw).hexdigest())
+
+
+def current_critic(root, st, label):
+    """(evidence, run, schedule) of the phase's gap critic when its evidence is stamped and current
+    (not stale) at HEAD; (None, None, None) otherwise."""
+    try:
+        sch_all = scheduled(root, st, label)
+    except VerifyError:
+        return None, None, None
+    for name, (role, base, hd, req) in sch_all.items():
+        if not role.get("critic"):
+            continue
+        sch, ev, _raw = _read_stamped(root, label, name)
+        if not sch or staleness(root, st, name, role, base, hd, req, sch):
+            return None, None, None
+        return ev, ingest_stamped(root, st, label, name), sch
+    return None, None, None
+
+
 def check_phase(root, st, label):
     """[(role, status, problems, info)] for every verifier the phase requires."""
     out = []
@@ -1091,33 +1221,27 @@ def passed_findings(root, st, label):
     """Increment 7b: the open gap-critic findings (BLOCKER, and MAJOR not waived) in the phase's
     CRITIC.json at HEAD, for the PROCEED-PAST ledger line: PROCEED-PAST is the operator's only way
     past a BLOCKER, and the ledger records what it passed. [] when there is no critic evidence."""
-    import hashlib as _h
+    from . import critic
     out = []
-    try:
-        sch = scheduled(root, st, label)
-    except VerifyError:
+    ev, run, sch = current_critic(root, st, label)
+    if not ev:
         return out
     waived = active_waivers(st)
-    for name, (role, _base, hd, _req) in sorted(sch.items()):
-        if not role.get("critic"):
+    uncarried = set(st.get("_uncarried") or [])
+    for fd in ev.get("findings") or []:
+        if not isinstance(fd, dict):
             continue
-        ef = evidence_file(root, label, name)
-        try:
-            with open(ef, "rb") as f:
-                raw = f.read()
-            ev = json.loads(raw.decode("utf-8"))
-        except (OSError, ValueError, UnicodeDecodeError):
-            continue
-        if ev.get("source_commit") != hd:
-            continue
-        for fd in ev.get("findings") or []:
-            if not isinstance(fd, dict):
-                continue
-            sev = fd.get("severity")
-            if sev == "BLOCKER" or (sev == "MAJOR" and "%s.%s" % (name, fd.get("topic")) not in waived):
-                out.append({"role": name, "id": str(fd.get("id")), "topic": str(fd.get("topic")), "severity": sev,
-                            "quote": str(fd.get("quote") or "")[:300], "citation": str(fd.get("citation") or ""),
-                            "evidence_sha256": _h.sha256(raw).hexdigest(), "source_commit": hd})
+        sev = fd.get("severity")
+        gid = (run or {}).get("map", {}).get(str(fd.get("id")))
+        fp = (run or {}).get("prints", {}).get(gid)
+        if sev == "CARRY" and gid in uncarried:
+            sev = "MAJOR"
+        if sev == "BLOCKER" or (sev == "MAJOR" and not critic.waiver_covers(
+                root, st, label, gid, str(fd.get("topic")), fp, waived)[0]):
+            out.append({"role": "gap-critic", "id": str(fd.get("id")), "gc": gid, "topic": str(fd.get("topic")),
+                        "severity": sev, "quote": str(fd.get("quote") or "")[:300],
+                        "citation": str(fd.get("citation") or ""), "evidence_sha256": (run or {}).get("evidence_sha256"),
+                        "source_commit": sch.get("head")})
     return out
 
 
