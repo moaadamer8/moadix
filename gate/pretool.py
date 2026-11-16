@@ -135,6 +135,27 @@ def _link_reason(src_abs, session_root):
     return None
 
 
+FIND_PATTERN_FLAGS = {"-name", "-iname", "-path", "-ipath", "-regex", "-iregex", "-wholename", "--include", "--exclude",
+                      "--glob", "-g"}
+
+
+def _names_read_protected(a, cwd):
+    """0.7.3 (item 4): a command that names a file the agent may never read is refused, whatever its verb
+    (the sandbox's denyRead stops the read itself; this names the rule). A find/grep pattern is not a file."""
+    words = a.get("words") or []
+    for j, t in enumerate(words):
+        if j and words[j - 1] in FIND_PATTERN_FLAGS:
+            continue
+        t = bashcls.expand_vars(t, a.get("resolved") or {})
+        for cand in ([t.split("=", 1)[1]] if t.startswith("-") and "=" in t else [t]):
+            if not cand or cand.startswith("-") or bashcls.COMPUTED.search(cand) or any(c.isspace() for c in cand):
+                continue
+            why = pathmap.read_protected(cand, os.path.realpath(cwd) if cwd else None)
+            if why:
+                return "the command names a file the agent may never read: %s" % why
+    return None
+
+
 def check_bash(cmd, cwd, cache):
     a = bashcls.analyse(cmd, os.path.realpath(cwd) if cwd else None)
     verbs = [v.rsplit("/", 1)[-1] for v in a["verbs"]]
@@ -148,6 +169,9 @@ def check_bash(cmd, cwd, cache):
     # opaque (an interpreter fed a heredoc, a substitution that is not read-only), the whole text.
     if GATE_NAMES.search(cmd if a["opaque"] else "\n".join(a["exec_text"])):
         return "the agent has no command that changes gate state; operator commands are typed in chat (invariant 3)"
+    why = _names_read_protected(a, cwd)
+    if why:
+        return why
     if a.get("subst_denied"):
         # 0.7.2: a substitution never reads what the sandbox's denyRead, the managed Read() rules or the
         # path map's secret classes protect. Stricter than a top-level read, which only the sandbox stops.
@@ -260,6 +284,9 @@ def decide(hook_input):
         p = ti.get(READ_TOOLS[tool])
         if p and pathmap.resolve(p, cwd).startswith(TRANSCRIPTS):
             return deny("session transcripts are not readable by the agent")
+        why = pathmap.read_protected(p, cwd) if p else None
+        if why:  # 0.7.3 (item 4): the managed Read() rules and the sandbox's denyRead say the same
+            return deny("%s; it is never readable by the agent" % why)
         return None
     if tool == "Bash":
         why = check_bash(ti.get("command") or "", cwd, cache)

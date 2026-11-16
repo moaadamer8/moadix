@@ -104,8 +104,18 @@ def main():
     check("the agent cannot read gh's or firebase's stored credentials (Read tool and sandbox denyRead)",
           all(c in deny for c in creds) and {"~/.config/gh", "~/.config/configstore"} <=
           set(pol.get("sandbox", {}).get("filesystem", {}).get("denyRead") or []), str(creds))
+    # 0.7.3 (item 4): the dotenvx key file, private keys and the overlay are never readable, in both layers
+    reads = ["~/.config/moadix", "~/**/.env.keys", "~/**/*.key", "~/**/*.p12", "~/**/*.pfx", "~/**/*.jks",
+             "~/**/*.keystore", "~/**/id_rsa", "~/**/id_ed25519", "~/**/id_ecdsa", "~/**/id_dsa", "~/**/*key*.pem",
+             "~/**/*private*.pem"]
+    rrules = ["Read(%s)" % (r + "/**" if r == "~/.config/moadix" else r) for r in reads]
+    check("0.7.3: the dotenvx key file, private keys and the overlay are in the sandbox's denyRead and the managed "
+          "Read() rules; no .env rule (encrypted .env files stay readable) and no certificate rule",
+          set(reads) <= set(pol.get("sandbox", {}).get("filesystem", {}).get("denyRead") or []) and
+          all(r in deny for r in rrules) and not any(".env)" in r or ".env/" in r or r.endswith(".crt)") for r in deny),
+          str([r for r in rrules if r not in deny]))
     check("the earlier deny rules are all still there", all(g in deny for g in earlier) and
-          len(deny) == 12 + len(guards) + len(creds),
+          len(deny) == 12 + len(guards) + len(creds) + len(rrules),
           "%d rules" % len(deny))
     check("allowManagedHooksOnly and allowManagedPermissionRulesOnly are still on",
           pol.get("allowManagedHooksOnly") is True and pol.get("allowManagedPermissionRulesOnly") is True,

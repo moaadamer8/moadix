@@ -127,6 +127,9 @@ def main():
         print("false" if len(a) > 3 else "")
     elif cmd == "build":
         sys.stdin.buffer.read()
+    elif cmd == "run" and "getent" in a:
+        save(s)
+        return 0  # 0.7.3: the runner's passwd check (confined.Run.check_user); the double's images have the entry
     elif cmd == "run":
         name = (opt(a, "--name") or ["anon"])[0]
         m = mounts(a)

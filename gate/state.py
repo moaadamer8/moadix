@@ -261,6 +261,18 @@ def replay(product_id, entries):
             elif cid in carries and carries[cid]["status"] == "open":
                 carries[cid].update(to=pl.get("phase"), scope=fid or "product", uncarried_seq=e["seq"])
             continue
+        if verb == "APPROVE" and isinstance(pl.get("waivers"), list):
+            # 0.7.3 (item 5): APPROVE <phase> WITH-WAIVERS records the proposed waivers under the approval's code
+            for w in pl["waivers"]:
+                if isinstance(w, dict) and w.get("id"):
+                    wid = str(w["id"])
+                    waivers[wid] = {"id": wid, "owner": w.get("owner"), "scope": w.get("scope"),
+                                    "expiry": w.get("expiry"), "reason": w.get("reason"), "seq": e["seq"],
+                                    "at": e["ts"], "feature": fid}
+                    wpay[wid] = {"seq": e["seq"], "source_commit": pl.get("source_commit"),
+                                 "phase_at": pl.get("phase"), "feature": fid,
+                                 "fingerprints": {k: v for k, v in (pl.get("fingerprints") or {}).items() if k == wid},
+                                 "carry": (pl.get("carries_waived") or {}).get(wid)}
         if verb in PHASE_VERBS:
             if fid:
                 if fid not in features or features[fid]["status"] != "active":
@@ -282,7 +294,8 @@ def replay(product_id, entries):
             ids = pl.get("ids") if isinstance(pl.get("ids"), list) and pl.get("ids") else [pl.get("id")]
             cur = _current(features[fid]["phases"] if fid in features else product)
             for wid in ids:
-                waivers[wid] = {"id": wid, "owner": pl.get("owner"), "scope": pl.get("scope"),
+                waivers[wid] = {"id": wid, "owner": pl.get("owner"),
+                                "scope": (pl.get("scopes") or {}).get(wid) or pl.get("scope"),
                                 "expiry": pl.get("expiry"), "reason": pl.get("reason"), "seq": e["seq"],
                                 "at": e["ts"], "feature": fid}
                 wpay[wid] = {"seq": e["seq"], "source_commit": pl.get("source_commit"),

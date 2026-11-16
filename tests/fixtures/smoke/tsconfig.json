@@ -1,0 +1,1 @@
+{"compilerOptions": {"allowJs": true, "checkJs": false, "noEmit": true, "strict": true, "module": "commonjs", "target": "es2022", "types": []}, "include": ["src/sum.js"]}

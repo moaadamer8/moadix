@@ -55,8 +55,13 @@ def pending(root):
     for dp, dns, fns in os.walk(d):
         dns.sort()
         for f in sorted(fns):
-            out.append(os.path.relpath(os.path.join(dp, f), d))
+            rel = os.path.relpath(os.path.join(dp, f), d)
+            if rel != WAIVERS:  # 0.7.3: proposed waivers are recorded by APPROVE <phase> WITH-WAIVERS, never adopted
+                out.append(rel)
     return out
+
+
+WAIVERS = "waivers.yaml"
 
 
 def _sha(b):

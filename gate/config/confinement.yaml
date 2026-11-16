@@ -13,7 +13,11 @@
 #   user           an image that must run as its own user (ZAP runs as uid 1000; it executes no product code)
 version: 1
 max_factor: 2
-uid: 10001
+# 0.7.3 (task-tracker MF-27): the run's uid is `nobody` (65534:65534), which has a passwd entry in every
+# pinned image (Debian 12/13, Ubuntu 24.04). 10001 had none, so a tool asking for its user (Node's
+# os.userInfo, used by LikeC4) crashed. Still non-root, no capabilities, read-only root, no host mounts;
+# no image is modified. confined.Run checks the entry exists before a run and reports UNKNOWN otherwise.
+uid: 65534
 tiers:
   E-lint:
     cpus: 2

@@ -1,0 +1,8 @@
+# Copied by tests/confined-engine to .sdlc/config/product-tools.yaml of the throwaway smoke product.
+tests:
+  command: [node, --test, --test-reporter=junit, --test-reporter-destination=/out/junit.xml]
+live:
+  compose: compose.yaml
+  service: app
+  port: 3000
+  paths: ["/"]

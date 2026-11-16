@@ -101,7 +101,7 @@ def test_mounts():
     argv = confined.run_argv("r2", "img@sha256:" + D, ["true"], LIM, "moadix-r2-src", "moadix-r2-out")
     j = " ".join(argv)
     record(G, "the run is non-root, drops every capability, forbids new privileges, has a read-only root",
-           "--user 10001:10001" in j and "--cap-drop ALL" in j and "no-new-privileges" in j and "--read-only" in j, j)
+           "--user 65534:65534" in j and "--cap-drop ALL" in j and "no-new-privileges" in j and "--read-only" in j, j)
     record(G, "the source is a read-only named volume, the output the only writable one, no host path anywhere",
            "src=moadix-r2-src,dst=/src,readonly" in j and "src=moadix-r2-out,dst=/out" in j and " -v " not in j and
            "type=bind" not in j and "docker.sock" not in j, j)
@@ -135,7 +135,7 @@ def test_mounts():
     proj, notes = confined.compose_project(json.loads(json.dumps(OKSVC)), "r2", LIM)
     app = proj["services"]["app"]
     record(G, "control: an allowlisted compose file becomes a gate-generated, hardened project",
-           app["user"] == "10001:10001" and app["cap_drop"] == ["ALL"] and app["read_only"] is True and
+           app["user"] == "65534:65534" and app["cap_drop"] == ["ALL"] and app["read_only"] is True and
            proj["networks"]["moadix-r2"]["internal"] is True and "ports" not in app and
            app["volumes"] == ["moadix-r2-data:/var/lib/app"] and app["image"].startswith("moadix/"), json.dumps(proj)[:600])
 

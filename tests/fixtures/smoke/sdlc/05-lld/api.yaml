@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info: {title: smoke, version: "1"}
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: the service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [ok]}

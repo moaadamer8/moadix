@@ -710,9 +710,10 @@ def group_waive():
     E.init(p, "waivefx")
     ok = lambda ctx: "recorded" in ctx and "NOT" not in ctx  # noqa: E731
     cases = [
-        ("WAIVE W-1 owner=moad expiry=%s reason=no scope %s" % (today(30), "{c}"), "not recognised", "scope is required"),
-        ("WAIVE W-1 owner=moad scope=api expiry=%s reason=late %s" % (today(-1), "{c}"), "already in the past", "past expiry"),
-        ("WAIVE W-1 owner=moad scope=api expiry=%s reason=far %s" % (today(400), "{c}"), "beyond the 180-day maximum", "expiry beyond policy"),
+        # 0.7.3 (review of 0.7.2, item 5): scope, owner and expiry are optional and default
+        ("WAIVE W-1 owner=moad expiry=%s reason=no scope %s" % (today(30), "{c}"), ok, "scope defaults (0.7.3)"),
+        ("WAIVE W-2 owner=moad scope=api expiry=%s reason=late %s" % (today(-1), "{c}"), "already in the past", "past expiry"),
+        ("WAIVE W-2 owner=moad scope=api expiry=%s reason=far %s" % (today(400), "{c}"), "beyond the 180-day maximum", "expiry beyond policy"),
         ("WAIVE SEC-001 owner=moad scope=api expiry=%s reason=later %s" % (today(30), "{c}"), "CANNOT be waived", "high-severity finding"),
         ("WAIVE SEC-003 owner=moad scope=api expiry=%s reason=later %s" % (today(30), "{c}"), "severity cannot be read", "finding with no readable severity"),
         ("WAIVE SEC-002 owner=moad scope=error-pages expiry=%s reason=cosmetic %s" % (today(30), "{c}"), ok, "low-severity finding -> recorded"),

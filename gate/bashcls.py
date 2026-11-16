@@ -106,10 +106,10 @@ SUBST_READ_DENY = [
     (re.compile(r"\.config/gh(?:/|\b)"), "the gh credential store (~/.config/gh)"),
     (re.compile(r"\.config/configstore"), "the firebase credential store (~/.config/configstore)"),
     (re.compile(r"\.config/moadix"), "the operator's overlay (~/.config/moadix)"),
-    (re.compile(r"(?:^|[/\s'\"=])\.env(?!\.(?:example|sample|template)\b)(?:\.[\w-]+)?(?=$|[\s'\";|&)/])"),
-     "a real environment file (.env)"),
-    (re.compile(r"Keychains|\.pem\b|\.p12\b|\.pfx\b|\.jks\b|\.keystore\b|\bid_rsa|\bid_ed25519|"
-                r"service-account[^\s/]*\.json|\.key\b"), "key material"),
+    # 0.7.3 (item 4): an encrypted .env is readable; dotenvx's private key file is not
+    (re.compile(r"(?:^|[/\s'\"=])\.env\.keys\b"), "dotenvx's private key file (.env.keys)"),
+    (re.compile(r"Keychains|\.p12\b|\.pfx\b|\.jks\b|\.keystore\b|\bid_(?:rsa|ed25519|ecdsa|dsa)\b(?!\.pub)|"
+                r"(?:key|private)[^\s/'\")]*\.pem\b|service-account[^\s/]*\.json|\.key\b", re.I), "key material"),
 ]
 # Anything that can make a reader's name run something else: a function or alias definition, a
 # PATH change, shell options. With one of these in the command, L2 and L4 do not apply.

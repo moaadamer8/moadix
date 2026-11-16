@@ -44,11 +44,13 @@ PID = r"(?P<id>[A-Za-z0-9_.-]{1,64})"
 WAIVE_MAX = 20
 PIDS = r"(?P<id>[A-Za-z0-9_.-]{1,64}(?:,[A-Za-z0-9_.-]{1,64}){0,%d})" % (WAIVE_MAX - 1)
 COMMANDS = [
-    ("APPROVE", re.compile(r"^APPROVE " + PH + CODE + r"$")),
+    ("APPROVE", re.compile(r"^APPROVE " + PH + r"(?P<ww> WITH-WAIVERS)?" + CODE + r"$")),
     ("REOPEN", re.compile(r"^REOPEN " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
-    ("WAIVE", re.compile(r"^WAIVE " + PIDS + r" owner=(?P<owner>[A-Za-z0-9_.@-]{1,64}) "
-                         r"scope=(?P<scope>[A-Za-z0-9_./:*@-]{1,128}) "
-                         r"expiry=(?P<expiry>\d{4}-\d{2}-\d{2}) reason=(?P<reason>" + TEXT + r")" + CODE + r"$")),
+    # 0.7.3 (item 5): owner, scope and expiry are optional; they default to `operator`, the finding's document and
+    # 30 days (waiver_defaults). The order stays fixed.
+    ("WAIVE", re.compile(r"^WAIVE " + PIDS + r"(?: owner=(?P<owner>[A-Za-z0-9_.@-]{1,64}))?"
+                         r"(?: scope=(?P<scope>[A-Za-z0-9_./:*@-]{1,128}))?"
+                         r"(?: expiry=(?P<expiry>\d{4}-\d{2}-\d{2}))? reason=(?P<reason>" + TEXT + r")" + CODE + r"$")),
     ("UNWAIVE", re.compile(r"^UNWAIVE " + PID + CODE + r"$")),
     ("UNCARRY", re.compile(r"^UNCARRY (?P<id>(?:GC|CARRY)-[A-Za-z0-9_.-]{1,64})" + CODE + r"$")),
     ("PROCEED-PAST", re.compile(r"^PROCEED-PAST " + PH + r" (?P<reason>" + TEXT + r")" + CODE + r"$")),
@@ -62,9 +64,9 @@ COMMANDS = [
 ]
 VERBS = {name for name, _ in COMMANDS}
 USAGE = {
-    "APPROVE": "APPROVE <phase> <code>",
+    "APPROVE": "APPROVE <phase> [WITH-WAIVERS] <code>",
     "REOPEN": "REOPEN <phase> <reason> <code>",
-    "WAIVE": "WAIVE <id>[,<id>...] owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>",
+    "WAIVE": "WAIVE <id>[,<id>...] [owner=<name>] [scope=<what it covers>] [expiry=YYYY-MM-DD] reason=<text> <code>",
     "UNWAIVE": "UNWAIVE <id> <code>",
     "UNCARRY": "UNCARRY <GC id or CARRY id> <code>",
     "PROCEED-PAST": "PROCEED-PAST <phase> <reason> <code>",
@@ -83,10 +85,11 @@ HELP = {
     "STATUS": "Shows the gate's state. It starts with `INTEGRITY OK` when the ledger and state verify.",
     "REVIEW": "Read-only. Shows the latest validator result for a phase and its digest.",
     "APPROVE": "Approves a phase. Refused, with the findings, unless the phase's validators passed on the current "
-               "commit.",
+               "commit. With WITH-WAIVERS it also records, under the same code, exactly the waivers the agent proposed "
+               "in `.sdlc-proposals/waivers.yaml` (REVIEW shows them); refused if one names a BLOCKER or an unknown id.",
     "REOPEN": "Reopens an approved (frozen) phase.",
-    "WAIVE": "Waives findings for at most 180 days; a gap-critic finding is named `gap-critic.<GC id>`, a carry "
-             "`CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or "
+    "WAIVE": "Waives findings for at most 180 days; owner defaults to operator, scope to the finding's document "
+             "and expiry to 30 days. A gap-critic finding is named `gap-critic.<GC id>`, a carry `CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or "
              "tenant-isolation carries can't be waived.",
     "UNWAIVE": "Withdraws a waiver.",
     "UNCARRY": "Pulls a carried finding back into the current phase (a GC id counts as a MAJOR; a CARRY id is "
@@ -727,6 +730,181 @@ def _waive_gate(root, g, extra=None):
     return None
 
 
+# ---------------------------------------------------------------- 0.7.3: waiver defaults and proposals (item 5)
+WAIVE_DEFAULT_OWNER = "operator"
+WAIVE_DEFAULT_DAYS = 30
+PROPOSED_WAIVERS = ".sdlc-proposals/waivers.yaml"
+SCOPE_CHARS = re.compile(r"[^A-Za-z0-9_./:*@-]")
+
+
+def finding_doc(root, st, wid):
+    """The repository document a finding cites, as a waiver's default scope; `phase-<label>` when unknown."""
+    from . import critic, secscan, verify
+    label = (st or {}).get("current_phase") or "?"
+    path = None
+    m = VERIFIER_FINDING.match(wid)
+    if m and m.group("role") in verify.roles() and verify.roles()[m.group("role")].get("critic"):
+        _r, reg = critic.latest_run(root, st, label)
+        path = (reg["findings"].get(m.group("fid")) or {}).get("path")
+    elif m and m.group("role") in verify.roles():
+        role = verify.roles()[m.group("role")]
+        try:
+            with open(verify.evidence_file(root, str(role["phase"]), m.group("role"))) as f:
+                ev = json.load(f)
+            fd = next((x for x in ev.get("findings") or [] if isinstance(x, dict) and str(x.get("id")) == m.group("fid")),
+                      {})
+            cit = (fd.get("citations") or [fd.get("citation")])[0]
+            path = str(cit).split(":", 1)[0] if cit else None
+        except (OSError, ValueError):
+            path = None
+    elif critic.CARRY_ID.match(wid):
+        path = str((critic.carries(st).get(wid) or {}).get("citation") or "").split(":", 1)[0] or None
+    elif re.match(r"^SF-\d+$", wid, re.I):
+        try:
+            with open(secscan.result_file(root)) as f:
+                res = json.load(f)
+            fd = next((x for x in res.get("findings") or [] if str(x.get("id")).upper() == wid.upper()), {})
+            path = fd.get("path") or fd.get("file")
+        except (OSError, ValueError):
+            path = None
+    out = SCOPE_CHARS.sub("-", str(path))[:128] if path else "phase-%s" % label
+    return out or "phase-%s" % label
+
+
+def waiver_defaults(root, st, g):
+    """Fill a WAIVE's omitted owner and expiry (0.7.3). The scope is per finding: {id: scope}."""
+    g = dict(g)
+    g["owner"] = g.get("owner") or WAIVE_DEFAULT_OWNER
+    g["expiry"] = g.get("expiry") or (datetime.date.today() + datetime.timedelta(days=WAIVE_DEFAULT_DAYS)).isoformat()
+    scopes = {i: (g.get("scope") or finding_doc(root, st, i)) for i in waive_ids(g["id"])}
+    g["scope"] = g.get("scope") or (list(scopes.values())[0] if len(set(scopes.values())) == 1 else "per-finding")
+    return g, scopes
+
+
+def known_finding(root, wid):
+    """True when `wid` names a finding the gate can judge (a verifier's, Claude Security's, the phase-9 report's or
+    a carry); a WITH-WAIVERS proposal naming anything else is an unknown id."""
+    from . import critic
+    if critic.CARRY_ID.match(wid) or VERIFIER_FINDING.match(wid):
+        return True
+    key = wid.split(":", 1)[0].strip().upper()
+    if not FINDING_ID.match(key):
+        return False
+    vf = _verifier_finding(root, key)  # SF-n in Claude Security's result
+    return bool(vf and vf[0] is not None) or key in (_finding_severities(root) or {})
+
+
+def proposed_waivers(root, st):
+    """(items, sha256 of the file, problems). Each item: {id, reason, owner, scope, expiry}; the file is
+    .sdlc-proposals/waivers.yaml, written by the agent:
+
+        waivers:
+          - id: gap-critic.GC-1-4
+            reason: the operator accepts this for the first release
+            owner: operator        # optional
+            expiry: 2026-12-31     # optional
+            scope: sdlc/01-research.md   # optional
+
+    Nothing is judged here except the shape; the gate judges each id with _waive_gate."""
+    import hashlib
+    from .v1 import hlib
+    p = os.path.join(root, PROPOSED_WAIVERS)
+    if not os.path.isfile(p) or os.path.islink(p):
+        return [], None, ["there is no %s (the agent proposes waivers there)" % PROPOSED_WAIVERS]
+    with open(p, "rb") as fh:
+        raw = fh.read()
+    digest = hashlib.sha256(raw).hexdigest()
+    try:
+        doc = hlib.load_yaml(p) or {}
+    except Exception as e:
+        return [], digest, ["%s is not readable YAML (%s)" % (PROPOSED_WAIVERS, e)]
+    items, probs = [], []
+    rows = doc.get("waivers") if isinstance(doc, dict) else None
+    if not isinstance(rows, list) or not rows:
+        return [], digest, ["%s lists no `waivers:`" % PROPOSED_WAIVERS]
+    text = re.compile(r"^" + TEXT + r"$")
+    for n, r in enumerate(rows, 1):
+        if not isinstance(r, dict):
+            probs.append("entry %d is not a mapping" % n)
+            continue
+        wid, reason = str(r.get("id") or "").strip(), str(r.get("reason") or "").strip()
+        if not re.match(r"^[A-Za-z0-9_.-]{1,64}$", wid):
+            probs.append("entry %d: id %r is not a finding id" % (n, wid))
+            continue
+        if not reason or not text.match(reason):
+            probs.append("%s: a reason is required (printable ASCII, no quotes or backslashes, at most 300)" % wid)
+            continue
+        owner = str(r.get("owner") or WAIVE_DEFAULT_OWNER)
+        expiry = str(r.get("expiry") or (datetime.date.today() + datetime.timedelta(days=WAIVE_DEFAULT_DAYS)).isoformat())
+        scope = str(r.get("scope") or finding_doc(root, st, wid))
+        if not re.match(r"^[A-Za-z0-9_.@-]{1,64}$", owner) or not re.match(r"^\d{4}-\d{2}-\d{2}$", expiry) or \
+                SCOPE_CHARS.search(scope) or not scope:
+            probs.append("%s: owner, expiry or scope is malformed" % wid)
+            continue
+        items.append({"id": wid, "reason": reason, "owner": owner, "scope": scope[:128], "expiry": expiry})
+    ids = [i["id"] for i in items]
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        probs.append("%s proposed more than once" % ", ".join(dup))
+    return items, digest, probs
+
+
+def judge_proposals(root, st, items, extra):
+    """[(id, refusal or None)] for each proposed waiver, judged exactly as WAIVE judges it, plus: an unknown id
+    is refused, and so is an id already waived."""
+    out = []
+    for it in items:
+        if not known_finding(root, it["id"]):
+            out.append((it["id"], "%s is not a finding id the gate knows (a verifier finding <role>.<id>, "
+                                  "gap-critic.GC-..., SF-n, SEC-n or CARRY-...)" % it["id"]))
+        elif any(w["id"] == it["id"] for w in st["waivers"]):
+            out.append((it["id"], "waiver %s already exists" % it["id"]))
+        else:
+            out.append((it["id"], _waive_gate(root, it, extra)))
+    return out
+
+
+def _with_waivers_gate(root, st, label, data, items, extra):
+    """(ok, reason). APPROVE WITH-WAIVERS on a result that did not pass: every failing validator must be one that
+    judges verifier evidence (check-verifiers-*), and with the proposed waivers in force that evidence must pass."""
+    from . import verify
+    if data is None:
+        return False, "there is no fresh validator result"
+    failing = [r["validator"] for r in data["results"] if r["result"] not in ("pass", "n/a-by-profile")]
+    other = [v for v in failing if not v.startswith("check-verifiers-")]
+    if other:
+        return False, ("validator(s) %s failed, and a waiver covers a finding, not a failing check: fix them first"
+                       % ", ".join(other))
+    st2 = dict(st)
+    st2["waivers"] = list(st["waivers"]) + [dict(it, seq=None, at=None, feature=st.get("feature")) for it in items]
+    wp = dict(st.get("_waiver_payload") or {})
+    for it in items:
+        wp[it["id"]] = {"fingerprints": {k: v for k, v in (extra.get("fingerprints") or {}).items() if k == it["id"]},
+                        "phase_at": label, "source_commit": _git_head(root)}
+    st2["_waiver_payload"] = wp
+    still = [(name, probs) for name, status, probs, _i in verify.check_phase(root, st2, label) if status != "ok"]
+    if still:
+        return False, "with the proposed waivers the verifier evidence still fails: %s" % "; ".join(
+            "%s: %s" % (n, "; ".join(p[:3])) for n, p in still)
+    return True, None
+
+
+def proposals_text(root, st):
+    """REVIEW's lines for the proposed waivers, each judged now, or ""."""
+    items, digest, probs = proposed_waivers(root, st)
+    if digest is None:
+        return ""
+    judged = judge_proposals(root, st, items, {})
+    rows = ["%s (%s; owner %s, scope %s, expiry %s)%s" % (it["id"], it["reason"], it["owner"], it["scope"],
+                                                        it["expiry"], " REFUSED: %s" % why if why else "")
+            for it, (_i, why) in zip(items, judged)]
+    ok = not probs and not any(w for _i, w in judged)
+    return " Proposed waivers (%s, sha256 %s): %s%s. %s" % (
+        PROPOSED_WAIVERS, digest[:12], " | ".join(rows) or "none", "; problems: %s" % "; ".join(probs) if probs else "",
+        "APPROVE %s WITH-WAIVERS <code> records exactly these with the approval." % st["current_phase"] if ok else
+        "APPROVE %s WITH-WAIVERS would be refused until every proposal is valid." % st["current_phase"])
+
+
 # ---------------------------------------------------------------- PARK
 
 def _trusted_dirs():
@@ -944,6 +1122,7 @@ def handle(hook_input):
             text = _validation_text(status, data, detail, ph["label"])
             if status == "fresh" and data["verdict"] != "pass":
                 text += ". Findings: " + " | ".join(validation.findings(data))
+            text += proposals_text(root, st)
         else:
             ev = ph.get("evidence") or []
             relied = _approval_digest(st, ph["label"])
@@ -953,6 +1132,10 @@ def handle(hook_input):
         return _ctx("%s; %s. Relay this to the operator verbatim." % (head, text))
 
     code = g.pop("code")
+    ww = bool(g.pop("ww", None))
+    scopes = {}
+    if name == "WAIVE" and not problems:
+        g, scopes = waiver_defaults(root, st, g)
     if problems:
         _burn_all(message)
         return _ctx("%s NOT recorded: gate state failed its integrity check (%s). Nothing changed; the code is spent. "
@@ -968,7 +1151,28 @@ def handle(hook_input):
         extra, why = _collapse_gate(root, st, g["phase"])
         if extra:
             payload.update(extra)
-    if not why and name == "APPROVE":
+    if not why and name == "APPROVE" and ww:
+        # 0.7.3 (item 5): one code approves the phase and records exactly the proposed waivers
+        items, digest, probs = proposed_waivers(root, st)
+        wextra = {}
+        judged = judge_proposals(root, st, items, wextra)
+        refused = ["%s: %s" % (i, w) for i, w in judged if w]
+        if probs or refused or not items:
+            why = "the proposed waivers were refused (%s); nothing was recorded" % "; ".join(probs + refused)
+        else:
+            ok, why0, data = _approve_gate(root, st, g["phase"])
+            if not ok and data is not None and data.get("verdict") == "fail":
+                ok, why0 = _with_waivers_gate(root, st, g["phase"], data, items, wextra)
+            why = why0
+            if ok:
+                payload.update(waivers=items, waivers_file=PROPOSED_WAIVERS, waivers_file_sha256=digest,
+                               fingerprints=wextra.get("fingerprints") or {}, with_waivers=True)
+                payload["validation"] = {"commit": data["key"]["commit"], "verdict": data["verdict"],
+                                         "finished_at": data.get("finished_at"), "digest": data["_digest"],
+                                         "passed_with_waivers": data["verdict"] != "pass",
+                                         "results": [{"validator": r["validator"], "result": r["result"],
+                                                      "exit_code": r["exit_code"]} for r in data["results"]]}
+    if not why and name == "APPROVE" and not ww:
         ok, why, data = _approve_gate(root, st, g["phase"])
         if ok:
             payload["validation"] = {"commit": data["key"]["commit"], "verdict": data["verdict"],
@@ -999,6 +1203,8 @@ def handle(hook_input):
         if len(ids) > 1:
             payload["ids"] = ids
         # Each id is judged as if waived alone; one refusal refuses the whole message (nothing is recorded).
+        if len(set(scopes.values())) > 1:
+            payload["scopes"] = scopes
         for i in ids:
             why = _waive_gate(root, dict(g, id=i), payload)
             if why:
@@ -1109,6 +1315,12 @@ def handle(hook_input):
         nxt = (" %s now counts as a MAJOR of phase %s: fix it, or WAIVE gap-critic.%s with a reason." % (
             g["id"], st["current_phase"], g["id"]) if critic.GC_ID.match(g["id"]) else
             " %s is now addressed to phase %s: its COVERAGE.md must settle it." % (g["id"], st["current_phase"]))
+    if name == "APPROVE" and payload.get("waivers"):
+        nxt += " Under the same code it recorded %d waiver(s) from %s (sha256 %s): %s." % (
+            len(payload["waivers"]), PROPOSED_WAIVERS, payload["waivers_file_sha256"][:12],
+            "; ".join("%s (%s, until %s)" % (w["id"], w["reason"], w["expiry"]) for w in payload["waivers"]))
+        with contextlib.suppress(OSError):  # the proposals are used up, as ADOPT removes what it adopted
+            os.unlink(os.path.join(root, PROPOSED_WAIVERS))
     if name == "COLLAPSE":
         nxt = " Phase %s collapsed by the %s (recorded ruling; checks not run: %s).%s" % (
             g["phase"], "%s platform ruling" % payload["ruling"] if payload.get("ruling") else

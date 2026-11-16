@@ -10,7 +10,7 @@ anything it cannot establish raises Unavailable (the gate reports UNKNOWN) or Re
   install_scripts(product_tools)    ruling 6: packages whose install script may run, from the
                                     adopted product-tools.yaml only
   image(name)                       a digest-pinned image, or Unavailable (blocked or unpinned)
-  run_argv(...)                     `docker run` with uid 10001, --cap-drop ALL, no-new-privileges,
+  run_argv(...)                     `docker run` as uid 65534 (nobody), --cap-drop ALL, no-new-privileges,
                                     --read-only, tmpfs /tmp, --network none (or the run's internal
                                     network), limits, a read-only /src volume and one /out volume,
                                     and never a host bind mount or the Docker socket
@@ -153,7 +153,7 @@ def run_argv(run_id, img, argv, lim, src_volume, out_volume, network="none", env
             raise Refused("volume %r is not a gate-created named volume" % (v,))
     if network != "none" and not re.match(r"^moadix-[a-z0-9-]+$", network):
         raise Refused("network %r is not the run's internal network" % (network,))
-    uid = int(config().get("uid") or 10001)
+    uid = int(config().get("uid") or 65534)
     e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/home",  # noqa: S108 (inside the container: a tmpfs)
          "LANG": "C.UTF-8", "CI": "1", "NODE_ENV": "test", "TZ": "UTC"}
     for k, val in (env or {}).items():
@@ -196,7 +196,7 @@ def compose_project(doc, run_id, lim, internal_network=None):
     out = {"name": "moadix-%s" % run_id, "services": {}, "networks": {net: {"internal": True,
                                                                             "labels": {"moadix.run": run_id}}},
            "volumes": {}}
-    uid = int(config().get("uid") or 10001)
+    uid = int(config().get("uid") or 65534)
     for sname, svc in doc["services"].items():
         if not isinstance(svc, dict):
             probs.append("service %s is not a mapping" % sname)
@@ -373,7 +373,23 @@ class Run(object):
         if not ok:
             raise Unavailable(why)
         self.volumes, self.networks, self.containers = [], [], []
-        self.uid = int(config().get("uid") or 10001)
+        self.uid = int(config().get("uid") or 65534)
+        self._users_ok = set()
+
+    def check_user(self, img, user):
+        """0.7.3 (task-tracker MF-27): the run's uid must have a passwd entry in the image, or a tool that asks
+        for its user (Node's os.userInfo) crashes before doing anything. Checked once per image and user, in
+        a helper with no network and no capabilities; an image without the entry is UNKNOWN, never a FAIL."""
+        uid = str(user).split(":")[0]
+        if (img, uid) in self._users_ok:
+            return
+        p = self._d(["run", "--rm", "--label", self.label, "--network", "none", "--user", "%s:%s" % (uid, uid),
+                     "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+                     "--entrypoint", "getent", img, "passwd", uid], check=False, timeout=120)
+        if p.returncode != 0:
+            raise Unavailable("image %s has no passwd entry for uid %s, so tools that look up their user crash; "
+                              "the runner's uid (confinement.yaml) must exist in every pinned image" % (img, uid))
+        self._users_ok.add((img, uid))
 
     def _version(self):
         try:
@@ -470,6 +486,7 @@ class Run(object):
                 detach=False, tmpfs=()):
         """Run argv confined (3.2). mounts: [(volume, path, readonly)]; /out is the only writable one."""
         lim = limits(tier, self.pt)
+        self.check_user(img, user or "%d:%d" % (self.uid, self.uid))
         name = name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower()))
         e = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/home", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
         for k, v in (env or {}).items():

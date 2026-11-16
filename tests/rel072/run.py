@@ -148,20 +148,24 @@ def test_readdeny():
         ("GitHub CLI credentials", "~/.config/%s/hosts.yml" % GH, "sandbox denyRead ~/.config/%s + Read() rule" % GH),
         ("Firebase CLI credentials", "~/.config/configstore/%s-tools.json" % FB,
          "sandbox denyRead ~/.config/configstore + Read() rule"),
-        ("overlay", "~/.config/moadix/overlay.yaml", "nothing: the overlay is write-protected only"),
-        (".env", ".env", "nothing: .env is write-protected only"),
-        (".env.local", "config/.env.local", "nothing: .env.* is write-protected only"),
-        ("key material", "~/.ssh/id_rsa", "nothing in the hook (path map: write-protected)"),
+        # 0.7.3 (item 4): the hook itself now refuses a top-level read of these three (and a substitution still)
+        ("overlay", "~/.config/moadix/overlay.yaml", "hook + sandbox denyRead + Read() rule (0.7.3)"),
+        ("dotenvx key file", ".env.keys", "hook + sandbox denyRead + Read() rule (0.7.3)"),
+        ("dotenvx key file", "config/.env.keys", "hook + sandbox denyRead + Read() rule (0.7.3)"),
+        ("key material", "~/.ssh/id_rsa", "hook + sandbox denyRead + Read() rule (0.7.3)"),
     ]
     for what, path, layer in protected:
         d, _why = E.pretool(p, "Bash", {"command": "cat %s" % path})
-        record(G, "top-level `cat %s`: the hook gives no decision (left to: %s)" % (path, layer), d == "none", d)
+        want = "deny" if layer.startswith("hook") else "none"
+        record(G, "top-level `cat %s`: hook decision %s (enforced by: %s)" % (path, want, layer), d == want, d)
         for form in ('echo "$(cat %s)"', 'echo "$(head -1 %s)"', 'echo "`cat %s`"', "diff <(cat %s) README.md",
                      'echo "$(grep -c x %s)"'):
             cmd = form % path
             d, why = E.pretool(p, "Bash", {"command": cmd})
-            record(G, "substitution read of %s refused: %s" % (what, cmd), d == "deny" and "read-protected" in why,
-                   "%s %s" % (d, why))
+            record(G, "substitution read of %s refused: %s" % (what, cmd), d == "deny" and (
+                "read-protected" in why or "never readable" in why or "may never read" in why), "%s %s" % (d, why))
+    d, why = E.pretool(p, "Bash", {"command": 'echo "$(cat .env)"'})
+    record(G, "0.7.3: an (encrypted) .env is readable in a substitution too", d != "deny", why)
     # a leading literal variable is resolved before the match
     d, why = E.pretool(p, "Bash", {"command": 'G=~/.config/%s; echo "$(cat $G/hosts.yml)"' % GH})
     record(G, "a leading literal variable naming a protected folder is resolved and refused", d == "deny", why)

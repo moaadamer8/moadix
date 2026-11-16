@@ -1,0 +1,7 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "/app/server.js"]
+    expose: ["3000"]

@@ -30,12 +30,13 @@
 
 A gate applies unless its coverage topic is N/A in the phase's COVERAGE.md (the gap critic judges the
 reason). Every run goes through gate/confined.py: Docker is required (UNKNOWN without it), images are
-digest-pinned and must be cleared, the product's code runs as uid 10001 with no network (the install
+digest-pinned and must be cleared, the product's code runs as uid 65534 (nobody) with no network (the install
 step reaches only the package registries through the allowlisting proxy; live gates use an internal
 network with no egress), and everything the run created is removed afterwards.
 
 Exit 0 pass or N/A, 1 fail, 2 unknown.
 """
+import contextlib
 import csv
 import io
 import json
@@ -566,7 +567,7 @@ def start_services(r, pt, net):
         mounts = []
         if svc.get("data"):
             dv = r.volume("svc-%s" % re.sub(r"[^a-z0-9]", "", str(name)))
-            r.own(dv, img, uid=int(str(svc.get("user") or "10001").split(":")[0]))
+            r.own(dv, img, uid=int(str(svc.get("user") or str(confined.config().get("uid") or 65534)).split(":")[0]))
             mounts.append((dv, svc["data"], False))
         r.execute(img, [], "L", mounts, network=net, env=senv, user=svc.get("user"), aliases=[svc["alias"]],
                   name="moadix-%s-svc-%s" % (r.id, name), detach=True, tmpfs=svc.get("tmpfs") or [])
@@ -623,9 +624,89 @@ def axe_urls(root, st, pt, label):
     return paths, probs
 
 
-def run_gate(root, st, gate, label):
+# ------------------------------------------------------------------ 0.7.3: a run's logs are kept, bounded and redacted
+LOG_LINES, LOG_BYTES, TAIL_LINES = 400, 64 << 10, 12
+REDACT = [
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S),
+     "[redacted private key]"),
+    (re.compile(r"(?i)\b(authorization|bearer)\b[:=]?\s*\S+(\s+\S+)?"), r"\1 [redacted]"),
+    (re.compile(r"(?i)([\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|private[_-]?key|credential|"
+                r"DOTENV_PRIVATE_KEY)[\w.-]*)(\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|\S+)"), r"\1\2[redacted]"),
+    (re.compile(r"(?i)(://[^/\s:@]+):[^@\s/]+@"), r"\1:[redacted]@"),
+    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|"
+                r"xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|npm_[A-Za-z0-9]{30,})\b"),
+     "[redacted token]"),
+    (re.compile(r"(?<![A-Za-z0-9+/=_-])(?=[A-Za-z0-9+/_-]*[A-Z])(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*\d)"
+                r"[A-Za-z0-9+/_-]{40,}={0,2}(?![A-Za-z0-9+/=_-])"), "[redacted long secret-looking string]"),
+]
+
+
+def redact(text):
+    """Secret-looking text removed (keys, tokens, key=value secrets, URL credentials, long random strings)."""
+    for rx, sub in REDACT:
+        text = rx.sub(sub, text)
+    return text
+
+
+def bounded(text, lines=LOG_LINES, nbytes=LOG_BYTES):
+    """The last `lines` lines and at most `nbytes` bytes, ANSI codes stripped, redacted."""
+    t = ANSI.sub("", text or "")
+    ls = t.splitlines()
+    cut = len(ls) > lines
+    t = "\n".join(ls[-lines:])
+    raw = t.encode("utf-8", "replace")
+    if len(raw) > nbytes:
+        t, cut = raw[-nbytes:].decode("utf-8", "replace"), True
+    return ("[... earlier output cut]\n" if cut else "") + redact(t)
+
+
+def run_logs(dest, rc, so, se):
+    """(text for the evidence file, one-line tail for the failure) from a run's output folder: every *.log and
+    *.rc the script wrote, plus the container's own stdout and stderr, each bounded and redacted."""
+    parts = ["container exit code: %s" % rc]
+    rcs = {}
+    logs = []
+    written = []
+    if dest and os.path.isdir(dest):
+        for root_, _dirs, files in os.walk(dest):
+            for fn in sorted(files):
+                full = os.path.join(root_, fn)
+                rel = os.path.relpath(full, dest)
+                written.append("%s (%d bytes)" % (rel, os.lstat(full).st_size))
+                if os.path.islink(full) or os.path.getsize(full) > (20 << 20):
+                    continue
+                if fn.endswith((".rc", ".log")):
+                    with open(full, errors="replace") as fh:
+                        text = fh.read()
+                    if fn.endswith(".rc"):
+                        rcs[rel] = text.strip()[:20]
+                    else:
+                        logs.append((rel, text))
+    parts.append("files written: %s" % (", ".join(sorted(written)) or "none"))
+    if rcs:
+        parts.append("tool exit codes: %s" % ", ".join("%s=%s" % kv for kv in sorted(rcs.items())))
+    for name, text in logs + [("container stderr", se or ""), ("container stdout", so or "")]:
+        if (text or "").strip():
+            parts += ["--- %s (last %d lines at most)" % (name, LOG_LINES), bounded(text)]
+    main = next((t for n, t in logs if n.startswith(("run", "validate"))), "") or (logs[0][1] if logs else "") or se or ""
+    tail = [ln.strip()[:200] for ln in bounded(main, TAIL_LINES, 4000).splitlines() if ln.strip()]
+    codes = ", ".join("%s=%s" % kv for kv in sorted(rcs.items())) or "none written"
+    line = "container exit %s; tool exit %s; last lines: %s" % (rc, codes, " | ".join(tail[-TAIL_LINES:]) or "(no output)")
+    return "\n".join(parts) + "\n", line[:2500]
+
+
+def keep_logs(root, label, gate, dest, rc, so, se):
+    """Write the run's logs to the evidence folder (they used to go with the temporary directory)."""
+    text, line = run_logs(dest, rc, so, se)
+    rel, _digest = toolrun.record(root, label, "exec-%s-log" % gate, "confined", "exec-%s-run.log" % gate, text,
+                                  "check-exec-%s" % gate)
+    return rel, line
+
+
+def run_gate(root, st, gate, label, run_id=None):
+    """(fails, notes, data, dest). `run_id` lets the engine suite label the run with its own prefix."""
     g, pt = GATES[gate], _pt(root)
-    run_id = "x" + secrets.token_hex(5)
+    run_id = run_id or "x" + secrets.token_hex(5)
     tmp = toolrun.mkdtemp("moadix-exec-")
     r = None
     try:
@@ -697,15 +778,27 @@ def run_gate(root, st, gate, label):
                 env.update(start_services(r, pt, net))
             env["MOADIX_JUNIT"] = "/out/junit.xml"
             script = tool_script(gate, root, pt)
-        rc, so, se = r.execute(img, ["sh", "-c", script], g["tier"], mounts, network=net, env=env, user=user,
-                               name="moadix-%s-%s" % (run_id, gate.replace("-", "")))
         dest = os.path.join(tmp, "out")
+        try:
+            rc, so, se = r.execute(img, ["sh", "-c", script], g["tier"], mounts, network=net, env=env, user=user,
+                                   name="moadix-%s-%s" % (run_id, gate.replace("-", "")))
+        except confined.Refused as e:  # past its wall clock or memory: keep what it wrote, then refuse
+            with contextlib.suppress(confined.Unavailable):
+                r.copy_out(out, dest, img)
+            rel, line = keep_logs(root, label, gate, dest, "killed", "", "")
+            raise confined.Refused("%s; %s; the run's log is kept at %s" % (e, line, rel)) from None
         r.copy_out(out, dest, img)
         probs = confined.check_output(dest, confined.limits(g["tier"], pt)["out_mb"] << 20)
+        rel, line = keep_logs(root, label, gate, dest, rc, so, se)
         if probs:
-            return ["%s: the run's output was refused: %s" % (gate, "; ".join(probs))], [], {}, None
-        f, n, data = verdict(gate, dest, pt, root, st)
-        return f, n, data, dest
+            return ["%s: the run's output was refused: %s (%s; log %s)" % (gate, "; ".join(probs), line, rel)], [], {}, None
+        try:
+            f, n, data = verdict(gate, dest, pt, root, st)
+        except confined.Refused as e:
+            raise confined.Refused("%s; %s; the run's log is kept at %s" % (e, line, rel)) from None
+        if f:
+            f = list(f) + ["%s: %s (the run's log is kept at %s)" % (gate, line, rel)]
+        return f, list(n) + ["run log %s" % rel], data, dest
     finally:
         if r is not None:
             r.close()
@@ -735,7 +828,12 @@ def verdict(gate, d, pt, root, st):
         if gate == "pytm":
             return parse_pytm(_read(d, "tm.json") if _rc(d) == 0 else "{}", _rc(d))
         if gate == "likec4":
-            return parse_likec4(_read(d, "validate.log"), _rc(d, "validate.rc"), _read(d, "model.json"))
+            # 0.7.3 (task-tracker MF-27): a crash of `likec4 validate` is reported as such, before the
+            # missing model.json it leaves behind
+            vrc = _rc(d, "validate.rc")
+            if vrc not in (0, None) and not os.path.isfile(os.path.join(d, "model.json")):
+                return ["likec4 validate exited %s and wrote no model.json" % vrc], [], {}
+            return parse_likec4(_read(d, "validate.log"), vrc, _read(d, "model.json"))
         if gate == "dependency-cruiser":
             f, n, data = parse_depcruise(_read(d, "depcruise.json"))
             want, have = depcruise_paths(pt, tracked(root))

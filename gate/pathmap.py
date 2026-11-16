@@ -180,6 +180,38 @@ def _literal_prefix(pattern):
     return head.rstrip("/")
 
 
+# 0.7.3 (review of 0.7.2, item 4): files the agent may never READ, in the hook as in the sandbox's denyRead
+# and the managed Read() rules (managed/managed-settings.json; the sandbox and Read() rules are scoped to ~/**,
+# the hook matches anywhere). An encrypted .env stays readable: only dotenvx's private key file is protected.
+# Public certificates are NOT here: blocking *.pem/*.crt/*.cer would also block the CA bundles TLS clients
+# read (certifi's cacert.pem, node and curl); that needs the operator's ruling.
+READ_PROTECTED_NAMES = [
+    (re.compile(r"^\.env\.keys$"), "is dotenvx's private key file (.env.keys); the encrypted .env stays readable"),
+    (re.compile(r"\.(?:key|p12|pfx|jks|keystore)$", re.I), "is private key material"),
+    (re.compile(r"^id_(?:rsa|ed25519|ecdsa|dsa)$"), "is an SSH private key"),
+    (re.compile(r"(?:key|private)[^/]*\.pem$", re.I), "is a private key in PEM form (a *key*.pem or *private*.pem file)"),
+]
+READ_PROTECTED_DIRS = [("~/.config/moadix", "is the operator's local overlay; only the operator reads and edits it")]
+
+
+def read_protected(path, cwd=None):
+    """The reason `path` may never be read by the agent, or None. Matches the resolved path and the path as
+    written (a link's own name counts too)."""
+    names = {os.path.basename(path.rstrip("/"))}
+    full = resolve(path, cwd) if cwd or os.path.isabs(os.path.expanduser(path)) else os.path.expanduser(path)
+    names.add(os.path.basename(full.rstrip("/")))
+    for rx, why in READ_PROTECTED_NAMES:
+        for n in names:
+            if rx.search(n):
+                return "%s %s" % (n, why)
+    for d, why in READ_PROTECTED_DIRS:
+        base = _expand(d)
+        for cand in (full, os.path.expanduser(path)):
+            if cand == base or cand.startswith(base + "/"):
+                return "%s %s" % (cand, why)
+    return None
+
+
 def resolve(path, cwd):
     """Absolute, normalised, symlinks resolved for the parts that exist."""
     p = os.path.expanduser(path)

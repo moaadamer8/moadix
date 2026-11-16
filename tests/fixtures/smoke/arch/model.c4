@@ -1,0 +1,18 @@
+specification {
+  element actor
+  element system
+}
+
+model {
+  user = actor 'User'
+  smoke = system 'Smoke' {
+    description 'MOADIX confined-engine smoke fixture'
+  }
+  user -> smoke 'uses'
+}
+
+views {
+  view index {
+    include *
+  }
+}

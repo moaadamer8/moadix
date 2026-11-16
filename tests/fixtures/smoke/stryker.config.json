@@ -1,0 +1,1 @@
+{"testRunner": "command", "commandRunner": {"command": "node --test"}, "mutate": ["src/sum.js"], "reporters": ["json"], "coverageAnalysis": "off"}

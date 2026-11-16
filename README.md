@@ -73,9 +73,9 @@ Open Claude Code in a product's git repo and type these **as the whole message**
 | `INIT <product-id> <code>` | Starts a product: creates `.sdlc/` at the repo root and the first ledger line. |
 | `STATUS` | Shows the gate's state. It starts with `INTEGRITY OK` when the ledger and state verify. |
 | `REVIEW <phase>` | Read-only. Shows the latest validator result for a phase and its digest. |
-| `APPROVE <phase> <code>` | Approves a phase. Refused, with the findings, unless the phase's validators passed on the current commit. |
+| `APPROVE <phase> [WITH-WAIVERS] <code>` | Approves a phase. Refused, with the findings, unless the phase's validators passed on the current commit. With WITH-WAIVERS it also records, under the same code, exactly the waivers the agent proposed in `.sdlc-proposals/waivers.yaml` (REVIEW shows them); refused if one names a BLOCKER or an unknown id. |
 | `REOPEN <phase> <reason> <code>` | Reopens an approved (frozen) phase. |
-| `WAIVE <id>[,<id>...] owner=<name> scope=<what it covers> expiry=YYYY-MM-DD reason=<text> <code>` | Waives findings for at most 180 days; a gap-critic finding is named `gap-critic.<GC id>`, a carry `CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or tenant-isolation carries can't be waived. |
+| `WAIVE <id>[,<id>...] [owner=<name>] [scope=<what it covers>] [expiry=YYYY-MM-DD] reason=<text> <code>` | Waives findings for at most 180 days; owner defaults to operator, scope to the finding's document and expiry to 30 days. A gap-critic finding is named `gap-critic.<GC id>`, a carry `CARRY-<phase>-<n>`. BLOCKERs, high or critical security findings, and security, privacy or tenant-isolation carries can't be waived. |
 | `UNWAIVE <id> <code>` | Withdraws a waiver. |
 | `UNCARRY <GC id or CARRY id> <code>` | Pulls a carried finding back into the current phase (a GC id counts as a MAJOR; a CARRY id is readdressed to this phase). |
 | `PROCEED-PAST <phase> <reason> <code>` | Moves past a phase whose validators definitely failed on the current commit; the findings it passes are recorded. |
@@ -98,6 +98,8 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/skills/run.py       # phase manifest, vendored sources, self-approval grep
 /usr/bin/python3 tests/rel071/run.py       # 0.7.1: hook loosenings and their guarded cases, generated docs, COLLAPSE 11b
 /usr/bin/python3 tests/rel072/run.py       # 0.7.2: substitution read-deny and reader proofs, critic section 10 (A1-A5)
+/usr/bin/python3 tests/rel073/run.py       # 0.7.3: runner uid, kept run logs, read protection, APPROVE WITH-WAIVERS
+/usr/bin/python3 tests/install/no_product_strings.py   # before a push: no overlay value or home path in new commits
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)
 /usr/bin/python3 tests/corpus/run.py       # attack corpus (Terminal; scratch keychains only)

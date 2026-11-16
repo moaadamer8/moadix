@@ -27,6 +27,13 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
   egress    the live network is internal: no route out; the install proxy refuses a host off its allowlist
   limits    fork bomb (pids), memory (OOM kill), disk (file-size cap, tmpfs cap), wall clock
   output    a forged report (symlink to a host file, a FIFO, an oversized file) is refused
+  user      0.7.3 (MF-27): the run's uid (65534, nobody) has a passwd entry in every pinned image the gates
+            run product code in; a uid without one (10001, the old value) is refused as UNKNOWN before a run
+  smoke     0.7.3: every executing gate starts and writes its output file, with its real pinned tool, on the
+            fixture product tests/fixtures/smoke, through check_exec.run_gate exactly as the gate calls it
+            (installs go through the egress proxy, so the host needs internet). Images a live gate builds
+            carry the suite's label and are left in place (ruling 3: nothing removes images); they are
+            listed at the end and excluded from the foreign-object comparison
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
 """
 import json
@@ -48,7 +55,7 @@ from gate import confined  # noqa: E402  (the repository's runner and configurat
 
 RESULTS = []
 T0 = time.time()
-NEEDED = ("node", "python")
+NEEDED = ("node", "node-full", "python", "chromium", "zap")
 PREFIX = "es"
 
 
@@ -98,9 +105,22 @@ def own_images():
     return ids
 
 
+SMOKE_RUNS = []  # the run ids the smoke group used (each carries the suite's own es<hex> label)
+
+
+def built_images():
+    """Ids of images a live gate built during this suite: listed by its own run labels only (never an inspect of
+    a foreign image); never removed (ruling 3)."""
+    out = []
+    for run_id in SMOKE_RUNS:
+        out += lines(["image", "ls", "-q", "--no-trunc", "--filter", "label=moadix.run=%s" % run_id])
+    return sorted(set(out))
+
+
 def snapshot(own_img):
     """Every container, volume, network and image that is not the suite's: names, ids (and container state)."""
     cs, vols, nets = inventory()
+    own_img = set(own_img) | set(built_images())
     imgs = lines(["image", "ls", "-a", "--no-trunc", "--format", "{{.ID}}\t{{.Repository}}:{{.Tag}}"])
     return {
         "containers": sorted("%s %s %s" % (c["id"], c["name"], c["state"]) for c in cs if not ours(c["run"])),
@@ -383,10 +403,97 @@ def test_output(node):
     record(G, "cleanup: nothing labelled is left", not r.leftovers(), r.leftovers())
 
 
+# ------------------------------------------------------------------ 0.7.3: the run's user, and one smoke run per gate
+def test_user(_node):
+    G = "user"
+    r = confined.Run(rid())
+    try:
+        for name in ("node", "node-full", "python", "chromium"):
+            try:
+                r.check_user(confined.image(name), "%d:%d" % (r.uid, r.uid))
+                ok, why = True, ""
+            except confined.Unavailable as e:
+                ok, why = False, str(e)
+            record(G, "uid %d has a passwd entry in the pinned %s image" % (r.uid, name), ok, why)
+        try:
+            r.check_user(confined.image("node"), "10001:10001")
+            refused = ""
+        except confined.Unavailable as e:
+            refused = str(e)
+        record(G, "a uid with no passwd entry (10001, the 0.7.2 value) is refused before any run", "no passwd entry"
+               in refused, refused)
+    finally:
+        r.close()
+
+
+SDLC = "." + "sdlc"  # the product state folder of the throwaway smoke repository
+SMOKE_FIX = os.path.join(REPO, "tests", "fixtures", "smoke")
+# (gate, phase, the output file the run must write, fixture variant)
+SMOKE = [("pytm", "4", r"tm\.json", None), ("likec4", "3", r"model\.json", None),
+         ("dependency-cruiser", "3", r"depcruise\.json", "no-src"), ("dependency-cruiser", "7", r"depcruise\.json", None),
+         ("knip", "7", r"knip\.json", None), ("eslint", "7", r"eslint\.json", None), ("tsc", "7", r"tsc\.txt", None),
+         ("stryker", "8", r"mutation\.json", None), ("tests", "8", r"junit\.xml", None),
+         ("schemathesis", "8", r"st/junit[^ ]*\.xml", None), ("zap", "9", r"zap\.json", None),
+         ("lhci", "10a", r"lhr-\d+\.json", None), ("axe", "6", r"axe\.json", None)]
+
+
+def smoke_product(base, variant):
+    """The fixture copied into a throwaway git repository (its own commit), product-tools.yaml in place."""
+    import shutil
+    p = os.path.join(base, variant or "full")
+    shutil.copytree(SMOKE_FIX, p, ignore=shutil.ignore_patterns(".claude", "README.md", "product-tools.yaml"))
+    if variant == "no-src":  # MF-26: phase 3 writes the rules before any code exists
+        shutil.rmtree(os.path.join(p, "src"))
+        shutil.rmtree(os.path.join(p, "tests"))
+    git = ["/usr/bin/git", "-C", p]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "smoke fixture"], check=True)
+    os.makedirs(os.path.join(p, SDLC, "config"))
+    with open(os.path.join(SMOKE_FIX, "product-tools.yaml")) as f, \
+            open(os.path.join(p, SDLC, "config", "product-tools.yaml"), "w") as g:
+        g.write(f.read())
+    return p
+
+
+def test_smoke(_node):
+    G = "smoke"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    base = tempfile.mkdtemp(prefix="moadix-smoke-")
+    products = {}
+    for gate, label, want, variant in SMOKE:
+        root = products.get(variant) or products.setdefault(variant, smoke_product(base, variant))
+        st = {"current_phase": label, "feature": None, "mode": "greenfield"}
+        try:
+            run_id = rid()
+            SMOKE_RUNS.append(run_id)
+            f, n, _data, _dest = check_exec.run_gate(root, st, gate, label, run_id=run_id)
+            err = ""
+        except (confined.Refused, confined.Unavailable) as e:
+            f, n, err = [], [], "%s: %s" % (type(e).__name__, e)
+        logrel = next((x[len("run log "):] for x in n if x.startswith("run log ")), None)
+        if not logrel:
+            m = re.search(r"kept at (\S+)", err)
+            logrel = m.group(1) if m else None
+        log = open(os.path.join(root, logrel)).read() if logrel and os.path.exists(os.path.join(root, logrel)) else ""
+        written = next((ln for ln in log.splitlines() if ln.startswith("files written:")), "")
+        got = re.search(r"(?:^|, |: )%s \(\d+ bytes\)" % want, written) is not None
+        extra = True
+        if variant == "no-src":
+            extra = any("configuration only" in x for x in n)
+        record(G, "%s (phase %s%s) starts and writes %s" % (gate, label, ", " + variant if variant else "",
+                                                           want.replace("\\", "")),
+               got and extra and not err, "%s | fails %s | notes %s | %s | log:\n%s" % (
+                   err, f[:3], n[:4], written, log[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 4), "test_host": ("host paths", 6), "test_network": ("network", 7),
-        "test_limits": ("limits", 6), "test_output": ("forged output", 5)}
+        "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
+        "test_smoke": ("smoke", 13)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -427,7 +534,7 @@ def main():
         print("found stopped compose projects (they do not block; left untouched, never started, stopped or "
               "inspected): %s" % ", ".join(stopped))
     node, py = confined.image("node"), confined.image("python")
-    for img in (node, py):
+    for img in [confined.image(x) for x in NEEDED]:
         p = docker(["pull", "-q", img], timeout=900)
         if p.returncode != 0:
             print("REFUSED: pulling %s failed: %s" % (img, p.stderr.strip()[:300]))
@@ -449,8 +556,12 @@ def main():
     before = snapshot(own_img)
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
-                 (test_output, (node,))):
+                 (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,))):
         run_group(t, a)
+    left = built_images()
+    if left:
+        print("images built by the live smoke runs, labelled moadix.run=%s*, left in place (nothing here removes an "
+              "image): %s" % (PREFIX, ", ".join(i[:19] for i in left)))
     cs, vols, nets = inventory()
     mine = [c["name"] for c in cs if ours(c["run"])] + [v for v in vols if ours((v.split("\t") + [""])[1])] + \
            [n for n in nets if ours((n.split("\t") + ["", ""])[2])]

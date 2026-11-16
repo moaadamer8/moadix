@@ -238,8 +238,8 @@ def test_argv(p):
            all("no-new-privileges" in " ".join(c) for c in runs if "--rm" not in c), runs)
     tool = [c for c in runs if (c[c.index("--name") + 1] if "--name" in c else "").endswith("-eslint")]
     tj = " ".join(tool[0]) if tool else ""
-    record(G, "the product-code run: --network none, read-only, uid 10001, the E-lint limits, /src read-only, /deps read-only",
-           bool(tool) and "--network none" in tj and "--read-only" in tj and "--user 10001:10001" in tj and
+    record(G, "the product-code run: --network none, read-only, uid 65534, the E-lint limits, /src read-only, /deps read-only",
+           bool(tool) and "--network none" in tj and "--read-only" in tj and "--user 65534:65534" in tj and
            "--cpus 2" in tj and "--memory 2048m" in tj and "--memory-swap 2048m" in tj and "--pids-limit 256" in tj and
            "fsize=%d" % (50 << 20) in tj and re.search(r"dst=/src,readonly", tj) and re.search(r"dst=/deps,readonly", tj),
            tj)
@@ -426,7 +426,8 @@ def test_runner_kill_and_mounts():
     stub = os.path.join(E.base, "engine-stub")
     with open(stub, "w") as f:
         f.write("#!/bin/sh\necho \"$*\" >> \"$0.log\"\ncase \"$1\" in\n  version) echo stub-1 ;;\n"
-                "  run) exit \"${STUB_RC:-0}\" ;;\n  ps) echo 0123456789abcdef ;;\n"
+                "  run) case \"$*\" in *getent*) exit 0 ;; esac; exit \"${STUB_RC:-0}\" ;;\n"  # 0.7.3: passwd check
+                "  ps) echo 0123456789abcdef ;;\n"
                 "  inspect) [ -n \"$STUB_INSPECT_FAILS\" ] && exit 1; echo \"${STUB_OOM:-false}\" ;;\nesac\nexit 0\n")
     os.chmod(stub, 0o755)
     saved_engine = confined.engine
@@ -549,7 +550,8 @@ def test_safeguards():
            '"images"' in src and "DIFFERENCE" in src and "not diff" in src, "")
     record(G, "it never starts, stops or inspects a foreign object: inspect only on its own pinned images and its own "
               "containers", '"start"' not in src and '"stop"' not in src and src.count('"inspect"') == 1, "")
-    # a crashing group is one failed check plus its unrun checks reported as failed: the total stays 31
+    # a crashing group is one failed check plus its unrun checks reported as failed: the total stays fixed
+    # (49 since 0.7.3: the user and smoke groups)
     saved_results = list(es.RESULTS)
     del es.RESULTS[:]
 
@@ -565,8 +567,8 @@ def test_safeguards():
     finally:
         es.RESULTS[:] = saved_results
     record(G, "engine suite: a group that crashes after 1 of its 6 checks reports 6 (1 passed, the crash, 4 not run); "
-              "the suite's total is fixed at 31",
-           es.TOTAL == 31 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
+              "the suite's total is fixed at 49 (0.7.3: user 5, smoke 13)",
+           es.TOTAL == 49 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
            got)
 
 

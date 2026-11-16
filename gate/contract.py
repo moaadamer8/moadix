@@ -1508,7 +1508,12 @@ def coverage_doc():
          "findings are BLOCKER (refuses APPROVE, cannot be waived), MAJOR (refuses APPROVE until fixed or waived by "
          "the operator), MINOR (a file for the operator) or CARRY (below the phase's depth: recorded for the later "
          "phase its defers rule names; never blocks this phase). The operator's waiver line is exactly `%s`, with "
-         "`gap-critic.<GC id>` as the id; one WAIVE may name several, comma-separated. The gate gives every finding "
+         "`gap-critic.<GC id>` as the id; one WAIVE may name several, comma-separated; owner, scope and expiry default "
+         "to operator, the finding's document and 30 days. To keep a phase to one code, write the waivers you "
+         "propose to `.sdlc-proposals/waivers.yaml` (`waivers:` entries with `id` and `reason`, optionally `owner`, "
+         "`scope`, `expiry`): REVIEW shows them, and `APPROVE <phase> WITH-WAIVERS <code>` approves the phase and "
+         "records exactly those waivers under that one code (a proposal naming a BLOCKER or an unknown id refuses the "
+         "whole command). The gate gives every finding "
          "a stable id, `GC-<phase>-<n>`: the brief says which ids the run's new findings will get, and the critic's "
          "final message lists `C<k> = GC-...`, so a WAIVE can be typed before REVIEW. The next brief lists earlier "
          "findings with what happened to each (waived, carried, ruled, fixed?, open), so findings converge. A waiver "
@@ -1545,6 +1550,14 @@ def coverage_doc():
          "out (%s) collapses the same way at any size." % (
              ", ".join(size_collapses("S")) or "none", opcmd_usage("COLLAPSE"),
              "; ".join("%s under %s" % (lab, " and ".join(rs)) for lab, rs in ruling_retired().items()) or "none"),
+         "",
+         "**Docker runs outside the sandbox only as the whole command.** The policy lets a command that starts with "
+         "`docker` reach the Docker engine only when it is the entire command: no `cd`, `&&`, `;`, pipe, environment "
+         "prefix or script around it (in any other form the socket is refused: `connect: operation not permitted`). "
+         "Use docker's own flags instead of `cd`: `docker compose --project-directory app -f app/compose.yaml up -d`, "
+         "`docker build -f app/Dockerfile app`, `docker run --rm -w /work <image> <command>`, `docker exec -w /app "
+         "<container> <command>`, and `--env-file <file>` instead of an environment prefix. One docker command per "
+         "Bash call.",
          "",
          "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
          "note there would reach later sessions without the operator. A lasting instruction goes in "
