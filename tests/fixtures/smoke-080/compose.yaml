@@ -1,0 +1,21 @@
+# 0.8.0 (task-tracker MF-57): the app needs a database built FROM the official postgres image, as the product's gate
+# stack does. The image keeps initdb and postgres in /usr/lib/postgresql/17/bin, on its own PATH only; the app waits
+# for db:5432 before it listens, so the live gates pass only when the database starts under the gate's confinement.
+services:
+  db:
+    build:
+      context: .
+      dockerfile: db.Dockerfile
+    environment:
+      POSTGRES_DB: smoke
+      POSTGRES_HOST_AUTH_METHOD: trust
+      PGDATA: /tmp/pgdata
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "/app/wait-db.mjs"]
+    environment:
+      APP_ORIGIN: http://sut.localhost:3000
+      DATABASE_URL: postgres://postgres@db:5432/smoke
+    expose: ["3000"]

@@ -70,7 +70,7 @@ from gate import confined  # noqa: E402  (the repository's runner and configurat
 
 RESULTS = []
 T0 = time.time()
-NEEDED = ("node", "node-full", "python", "chromium", "zap")
+NEEDED = ("node", "node-full", "python", "chromium", "zap", "postgres")
 PREFIX = "es"
 
 
@@ -216,9 +216,13 @@ def test_secrets(node):
     with open(os.path.join(host_dir, "canary-file"), "w") as f:
         f.write(canary)
     r = confined.Run(rid())
-    runner_env = {"PATH": confined.RUN_PATH, "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
+    image_env = json.loads(inspect_pinned("node", "{{json .Config.Env}}") or "null") or []
+    # 0.8.0 (task-tracker MF-57): the run keeps the image's own PATH, the gate's entries appended
+    image_path = next((x[len("PATH="):] for x in image_env if x.startswith("PATH=")), None)
+    runner_env = {"PATH": confined.run_path(image_path), "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1",  # noqa: S108
+                  "TZ": "UTC"}
     assert sorted(runner_env) == sorted(confined.RUN_ENV_NAMES)
-    image_names = [x.split("=", 1)[0] for x in (json.loads(inspect_pinned("node", "{{json .Config.Env}}") or "null") or [])]
+    image_names = [x.split("=", 1)[0] for x in image_env]
     try:
         rc, out, err = sh(r, node, env_leak.probe(canary))
         found = env_leak.problems(out, err, canary, runner_env, image_names)
@@ -707,12 +711,73 @@ def test_rel079(_node):
                    err, f[:4], [i[:19] for i in unlabelled], labelled(run_id), n[:3], log[-1500:]))
 
 
+FIX80 = os.path.join(REPO, "tests", "fixtures", "smoke-080")
+
+
+def smoke080_product(base, compose=None):
+    """smoke-076 with the smoke-080 overlay: a database built FROM the official postgres image, the app waiting for it."""
+    import shutil
+    p = os.path.join(base, "r080")
+    shutil.copytree(FIX76, p, ignore=shutil.ignore_patterns(".claude", "README.md", "product-tools.yaml"))
+    shutil.copytree(FIX80, p, dirs_exist_ok=True)
+    if compose is not None:
+        with open(os.path.join(p, "compose.yaml"), "w") as f:
+            f.write(compose)
+    git = ["/usr/bin/git", "-C", p]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "smoke-080 fixture"], check=True)
+    os.makedirs(os.path.join(p, SDLC, "config"))
+    with open(os.path.join(FIX76, "product-tools.yaml")) as f, \
+            open(os.path.join(p, SDLC, "config", "product-tools.yaml"), "w") as g:
+        g.write(f.read())
+    return p
+
+
+def test_rel080(_node):
+    """0.8.0 (task-tracker MF-57, MF-56): the official postgres image as a live service. 0.7.9 replaced every
+    container's PATH, so the image found no initdb and exited 127; and the gate kept nothing of a stack that never
+    started."""
+    G = "rel080"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    pg = confined.image("postgres")
+    r = confined.Run(rid())
+    try:
+        c = docker(["run", "--rm", "--label", r.label, "--name", "moadix-%s-pgcontrol" % r.id, "--network", "none",
+                    "--user", "65534:65534", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+                    "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "--env", "PATH=%s" % confined.RUN_PATH, "--env",
+                    "PGDATA=/tmp/pgdata", "--env", "POSTGRES_HOST_AUTH_METHOD=trust", pg, "postgres"], timeout=180)
+    finally:
+        r.close()
+    record(G, "control: the official postgres image, confined with 0.7.9's PATH, exits 127 (initdb: command not found)",
+           c.returncode == 127 and "initdb: command not found" in c.stdout + c.stderr, (c.returncode, c.stderr[-300:]))
+    base = tempfile.mkdtemp(prefix="moadix-smoke080-")
+    root = smoke080_product(base)
+    f, n, data, err, log, run_id = run_logged(check_exec, root, "schemathesis", "8")
+    record(G, "MF-57: schemathesis passes with a database built FROM the official postgres image as a live service "
+              "(it keeps its image's PATH); nothing of the run is left",
+           not err and not f and "command not found" not in log and not labelled(run_id),
+           "%s | fails %s | left %s | log:\n%s" % (err, f[:4], labelled(run_id), log[-1500:]))
+    with open(os.path.join(FIX80, "compose.yaml")) as fh:
+        broken = fh.read().replace("      DATABASE_URL: postgres://postgres@db:5432/smoke\n", "")
+    root = smoke080_product(tempfile.mkdtemp(prefix="moadix-smoke080b-"), compose=broken)
+    f, n, data, err, log, run_id = run_logged(check_exec, root, "schemathesis", "8")
+    msg = " ".join(f) + " " + err
+    record(G, "MF-56: when the app never listens, the evidence keeps the app's exit and output (DATABASE_URL is not "
+              "set) and the database's state; the failure line names the app",
+           re.search(r"--- service app \(exited, exit code 1", log) and "DATABASE_URL is not set" in log and
+           re.search(r"--- service db \(running", log) and "services: app exited 1" in msg and not labelled(run_id),
+           "%s | %s | left %s | log:\n%s" % (err, f[:3], labelled(run_id), log[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
-        "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4)}
+        "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4), "test_rel080": ("rel080", 3)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -776,7 +841,7 @@ def main():
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
-                 (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,))):
+                 (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,)), (test_rel080, (node,))):
         run_group(t, a)
     left = built_images()
     if left:

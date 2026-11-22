@@ -747,6 +747,9 @@ DEF_LIST = re.compile(r"^\s*[-*]\s+\*\*(%s)-(\d{1,4})\b" % "|".join(PREFIXES))
 DEF_ROW = re.compile(r"^\s*\|\s*\**(%s)-(\d{1,4})\**\s*\|" % "|".join(PREFIXES))
 AC_DEF = re.compile(r"^\s*[-*]\s*\*\*(AC-\d+)\b", re.I)
 SKIP_FILES = ("COVERAGE.md",)
+# 0.8.0 (task-tracker MF-58): check-security requires a `### SEC-nnn` heading in the phase 9 report for each SEC-ID of
+# the threat model, so in that report such a heading verifies the ID: a reference, never a second definition
+REFERENCE_HEADS = {"09-security-report.md": ("SEC",)}
 WEAK = "\x00weak\x00"  # a row of an ID table: a register entry, not the ID's own definition
 
 
@@ -782,6 +785,8 @@ def _definitions(rel, text):
         else:
             id_table = False
         m = DEF_HEAD.match(ln)
+        if m and m.group(1) in REFERENCE_HEADS.get(os.path.basename(rel), ()):
+            m = None  # a reference (counted by trace_lint's reference scan), not a definition
         if m:
             lvl = len(HEADING.match(ln).group(1))
             ident = "%s-%s" % (m.group(1), m.group(2))
@@ -1572,6 +1577,16 @@ def coverage_doc():
          "for example `APP_ORIGIN: %s` for port 3000, and allow no other host. `.localhost` is a secure context over "
          "plain http, so `Secure` and `__Host-` cookies work there unchanged." % (
              _app_origin_example()[0], _app_origin_example()[1]),
+         "",
+         "**Phase 9: SEC headings and test-fixture secrets.** In `09-security-report.md`, a `### SEC-nnn` heading "
+         "verifies the threat model's SEC-ID: trace-lint reads it as a reference, not a second definition. A gitleaks "
+         "hit is high and cannot be waived. When one is a test fixture (a throwaway password in `tests/` or a "
+         "`fixtures/` directory, never under `src/`), propose an entry per finding in "
+         "`.sdlc-proposals/config/product-tools.yaml` for the operator to review and ADOPT: `gitleaks: allow: - "
+         "{fingerprint: \"<commit>:<path>:<rule>:<line>\" (history) or \"<path>:<rule>:<line>\" (tree), path: "
+         "<path>, reason: \"<why it is not a credential>\", fixture: true}`. check-gitleaks prints each finding's "
+         "fingerprint. A whole rule or path is never allowlisted; REVIEW lists every finding the allowlist lets "
+         "through.",
          "",
          "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
          "note there would reach later sessions without the operator. A lasting instruction goes in "

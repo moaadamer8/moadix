@@ -96,8 +96,9 @@ services:
     user: "999:999"
     data: /var/lib/postgresql/data
     tmpfs: [/var/run/postgresql]
-    # 0.7.5: the runner's fixed PATH replaces the image's own, and the image's entrypoint finds initdb and
-    # postgres on PATH (they are in /usr/lib/postgresql/17/bin, which the image's own PATH adds)
+    # 0.7.5: the image's entrypoint finds initdb and postgres on PATH (they are in /usr/lib/postgresql/17/bin).
+    # 0.8.0: every run keeps its image's own PATH (confined.run_path), so this is no longer needed; these
+    # directories still come first
     path: /usr/lib/postgresql/17/bin:/usr/local/bin:/usr/bin:/bin
     env:
       POSTGRES_USER: moadix

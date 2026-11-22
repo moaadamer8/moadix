@@ -29,6 +29,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "tests", "lib"))
 sys.path.insert(0, REPO)
 
+import engine_double  # noqa: E402
 import env_leak  # noqa: E402
 import fixtures  # noqa: E402
 
@@ -134,8 +135,8 @@ def test_secrets():
     spec = importlib.util.spec_from_file_location("es_suite", p)
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
-    record(G, "the engine suite's total is 67 (0.7.5: 50, secrets 5 with the control; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4)",
-           es.TOTAL == 67 and es.PLAN["test_secrets"][1] == 5, (es.TOTAL, es.PLAN["test_secrets"]))
+    record(G, "the engine suite's total is 70 (0.7.5: 50, secrets 5 with the control; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3)",
+           es.TOTAL == 70 and es.PLAN["test_secrets"][1] == 5, (es.TOTAL, es.PLAN["test_secrets"]))
 
 
 # ------------------------------------------------------------------ path
@@ -164,7 +165,7 @@ def test_path():
     scan = next((c for c in calls() if c[:1] == ["run"] and "--name" in c and c[c.index("--name") + 1].endswith("zap")), [])
     j = " ".join(scan)
     record(G, "zap (phase 9) passes end to end through the gate and the double, the scan under the runner's PATH",
-           rc == 0 and "/zap/zap-baseline.py" in j and "--env PATH=%s " % confined.RUN_PATH in j + " ", out[-800:] + j[-400:])
+           rc == 0 and "/zap/zap-baseline.py" in j and "--env PATH=%s " % confined.run_path(engine_double.IMAGE_PATH["zaproxy"]) in j + " ", out[-800:] + j[-400:])
     for gate, label in (("schemathesis", "8"), ("lhci", "10a"), ("axe", "6")):
         rc, out = run_gate(p, gate, label)
         record(G, "%s (phase %s) still passes with the stricter double" % (gate, label), rc == 0, out[-800:])
@@ -200,12 +201,17 @@ def test_services():
     G = "services"
     old = ["run", "--name", "x-svc", "--network", "none", "--env", "PATH=" + confined.RUN_PATH, "-d", PG]
     r = double(old)
-    record(G, "the double refuses the 0.7.4 postgres service (initdb not on the runner's PATH), as the real engine did",
-           r.returncode == 127 and b"initdb: command not found" in r.stderr, r.stderr)
+    # 0.8.0: as the engine, the double starts the detached run; the container stops with 127 and the message
+    st = double(["inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", "x-svc"]).stdout
+    lg = double(["logs", "--tail", "50", "x-svc"]).stderr
+    record(G, "the 0.7.4 postgres service (initdb not on the runner's PATH) stops with 127 in the double, as on the "
+              "real engine", r.returncode == 0 and st.split() == [b"exited", b"127"] and b"initdb: command not found" in lg,
+           (st, lg))
     svc = (confined.config().get("services") or {}).get("postgres") or {}
-    r = double(old[:6] + ["PATH=" + svc.get("path", "")] + old[7:])
+    r = double(["run", "--name", "x-svc2"] + old[3:6] + ["PATH=" + svc.get("path", "")] + old[7:])
+    st = double(["inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", "x-svc2"]).stdout
     record(G, "with the gate's configured service PATH the service starts", r.returncode == 0 and
-           "/usr/lib/postgresql/17/bin" in svc.get("path", ""), r.stderr)
+           st.split() == [b"running", b"0"] and "/usr/lib/postgresql/17/bin" in svc.get("path", ""), (r.stderr, st))
     pt = open(os.path.join(SMOKE, "product-tools.yaml")).read().replace(
         "tests:\n", "tests:\n  services: [postgres]\n", 1)
     p = product("svc", pt)

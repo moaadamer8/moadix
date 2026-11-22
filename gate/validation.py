@@ -329,6 +329,24 @@ def summary(data, limit=8):
     fz = frozen_text(data)
     if fz:
         out.append(fz)
+    al = (data or {}).get("allowlisted") or []
+    if al:
+        out.append("%s (%d): %s" % (ALLOWLISTED_HEAD, len(al), " | ".join(al[:40]) + (
+            " | ... and %d more" % (len(al) - 40) if len(al) > 40 else "")))
+    return out
+
+
+ALLOWLISTED_HEAD = "Allowlisted test-fixture findings, by the operator's adopted allowlist (not blocking)"
+
+
+def allowlisted(results):
+    """0.8.0 (task-tracker MF-59): every finding a validator allowlisted (its "ALLOWLISTED ..." output lines), so REVIEW
+    shows what was let through and why."""
+    out = []
+    for r in results or []:
+        for ln in (r.get("output") or "").splitlines():
+            if ln.strip().startswith("ALLOWLISTED "):
+                out.append("%s: %s" % (r.get("validator"), ln.strip()[len("ALLOWLISTED "):][:400]))
     return out
 
 

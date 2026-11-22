@@ -567,8 +567,8 @@ def test_safeguards():
     finally:
         es.RESULTS[:] = saved_results
     record(G, "engine suite: a group that crashes after 1 of its 6 checks reports 6 (1 passed, the crash, 4 not run); "
-              "the suite's total is fixed at 67 (0.7.3: user 5, smoke 13; 0.7.5: secrets 5; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4)",
-           es.TOTAL == 67 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
+              "the suite's total is fixed at 70 (0.7.3: user 5, smoke 13; 0.7.5: secrets 5; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3)",
+           es.TOTAL == 70 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
            got)
 
 

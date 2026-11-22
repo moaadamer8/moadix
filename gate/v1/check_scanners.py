@@ -42,6 +42,7 @@ import tarfile
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
+import gitleaks_allow  # noqa: E402
 import hlib  # noqa: E402
 import toolrun  # noqa: E402
 
@@ -80,8 +81,33 @@ def read_json(path):
 
 
 # ---------------------------------------------------------------- gitleaks
+TOOLS_REL = os.path.join(".sdlc", "config", "product-tools.yaml")
+ALLOWLISTED: list = []  # 0.8.0: "ALLOWLISTED ..." lines, printed for REVIEW (gate/validate.py collects them)
+
+
+def gitleaks_allowlist(root):
+    """0.8.0 (task-tracker MF-59): ({fingerprint: entry}, findings). The operator's test-fixture allowlist
+    (gitleaks_allow), applied only when every entry passes and product-tools.yaml is as ADOPT recorded it; otherwise
+    nothing is allowlisted and each reason is a high finding."""
+    entries, probs = gitleaks_allow.from_tools(toolrun.product_tools(root))
+    if not entries and not probs:
+        return {}, []
+    sys.path.insert(0, os.path.dirname(toolrun.GATE))
+    from gate import adopt  # noqa: E402 (late: the gate package, as check_exec imports it)
+    if not adopt.adopted(root, TOOLS_REL):
+        probs = probs + ["the gitleaks allowlist in %s was not adopted (the file is not what ADOPT recorded), so it is "
+                         "not applied; propose it in .sdlc-proposals/config/product-tools.yaml for the operator to "
+                         "ADOPT" % TOOLS_REL]
+    if probs:
+        return {}, [("high", "gitleaks:allowlist", p) for p in probs]
+    return {str(e["fingerprint"]): e for e in entries}, []
+
+
 def run_gitleaks(root, out, notes):
     findings, files = [], []
+    allow, refused = gitleaks_allowlist(root)
+    findings += refused
+    used = set()
     empty = os.path.join(out, "no-ignore")
     os.makedirs(empty)
     common = ["--config", os.path.join(CONFIG, "gitleaks.toml"), "--gitleaks-ignore-path", empty,
@@ -109,11 +135,24 @@ def run_gitleaks(root, out, notes):
             loc = r["loc"]
             for base in (target.rstrip("/") + "/", os.path.realpath(target).rstrip("/") + "/"):
                 loc = loc[len(base):] if loc.startswith(base) else loc  # repo-relative, not the scratch export
+            path, line = (loc.rsplit(":", 1) + [""])[:2] if re.search(r":\d+$", loc) else (loc, "")
+            fp = gitleaks_allow.fingerprint(mode, r.get("commit_full") or "", path, r["rule"], line)
+            where = "%s %s (%s)" % (mode == "git" and "history" or "tree", loc, r.get("commit") or "HEAD")
+            e = allow.get(fp)
+            if e is not None and e.get("path") == path and gitleaks_allow.fixture_path(path):
+                used.add(fp)
+                ALLOWLISTED.append("ALLOWLISTED %s %s: gitleaks:%s, a test fixture by the operator's adopted allowlist "
+                                   "(%s)" % (fp, where, r["rule"], " ".join(str(e.get("reason")).split())[:200]))
+                continue
             # A secret in the history or the tree is HIGH: remove it and rotate it.
-            findings.append(("high", "gitleaks:%s" % r["rule"], "%s %s (%s)" % (
-                mode == "git" and "history" or "tree", loc, r.get("commit") or "HEAD")))
+            findings.append(("high", "gitleaks:%s" % r["rule"], "%s [fingerprint %s]" % (where, fp)))
     notes.append("gitleaks scanned the full history and the HEAD tree with the gate's config; inline "
                  "gitleaks:allow and .gitleaksignore are ignored")
+    if allow:
+        unused = sorted(set(allow) - used)
+        notes.append("gitleaks: %d finding(s) allowlisted as test fixtures by the adopted allowlist (%d entries)%s" % (
+            len(ALLOWLISTED), len(allow), "; %d entries match no finding: %s" % (len(unused), ", ".join(unused[:5]))
+            if unused else ""))
     return findings, files
 
 
@@ -126,8 +165,10 @@ def sarif_results(doc):
             path = ((pl.get("artifactLocation") or {}).get("uri")) or "?"
             line = (pl.get("region") or {}).get("startLine")
             props = r.get("properties") or {}
+            # 0.8.0: gitleaks puts the commit in partialFingerprints (properties hold none, so history hits said HEAD)
+            commit = (r.get("partialFingerprints") or {}).get("commitSha") or props.get("commitSha") or ""
             out.append({"rule": r.get("ruleId") or "?", "loc": "%s:%s" % (path, line) if line else path,
-                        "commit": (props.get("commitSha") or "")[:12], "level": r.get("level"), "props": props,
+                        "commit": commit[:12], "commit_full": commit, "level": r.get("level"), "props": props,
                         "message": ((r.get("message") or {}).get("text") or "")[:160]})
     return out
 
@@ -297,6 +338,8 @@ def main():
             errs.append(str(e))
     finally:
         shutil.rmtree(out, ignore_errors=True)
+    for ln in ALLOWLISTED:  # 0.8.0: shown in REVIEW (gate/validate.py collects them); never the first line
+        print(ln)
     return toolrun.report(title, notes, findings, errs, unknown)
 
 

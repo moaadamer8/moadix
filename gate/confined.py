@@ -152,6 +152,21 @@ def _refuse_host_mounts(options):
 
 RUN_PATH = "/usr/local/bin:/usr/bin:/bin"
 RUN_PATH_RE = re.compile(r"^/[\w./-]+(:/[\w./-]+)*$")
+
+
+def run_path(image_path, first=None):
+    """0.8.0 (task-tracker MF-57): a run's PATH. The image's own PATH is kept, in its order, and the gate's entries it
+    lacks are appended; 0.7.9 replaced it with RUN_PATH, so the official postgres image (initdb and postgres in
+    /usr/lib/postgresql/<major>/bin, on its own PATH only) exited 127. `first`: a gate-owned service's own directories
+    (confinement.yaml services.<name>.path), ahead of the image's. A PATH that is not a list of absolute directories
+    (empty, relative, `.`, a variable, a space) is never used: the gate's entries alone."""
+    dirs = []
+    for part in (first, image_path, RUN_PATH):
+        if part and RUN_PATH_RE.match(part) and ".." not in part.split("/"):
+            for d in part.split(":"):
+                if d.rstrip("/") not in [x.rstrip("/") for x in dirs]:
+                    dirs.append(d)
+    return ":".join(dirs)
 # The runner's fixed environment: these names and nothing else, plus the image's own variables (which the
 # engine keeps unless one of these replaces it) and what the gate passes for one run (never a secret).
 RUN_ENV_NAMES = ("PATH", "HOME", "LANG", "CI", "TZ")
@@ -529,6 +544,7 @@ class Run(object):
         self._used = set()  # 0.7.9: every name this run gave an object, so no step ever reuses one
         self.uid = int(config().get("uid") or 65534)
         self._users_ok = set()
+        self._paths = {}  # 0.8.0: image -> its own PATH (Run.image_path)
 
     def check_user(self, img, user):
         """0.7.3 (task-tracker MF-27): the run's uid must have a passwd entry in the image, or a tool that asks
@@ -544,6 +560,24 @@ class Run(object):
             raise Unavailable("image %s has no passwd entry for uid %s, so tools that look up their user crash; "
                               "the runner's uid (confinement.yaml) must exist in every pinned image" % (img, uid))
         self._users_ok.add((img, uid))
+
+    def image_path(self, img):
+        """0.8.0 (MF-57): the PATH the image declares (Config.Env), read from the engine once per image; None when the
+        image declares none. An image the engine does not have yet is pulled first, as `docker run` would."""
+        if img in self._paths:
+            return self._paths[img]
+        fmt = ["image", "inspect", "--format", "{{json .Config.Env}}", img]
+        p = self._d(fmt, check=False)
+        if p.returncode != 0:
+            self._d(["pull", "-q", img], timeout=900, check=False)
+            p = self._d(fmt)
+        try:
+            env = json.loads(p.stdout.decode(errors="replace") or "null") or []
+        except ValueError:
+            raise Unavailable("the engine's image inspect of %s is not JSON" % img) from None
+        found = next((str(x)[len("PATH="):] for x in env if str(x).startswith("PATH=")), None)
+        self._paths[img] = found
+        return found
 
     def _version(self):
         try:
@@ -690,14 +724,13 @@ class Run(object):
         if path is not None and not RUN_PATH_RE.match(path):
             raise Refused("PATH %r is not a list of absolute directories" % (path,))
         lim = limits(tier, self.pt)
+        run_path_ = run_path(self.image_path(img), first=path)
         self.check_user(img, user or "%d:%d" % (self.uid, self.uid))
         name = self.unique(name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower())))
         # 0.7.4 (the 0.7.3 engine run): HOME is the run's own tmpfs /tmp, which exists and is writable by any uid
         # (mode 1777). It was /tmp/home, which nothing created, so a tool writing to $HOME (zap-baseline.py's
         # zap.yaml) failed before it started.
-        e = {"PATH": RUN_PATH, "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
-        if path is not None:
-            e["PATH"] = path
+        e = {"PATH": run_path_, "HOME": "/tmp", "LANG": "C.UTF-8", "CI": "1", "TZ": "UTC"}  # noqa: S108
         for k, v in (env or {}).items():
             if SECRETISH.search(k) or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", k):
                 raise Refused("environment variable %s may not be passed into a confined run" % k)
@@ -743,6 +776,27 @@ class Run(object):
             raise Refused("the run exceeded its memory limit (%d MiB) and was killed (exit %s%s)"
                           % (lim["memory_mb"], p.returncode, ", OOMKilled" if state == "true" else ""))
         return p.returncode, p.stdout[-20000:], p.stderr[-20000:]
+
+    def service_output(self, lines=400):
+        """0.8.0 (task-tracker MF-56): [(service, state, stdout, stderr)] for every service container of this run
+        (moadix-<id>-svc-<name>), while they still exist: its state and exit code, and the last `lines` lines of its
+        output. Read-only; a container the engine cannot report is listed as unknown, never skipped."""
+        out = []
+        pre = "moadix-%s-svc-" % self.id
+        for name in self.containers:
+            if not name.startswith(pre):
+                continue
+            svc = name[len(pre):]
+            try:
+                p = self._d(["inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", name], check=False)
+                st = p.stdout.decode(errors="replace").split() if p.returncode == 0 else []
+                state = ("%s, exit code %s" % (st[0], st[1]) if st[0] != "running" else "running") if len(st) == 2 \
+                    else "state unknown"
+                lg = self._d(["logs", "--tail", str(int(lines)), name], check=False, timeout=60)
+                out.append((svc, state, lg.stdout.decode(errors="replace"), lg.stderr.decode(errors="replace")))
+            except Unavailable as e:
+                out.append((svc, "state unknown (%s)" % e, "", ""))
+        return out
 
     def _remove_label(self, label):
         """Remove every container, then network, then volume carrying `label`. 0.7.6: one engine call that times

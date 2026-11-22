@@ -137,6 +137,7 @@ OFF_PATH = {
 }
 IMAGE_PATH = {"zaproxy": "/usr/lib/jvm/java-17-openjdk-arm64/bin:/zap/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
               "postgres": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/17/bin"}
+DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"  # Debian's, as the node and python images
 KEYWORDS = ("do", "then", "else", "until", "while", "if", "!", "{", "exec", "time")
 
 
@@ -152,13 +153,33 @@ def command_words(script):
     return words
 
 
-def off_path(a):
+def image_key(ref, s=None):
+    """The OFF_PATH key of an image: a pinned ref names it; 0.8.0: an image the double built has its base image's."""
+    for img in (s or {}).get("images") or []:
+        if img.get("tag") and img["tag"] == ref:
+            return img.get("base")
+    return next((k for k in OFF_PATH if "/%s" % k in ref), None)
+
+
+def image_path(ref, s=None):
+    """0.8.0: the PATH an image declares (Config.Env), as `docker image inspect` reports it."""
+    key = image_key(ref, s)
+    return IMAGE_PATH.get(key, DEFAULT_PATH) if key else DEFAULT_PATH
+
+
+def run_image(a, s=None):
+    """The image of a `docker run`: the gate names every pinned image by digest; a built one by its tag."""
+    tags = {img["tag"] for img in (s or {}).get("images") or [] if img.get("tag")}
+    return next((x for x in a if "@sha256:" in x or x in tags), "")
+
+
+def off_path(a, s=None):
     """None, or the bash message for the first command the run cannot find on its PATH."""
-    ref = next((x for x in a if "@sha256:" in x), "")  # the image: the gate names every image by digest
-    key = next((k for k in OFF_PATH if "/%s" % k in ref), None)
+    ref = run_image(a, s)
+    key = image_key(ref, s)
     if not key:
         return None
-    path = next((x.split("=", 1)[1] for x in opt(a, "--env") + opt(a, "-e") if x.startswith("PATH=")), IMAGE_PATH[key])
+    path = next((x.split("=", 1)[1] for x in opt(a, "--env") + opt(a, "-e") if x.startswith("PATH=")), image_path(ref, s))
     dirs = {d.rstrip("/") for d in path.split(":")}
     if "-c" in a and a.index("-c") + 1 < len(a):
         cmds = command_words(a[a.index("-c") + 1])
@@ -197,9 +218,17 @@ def build_images(data, dockerfile, build_labels, classic):
             instrs.append(cur.strip())
             cur = ""
     images, labels, stage = [], None, []
+    base, aliases = None, {}
     for ins in instrs:
         word = ins.split(None, 1)[0].upper()
         if word == "FROM":
+            # 0.8.0: the final stage's base image (an earlier stage's alias followed), whose PATH the built image keeps
+            f = ins.split()[1:]
+            f = [x for x in f if not x.startswith("--")]
+            ref = f[0] if f else ""
+            base = aliases.get(ref.lower(), image_key(ref))
+            if len(f) >= 3 and f[1].upper() == "AS":
+                aliases[f[2].lower()] = base
             if stage:
                 images.append(stage)
             labels, stage = {}, []
@@ -214,9 +243,9 @@ def build_images(data, dockerfile, build_labels, classic):
         images.append(stage)
     final = dict((images[-1][-1] if images and images[-1] else {}), **build_labels)
     if not classic:
-        return [final]
+        return [final], base
     out = [img for st in images for img in st]  # every step's image, every stage's last one among them
-    return out + [final]
+    return out + [final], base
 
 
 def network_ok(s, net):
@@ -301,7 +330,14 @@ def main():
         listing([(c, v.get("labels") or dict([v["label"].split("=", 1)] if v.get("label") else []))
                  for c, v in s["containers"].items()], a)
     elif cmd == "inspect":
-        print("false" if len(a) > 3 else "")
+        fmt = (opt(a, "--format") or [""])[0]
+        if "State.Status" in fmt:  # 0.8.0: a service's state and exit code, as the engine reports them
+            c = s["containers"].get(a[-1])
+            if c is None:
+                return refuse("Error: No such object: %s" % a[-1])
+            print("%s %s" % (c.get("state") or "running", c.get("exit") or 0))
+        else:
+            print("false" if len(a) > 3 else "")
     elif cmd == "build":
         data = sys.stdin.buffer.read()
         net = (opt(a, "--network") or ["default"])[0]
@@ -320,10 +356,24 @@ def main():
         built = build_images(data, (opt(a, "-f") or ["Dockerfile"])[0], labels_of(a), os.environ.get("DOCKER_BUILDKIT") == "0")
         if built is None:
             return refuse("ERROR: failed to build: the Dockerfile is not in the context")
+        built, base = built
         tag = (opt(a, "-t") or [None])[0]
         for i, labels in enumerate(built):
             s.setdefault("images", []).append({"id": "sha256:%064x" % (len(s.get("images") or []) + 1),
-                                               "tag": tag if i == len(built) - 1 else None, "labels": labels})
+                                               "tag": tag if i == len(built) - 1 else None, "labels": labels,
+                                               "base": base})
+    elif cmd == "image" and a[1] == "inspect":
+        # 0.8.0: the image's own environment (the runner keeps its PATH); --format '{{json .Config.Env}}' only
+        print(json.dumps(["PATH=%s" % image_path(a[-1], s)]))
+    elif cmd == "logs":
+        # 0.8.0: a service container's output (stdout, then stderr), the last --tail lines of each
+        c = s["containers"].get(a[-1])
+        if c is None:
+            return refuse("Error response from daemon: No such container: %s" % a[-1])
+        n = int((opt(a, "--tail") or ["100000"])[0])
+        for stream, key in ((sys.stdout, "stdout"), (sys.stderr, "stderr")):
+            ls = (c.get(key) or "").splitlines()[-n:]
+            stream.write("".join(x + "\n" for x in ls))
     elif cmd == "image" and a[1] == "ls":
         imgs = [x for x in s.get("images") or [] if "-a" in a or x["tag"]]
         filters = opt(a, "--filter")
@@ -341,8 +391,8 @@ def main():
         if "sh" in a and "-c" in a and "/dev/tcp/" in a[a.index("-c") + 1 if a.index("-c") + 1 < len(a) else -1]:
             # the pinned images' /bin/sh is dash, which has no /dev/tcp: the wait never succeeds
             return refuse("sh: 1: cannot create /dev/tcp/sut.moadix.test/3000: Directory nonexistent", 3)
-        missing = off_path(a)
-        if missing:
+        missing = off_path(a, s)
+        if missing and "-d" not in a:
             return refuse(missing, 127)
         name = (opt(a, "--name") or ["anon"])[0]
         m = mounts(a)
@@ -351,6 +401,20 @@ def main():
             return refuse("docker: " + CONFLICT % (name, name), 125)
         if "-d" in a or "--rm" not in a:
             s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": m, "nets": [net]}
+        if "-d" in a:
+            # 0.8.0 (task-tracker MF-56, MF-57): as the engine, a detached run starts; a command its PATH cannot find
+            # stops the container with 127 and its message. MOADIX_DOUBLE_SVC ({service: {exit, stdout, stderr}})
+            # stops a service the way a test asks (a configuration error, say).
+            c = s["containers"][name]
+            svc = re.search(r"-svc-([a-z0-9_]+?)(-\d+)?$", name)
+            want = json.loads(os.environ.get("MOADIX_DOUBLE_SVC") or "{}").get(svc.group(1) if svc else "", None)
+            if missing:
+                c.update(state="exited", exit=127, stderr=missing)
+            elif want:
+                c.update(state="exited" if want.get("exit") is not None else "running", exit=want.get("exit") or 0,
+                         stdout=want.get("stdout") or "", stderr=want.get("stderr") or "")
+            else:
+                c.update(state="running", exit=0)
         sleep = os.environ.get("MOADIX_DOUBLE_SLEEP")
         if sleep and name.rsplit("-", 1)[-1] in GATES and "-d" not in a:
             save(s)  # a test stops the gate during this run (0.7.6: the run is still removed)
@@ -358,6 +422,15 @@ def main():
             time.sleep(float(sleep))
         suffix = name.rsplit("-", 1)[-1]
         out_vol = m.get("/out") or m.get("/zap/wrk")
+        script = a[a.index("-c") + 1] if "-c" in a and a.index("-c") + 1 < len(a) else ""
+        stopped = [c for c, v in s["containers"].items() if net in (v.get("nets") or []) and v.get("state") == "exited"]
+        if suffix in GATES and out_vol and "-d" not in a and "/dev/tcp/" in script and stopped:
+            # 0.8.0: a live stack with a stopped service never serves the app (the app needs its database, or is the
+            # one that stopped): the gate's wait loop gives up, as on the engine
+            with open(os.path.join(vol_dir(out_vol), "wait.log"), "w") as f:
+                f.write("the app never listened on port 3000\n")
+            save(s)
+            return 3
         if suffix in GATES and out_vol and "-d" not in a:
             src = os.path.join(OUTPUTS, suffix)
             if os.path.isdir(src):

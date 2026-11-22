@@ -895,9 +895,11 @@ def bounded(text, lines=LOG_LINES, nbytes=LOG_BYTES):
     return ("[... earlier output cut]\n" if cut else "") + redact(t)
 
 
-def run_logs(dest, rc, so, se):
+def run_logs(dest, rc, so, se, services=None):
     """(text for the evidence file, one-line tail for the failure) from a run's output folder: every *.log and
-    *.rc the script wrote, plus the container's own stdout and stderr, each bounded and redacted."""
+    *.rc the script wrote, plus the container's own stdout and stderr, each bounded and redacted. 0.8.0 (task-tracker
+    MF-56): `services`, [(name, state, stdout, stderr)] of the live stack's containers when the wait for the app gave
+    up, each bounded and redacted the same way, and named in the one-line tail."""
     parts = ["container exit code: %s" % rc]
     rcs = {}
     logs = []
@@ -923,11 +925,22 @@ def run_logs(dest, rc, so, se):
     for name, text in logs + [("container stderr", se or ""), ("container stdout", so or "")]:
         if (text or "").strip():
             parts += ["--- %s (last %d lines at most)" % (name, LOG_LINES), bounded(text)]
+    svc_line = []
+    # a stopped service first: it is the likely reason the app never listened
+    for name, sstate, sso, sse in sorted(services or (), key=lambda x: (x[1] == "running", x[0])):
+        text = "\n".join(x for x in ((sso or "").rstrip("\n"), (sse or "").rstrip("\n")) if x)
+        parts += ["--- service %s (%s; its stdout then stderr, last %d lines at most)" % (name, sstate, LOG_LINES),
+                  bounded(text) if text.strip() else "(no output)"]
+        sfirst, stail = summary_lines(sse or sso or "")
+        word = sstate.replace(", exit code ", " ") if sstate.startswith("exited") else sstate
+        svc_line.append("%s %s%s" % (name, word, (" (%s)" % " | ".join(sfirst or stail[-2:])) if
+                                     (sfirst or stail) and not sstate.startswith("running") else ""))
     main = next((t for n, t in logs if n.startswith(("run", "validate"))), "") or (logs[0][1] if logs else "") or se or ""
     first, tail = summary_lines(main)
     codes = ", ".join("%s=%s" % kv for kv in sorted(rcs.items())) or "none written"
-    line = "container exit %s; tool exit %s; %slast lines: %s" % (
-        rc, codes, ("first errors: %s; " % " | ".join(first)) if first else "", " | ".join(tail) or "(no output)")
+    line = "container exit %s; tool exit %s; %slast lines: %s%s" % (
+        rc, codes, ("first errors: %s; " % " | ".join(first)) if first else "", " | ".join(tail) or "(no output)",
+        ("; services: %s" % ", ".join(svc_line)) if svc_line else "")
     return "\n".join(parts) + "\n", line[:3000]
 
 
@@ -950,9 +963,9 @@ def summary_lines(text):
     return first, [ln[:200] for ln in lines[-TAIL_LINES:]]
 
 
-def keep_logs(root, label, gate, dest, rc, so, se):
+def keep_logs(root, label, gate, dest, rc, so, se, services=None):
     """Write the run's logs to the evidence folder (they used to go with the temporary directory)."""
-    text, line = run_logs(dest, rc, so, se)
+    text, line = run_logs(dest, rc, so, se, services)
     rel, _digest = toolrun.record(root, label, "exec-%s-log" % gate, "confined", "exec-%s-run.log" % gate, text,
                                   "check-exec-%s" % gate)
     return rel, line
@@ -1075,7 +1088,12 @@ def run_gate(root, st, gate, label, run_id=None):
             raise confined.Refused("%s; %s; the run's log is kept at %s" % (e, line, rel)) from None
         r.copy_out(out, dest, img)
         probs = confined.check_output(dest, confined.limits(g["tier"], pt)["out_mb"] << 20)
-        rel, line = keep_logs(root, label, gate, dest, rc, so, se)
+        services = None
+        if g.get("live") and os.path.isfile(os.path.join(dest, "wait.log")):
+            # 0.8.0 (task-tracker MF-56): the wait for the app gave up; keep why, from the stack's own containers (the
+            # app's configuration error, a database that never started), before close() removes them
+            services = r.service_output(LOG_LINES)
+        rel, line = keep_logs(root, label, gate, dest, rc, so, se, services)
         if probs:
             return ["%s: the run's output was refused: %s (%s; log %s)" % (gate, "; ".join(probs), line, rel)], [], {}, None
         try:

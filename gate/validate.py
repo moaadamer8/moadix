@@ -172,6 +172,7 @@ def main():
             results = []
             minor = []  # increment 7 (Amendment 3 section 5): MINOR findings go to a file, not the summary
             frozen_blockers = []  # 0.7.2 (ruling A1): shown in full in REVIEW and APPROVE, never blocking
+            allowed = []  # 0.8.0 (task-tracker MF-59): allowlisted test-fixture findings, shown in REVIEW
             for c in validators_for(label, "feature" if st.get("feature") else "product"):
                 vid = str(c.get("id"))
                 cmd = " ".join([str(c.get("module"))] + [str(a) for a in (c.get("args") or [])])
@@ -184,8 +185,10 @@ def main():
                           if ln.strip().startswith("MINOR ")]
                 frozen_blockers += [ln.strip()[len("FROZEN-BLOCKER "):] for ln in out.splitlines()
                                     if ln.strip().startswith("FROZEN-BLOCKER ")]
+                # 0.8.0 (MF-59): from the whole output (the stored output keeps only its tail)
+                allowed += validation.allowlisted([{"validator": vid, "output": out}])
                 first = next((ln for ln in out.splitlines() if ln.strip() and not ln.strip().startswith(
-                    ("MINOR ", "FROZEN-BLOCKER "))), "")
+                    ("MINOR ", "FROZEN-BLOCKER ", "ALLOWLISTED "))), "")
                 results.append({"validator": vid, "command": cmd, "exit_code": rc, "result": result_of(rc),
                                 "first_line": first[:200], "output": out[-6000:]})
         verdict = "pass" if all(r["result"] in ("pass", "n/a-by-profile") for r in results) else (
@@ -201,6 +204,7 @@ def main():
         data = {"version": 1, "phase": label, "scope": validation.scope_of(st), "key": k, "started_at": started,
                 "finished_at": now(), "minor": len(minor), "minor_file": os.path.relpath(mf, root),
                 "frozen_blockers": frozen_blockers,
+                "allowlisted": allowed,  # 0.8.0 (MF-59): shown in REVIEW
                 "verdict": verdict, "results": results}
         tmpf = validation.cache_file(root, label) + ".tmp"
         with open(tmpf, "w") as f:

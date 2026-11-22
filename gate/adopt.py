@@ -164,6 +164,8 @@ def plan(root):
         if len(parts) == 2 and parts[0] == "config" and parts[1] in hlib.PRODUCT_CONFIG:
             if parts[1] == "coverage-overrides.yaml":
                 _validate_overrides(doc)
+            if parts[1] == "product-tools.yaml":
+                _validate_tools(doc)
             target = os.path.join(root, state.SDLC, "config", parts[1])
             out.append((rel, target, raw, {"kind": "config"}))
         elif rel == "product.yaml":
@@ -305,6 +307,38 @@ def _validate_overrides(doc):
             raise ProposalError("coverage-overrides.yaml: the N/A ruling for %s needs a real reason" % e["topic"])
         if str(e["topic"]) in {str(t) for t in doc.get("turn_on") or []}:
             raise ProposalError("coverage-overrides.yaml: %s is both turned on and ruled N/A" % e["topic"])
+
+
+def _validate_tools(doc):
+    """0.8.0 (task-tracker MF-59): the gitleaks test-fixture allowlist is checked before it is adopted."""
+    from .v1 import gitleaks_allow
+    _entries, probs = gitleaks_allow.from_tools(doc)
+    if probs:
+        raise ProposalError("product-tools.yaml: %s" % "; ".join(probs[:6]) + (
+            "; and %d more" % (len(probs) - 6) if len(probs) > 6 else ""))
+
+
+def adopted(root, rel):
+    """0.8.0: True when the gate-state file `rel` (repo-relative) has exactly the bytes its last ADOPT recorded, in a
+    ledger that verifies; False for a file never adopted, edited since, or a ledger that fails its check."""
+    try:
+        prod = state.load_product(root)
+        ok, _problems, entries = state.verify_ledger(root, prod["product"])
+    except Exception:  # no product, an unreadable ledger: not adopted
+        return False
+    if not ok:
+        return False
+    want = None
+    for e in entries:
+        if e["action"].split(" ", 1)[0] == "ADOPT":
+            for f in state.decode_payload(e).get("files") or []:
+                if f.get("target") == rel:
+                    want = f.get("result_sha256")
+    try:
+        with open(os.path.join(root, rel), "rb") as f:
+            return want is not None and _sha(f.read()) == want
+    except OSError:
+        return False
 
 
 def payload(root, items):

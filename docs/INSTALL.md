@@ -273,6 +273,38 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.7.9 to 0.8.0
+
+0.8.0 fixes the four findings that stopped the first product's phase 9 (report: `docs/release-0.8.0-report.md`):
+
+- **MF-57:** every container keeps its image's own PATH, with the gate's entries appended, so a database built FROM the official postgres image starts as a live service.
+- **MF-56:** when a live gate's wait for the app gives up, the evidence keeps each service container's state and last output, bounded and redacted.
+- **MF-58:** a `### SEC-nnn` heading in `09-security-report.md` is a reference for trace-lint, not a second definition.
+- **MF-59:** an operator-reviewed gitleaks allowlist for test fixtures, in `product-tools.yaml` and adopted with ADOPT. It names one finding per entry, by fingerprint, path, reason and `fixture: true`, and covers history findings too. It never allows a path outside `tests/` or a fixtures directory, and never a whole rule. REVIEW lists each finding it lets through.
+
+It changes the gate's Python, `/moadix:coverage` (new paragraph "Phase 9: SEC headings and test-fixture secrets"), `confinement.yaml` (a comment only), the tests, the engine double and the new smoke-080 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.8.0 commit, then `ff7cca6` (0.7.9). `cat .claude-plugin/plugin.json` shows `"version": "0.8.0"`.
+
+**2. Run the real-engine suite.** Docker Desktop: **must be running**, with no other container running. It needs internet (pinned images, tool installs) and takes about 45–70 minutes. It now also pulls the gate's pinned `postgres` image. The new rel080 group (3 checks) checks three things:
+- the official image, confined with 0.7.9's PATH, exits 127 (`initdb: command not found`);
+- Schemathesis passes on smoke-080, whose database is built FROM that image;
+- with no `DATABASE_URL`, the evidence holds the app's exit and its message.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `70 checks, 70 passed, 0 failed (<seconds> s)`.
+
+**3. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   ff7cca6..<0.8.0 commit>  master -> master`;
+- the tag: `git tag -a v0.8.0 -m "MOADIX 0.8.0" && git push origin v0.8.0`;
+- `/plugin` shows **0.8.0**.
+
+**4. In the product (phase 9).** The agent proposes the allowlist in `.sdlc-proposals/config/product-tools.yaml` (the whole file: ADOPT replaces it, so its existing settings stay in the proposal), one entry per finding check-gitleaks printed (its `[fingerprint ...]`). Read every entry before you type `ADOPT <code>`: each must be a throwaway test value under `tests/` or a fixtures directory, never a real key. REVIEW 9 then lists each allowlisted finding under "Allowlisted test-fixture findings".
+
 ## Updating from 0.7.8 to 0.7.9
 
 0.7.9 fixes the live gates for a product that builds two services with `build.network: registry`: the second build created the run's build network again under the same name, which the engine refuses, so the gate was UNKNOWN. Every network, volume and container a run creates now has its own name, each build and the install step remove their own objects when they end, and every image a build makes carries the run's labels, the untagged step and stage images included (report: `docs/release-0.7.9-report.md`). It changes the gate's Python, the tests, the engine double and the smoke-076 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
