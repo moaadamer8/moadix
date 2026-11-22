@@ -596,30 +596,38 @@ def start_live(r, root, pt, export_tar, tmp, net):
         if "build" in src:
             b = src["build"] if isinstance(src["build"], dict) else {"context": src["build"]}
             ctx, dockerfile = str(b.get("context") or "."), str(b.get("dockerfile") or "Dockerfile")
-            ctx_tar = _context_tar(export_tar, ctx, tmp)
             text = _member(export_tar, os.path.normpath(os.path.join(ctx, dockerfile)))
             probs = confined.dockerfile_problems(text, pt)
             if probs:
                 raise confined.Refused("%s's Dockerfile: %s" % (name, "; ".join(probs)))
-            bnet = None
+            # 0.7.9: the engine builds the Dockerfile with the run's labels set first in every stage, so every image the
+            # build makes (each step's, each earlier stage's, untagged) carries them, not only the tagged one
+            ctx_tar = _context_tar(export_tar, ctx, tmp, dockerfile=dockerfile,
+                                   replace=confined.label_stages(text, r.id).encode("utf-8"))
+            bnet, step = None, ([], [], [])
             if confined.build_network(pt) == "registry":
                 # section 3.9: the classic builder on an internal network whose only way out is the allowlisting
-                # proxy (0.7.4: the network used to be named but never created)
+                # proxy (0.7.4: the network used to be named but never created). 0.7.9: each built service is its own
+                # step, with its own networks, proxy and volume (r.unique), removed when its build ends; the second
+                # built service used to create the first one's build network again, which the engine refuses
                 bnet, benet = r.network("build"), r.network("build-egress", internal=False)
                 pvol = r.volume("build-proxy")
-                r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
-                       confined.image("python"))
-                bproxy = r.proxy(bnet, benet, pvol, "build")  # 0.7.6 (MF-54): its own name, not the install proxy's
-            else:
-                bproxy = None
-            args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt, network=bnet)
+                step = ([], [bnet, benet], [pvol])
+                try:
+                    r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
+                           confined.image("python"))
+                    step[0].append(r.proxy(bnet, benet, pvol, "build"))  # 0.7.6 (MF-54): not the install proxy's name
+                except BaseException:
+                    r.end_step(*step)
+                    raise
             try:
+                args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt,
+                                                 network=bnet)
                 with open(ctx_tar, "rb") as f:
                     p = subprocess.run([r.d] + args, stdin=f, capture_output=True,
                                        timeout=confined.limits("build", pt)["wall_s"], env=dict(os.environ, **envb))
             finally:
-                if bproxy:
-                    r.remove(bproxy)  # the build's way out ends with the build
+                r.end_step(*step)  # the build's way out (proxy, networks, its volume) ends with the build
             if p.returncode != 0:
                 err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
                 err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
@@ -639,12 +647,15 @@ def _member(tar_path, rel):
         return tf.extractfile(m).read().decode("utf-8", errors="replace")
 
 
-def _context_tar(tar_path, ctx, tmp):
+def _context_tar(tar_path, ctx, tmp, dockerfile=None, replace=None):
     """The build context: the export's `ctx` subfolder, as a tar the engine reads from stdin. 0.7.4: written
     without PAX headers (git archive's global `comment` header used to be copied onto every member, so the
     first entry was a PAX header and the engine took the stream for a Dockerfile) and with a short-named
-    entry first, so its first 512 bytes are a plain ustar header (confined.stdin_context_problem)."""
+    entry first, so its first 512 bytes are a plain ustar header (confined.stdin_context_problem). 0.7.9: with
+    `replace`, the context's `dockerfile` member is that text (the stage-labelled Dockerfile), and it must be there."""
     ctx = os.path.normpath(ctx)
+    want = os.path.normpath(dockerfile) if replace is not None else None
+    replaced = False
     out = os.path.join(tmp, "context.tar")
     with tarfile.open(tar_path) as src:
         keep = []
@@ -664,7 +675,13 @@ def _context_tar(tar_path, ctx, tmp):
         keep.sort(key=lambda m: len(m.name.encode("utf-8")) >= 100)  # stable: a short name first
         with tarfile.open(out, "w", format=tarfile.GNU_FORMAT) as dst:
             for m in keep:
+                if want is not None and m.isfile() and os.path.normpath(m.name) == want:
+                    m.size, replaced = len(replace), True
+                    dst.addfile(m, io.BytesIO(replace))
+                    continue
                 dst.addfile(m, src.extractfile(m) if m.isfile() else None)
+    if want is not None and not replaced:
+        raise confined.Refused("the Dockerfile %s is not inside the build context %s" % (dockerfile, ctx))
     why = confined.stdin_context_problem(out)
     if why:
         raise confined.Refused("the build context cannot be streamed to the engine: %s" % why)
@@ -981,7 +998,12 @@ def run_gate(root, st, gate, label, run_id=None):
             pyimg = confined.image("python")
             pvol = r.volume("proxy")
             r.load(pvol, _write(tmp, "proxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})), pyimg)
-            iproxy = r.proxy(inet, enet, pvol, "install")
+            istep = ([], [inet, enet], [pvol])  # 0.7.9: the install step's own objects, removed when it ends
+            try:
+                istep[0].append(r.proxy(inet, enet, pvol, "install"))
+            except BaseException:
+                r.end_step(*istep)
+                raise
             steps = []
             if g.get("product"):
                 steps.append(("npm-product", None))
@@ -992,6 +1014,7 @@ def run_gate(root, st, gate, label, run_id=None):
                     imounts = [(src, "/src", True), (deps, "/deps", False)]
                     if name:
                         tvol = r.volume("lock-%s" % re.sub(r"[^a-z0-9]", "", name))
+                        istep[2].append(tvol)
                         r.load(tvol, _write(tmp, "lock.tar", _tar_of(lock_files(kind, name))), img)
                         imounts.append((tvol, "/tools", True))
                     rc, so, se = r.execute(img, ["sh", "-c", install_script(kind if name else kind, name,
@@ -1004,7 +1027,7 @@ def run_gate(root, st, gate, label, run_id=None):
                             raise confined.Unavailable("the install step could not reach the registry: %s" % tail)
                         return ["%s: the install step failed (npm ci / pip from the lockfile): %s" % (gate, tail)], [], {}, None
             finally:
-                r.remove(iproxy)  # 0.7.6 (MF-54): the install step's way out ends with the install step
+                r.end_step(*istep)  # 0.7.6 (MF-54), 0.7.9: the install step's way out ends with the install step
             mounts.append((deps, "/deps", True))
         net, env = "none", {}
         if g.get("live"):

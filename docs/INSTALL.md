@@ -273,6 +273,26 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.7.8 to 0.7.9
+
+0.7.9 fixes the live gates for a product that builds two services with `build.network: registry`: the second build created the run's build network again under the same name, which the engine refuses, so the gate was UNKNOWN. Every network, volume and container a run creates now has its own name, each build and the install step remove their own objects when they end, and every image a build makes carries the run's labels, the untagged step and stage images included (report: `docs/release-0.7.9-report.md`). It changes the gate's Python, the tests, the engine double and the smoke-076 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.7.9 commit, then `f834a21` (0.7.8). `cat .claude-plugin/plugin.json` shows `"version": "0.7.9"`.
+
+**2. Run the real-engine suite.** Docker Desktop: **must be running**, with no other container running. It needs internet (pinned images, tool installs) and takes about 40–65 minutes. smoke-076 now builds two services under `build.network: registry` (`app`, and the two-stage `worker`), so every live run in rel076, rel077, rel078 and the new rel079 group (4 checks) makes two classic builds. rel079 requires, for each live gate, a pass, nothing of the run left, and every image the run added labelled with its run id. The final cleanup check now counts untagged images too.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `67 checks, 67 passed, 0 failed (<seconds> s)`.
+
+**3. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   f834a21..<0.7.9 commit>  master -> master`;
+- the tag: `git tag -a v0.7.9 -m "MOADIX 0.7.9" && git push origin v0.7.9`;
+- `/plugin` shows **0.7.9**.
+
 ## Updating from 0.7.7 to 0.7.8
 
 0.7.8 gives every live gate one app origin, `http://sut.localhost:<live.port>`, for its URL, Host and Origin headers: Schemathesis and ZAP now use it as well as axe and Lighthouse CI (report: `docs/release-0.7.8-report.md`). It changes the gate's Python, `/moadix:coverage` (new paragraph "Live gates: the app's origin"), the tests and the smoke-076 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.

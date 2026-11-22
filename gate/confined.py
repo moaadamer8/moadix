@@ -18,12 +18,15 @@ anything it cannot establish raises Unavailable (the gate reports UNKNOWN) or Re
                                     written; the allowlisted keys are taken into a project the
                                     gate generates and hardens; every other key is refused
   dockerfile_problems(text)         section 3.9: FROM by digest only; no secret or ssh mounts
+  label_stages(text, run_id)        0.7.9: the run's labels set first in every stage, so every image a build
+                                    makes (intermediate, untagged, earlier stages) carries them
   check_output(dir, max_bytes)      no links, devices or oversize output
   docker_available()                Docker is a hard requirement (ruling 1): UNKNOWN without it
 
 The engine calls are in class Run (increment 7d): named volumes loaded with `docker cp` (no host
 path), a gate-controlled helper that sets their owner, internal networks, the allowlisting egress
-proxy for the install step, confined execution with OOM and wall-clock detection, and close(),
+proxy for the install step, confined execution with OOM and wall-clock detection, end_step() (0.7.9:
+every name is unique within the run, and what a step created goes when the step ends), and close(),
 which removes everything carrying the run's label. Tested against a real engine by
 tests/confined-engine (Terminal).
 """
@@ -327,10 +330,51 @@ def build_argv(run_id, tag, dockerfile, lim, product_tools=None, network=None):
             raise Refused("a registry build needs the run's internal build network")
         for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             out += ["--build-arg", "%s=http://moadix-proxy:3128" % k]
-        out += ["--network", network]
+        # 0.7.9: the classic builder's step containers sit on the build network; they go when the build ends, even
+        # when it fails, so the network can be removed with its step
+        out += ["--network", network, "--rm", "--force-rm"]
     else:
         out += ["--network", "none"]
     return out, ({"DOCKER_BUILDKIT": "0"} if net == "registry" else {"DOCKER_BUILDKIT": "1"})
+
+
+def image_labels(run_id):
+    """0.7.9: the labels every image a gate build makes carries (the build's --label reaches only the last image)."""
+    if not re.match(r"^[a-z0-9][a-z0-9-]{3,40}$", run_id):
+        raise Refused("run id %r is not a plain lower-case id" % run_id)
+    return {"moadix.run": run_id, "moadix.owner": OWNER}
+
+
+def label_stages(text, run_id):
+    """0.7.9 (the 0.7.8 engine run left two unlabelled <none> images): the Dockerfile the gate builds, with a LABEL
+    instruction right after every FROM. The classic builder (build.network: registry) keeps an image for every step
+    and every earlier stage, untagged, and `docker build --label` labels only the final one; with the run's labels
+    set first in each stage, every image the build makes inherits them, so the cleanup check recognises it.
+    Parser directives (escape) and line continuations are kept; nothing else in the file changes."""
+    labels = image_labels(run_id)
+    line = "LABEL " + " ".join("%s=%s" % (k, labels[k]) for k in sorted(labels))
+    esc = "\\"
+    for ln in (text or "").split("\n"):
+        m = re.match(r"^\s*#\s*([A-Za-z]+)\s*=\s*(\S+)\s*$", ln)
+        if not m:
+            break  # directives end at the first line that is not one
+        if m.group(1).lower() == "escape" and m.group(2) in ("\\", "`"):
+            esc = m.group(2)
+    out, cont, is_from, n = [], False, False, 0
+    for ln in (text or "").split("\n"):
+        out.append(ln)
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue  # blank and comment lines never start or end an instruction
+        if not cont:
+            is_from = re.match(r"(?i)^FROM\s", s) is not None
+        cont = s.endswith(esc)
+        if is_from and not cont:
+            out.append(line)
+            is_from, n = False, n + 1
+    if not n:
+        raise Refused("the Dockerfile has no FROM")
+    return "\n".join(out)
 
 
 TAR_PLAIN_TYPES = b"0\x0012345677"
@@ -482,6 +526,7 @@ class Run(object):
         if not ok:
             raise Unavailable(why)
         self.volumes, self.networks, self.containers = [], [], []
+        self._used = set()  # 0.7.9: every name this run gave an object, so no step ever reuses one
         self.uid = int(config().get("uid") or 65534)
         self._users_ok = set()
 
@@ -520,17 +565,48 @@ class Run(object):
         return p
 
     # ---- resources
+    def unique(self, base):
+        """0.7.9 (the 0.7.8 product run: "network with name moadix-<id>-build already exists", a compose file with two
+        built services): a name no earlier step of this run used. The first use keeps `base`; a later one gets -2, -3.
+        Every network, volume and container the run creates is named through here."""
+        if not re.match(r"^moadix-[A-Za-z0-9_.-]+$", base):
+            raise Refused("name %r is not one of the run's" % (base,))
+        name, i = base, 1
+        while name in self._used:
+            i += 1
+            name = "%s-%d" % (base, i)
+        self._used.add(name)
+        return name
+
     def volume(self, name):
-        v = "moadix-%s-%s" % (self.id, name)
+        v = self.unique("moadix-%s-%s" % (self.id, name))
         self._d(["volume", "create"] + self.labels + [v])
         self.volumes.append(v)
         return v
 
     def network(self, name, internal=True):
-        n = "moadix-%s-%s" % (self.id, name)
+        n = self.unique("moadix-%s-%s" % (self.id, name))
         self._d(["network", "create"] + self.labels + (["--internal"] if internal else []) + [n])
         self.networks.append(n)
         return n
+
+    def end_step(self, containers=(), networks=(), volumes=()):
+        """0.7.9: what one step created goes when the step ends (containers first, then the networks they were on,
+        then volumes); only names this run created are removed. A removal the engine refuses is left to close(),
+        which removes everything carrying the run's label."""
+        for c in containers:
+            if c:
+                self.remove(c)
+        for n in networks:
+            if n in self.networks:
+                with contextlib.suppress(Unavailable):
+                    if self._d(["network", "rm", n], check=False).returncode == 0:
+                        self.networks.remove(n)
+        for v in volumes:
+            if v in self.volumes:
+                with contextlib.suppress(Unavailable):
+                    if self._d(["volume", "rm", "-f", v], check=False).returncode == 0:
+                        self.volumes.remove(v)
 
     def _helper(self, img, mounts, argv, user="0"):
         """A gate-controlled helper (never product code): no network, no capabilities beyond chown."""
@@ -544,7 +620,7 @@ class Run(object):
     def load(self, vol, tar_path, img):
         """Copy a tar (the git archive export, or gate files) into a volume, then hand it to the run's uid,
         read-only for everyone else. No host path is mounted: `docker cp` streams the tar."""
-        c = "moadix-%s-load-%s" % (self.id, vol.rsplit("-", 1)[-1])
+        c = self.unique("moadix-%s-load-%s" % (self.id, self._short(vol)))
         self._d(["create", "--name", c] + self.labels + ["--network", "none", "--mount",
                  "type=volume,src=%s,dst=/v" % vol, "--entrypoint", "true", img])
         try:
@@ -553,6 +629,10 @@ class Run(object):
         finally:
             self._rm_own(c)
         self._helper(img, [(vol, "/v", False)], ["chown", "-R", "%d:%d" % (self.uid, self.uid), "/v"])
+
+    def _short(self, vol):
+        pre = "moadix-%s-" % self.id
+        return vol[len(pre):] if vol.startswith(pre) else vol.rsplit("-", 1)[-1]
 
     def _own_ids(self, name):
         """Ids of this run's container called name: only an object carrying this run's label is ever removed."""
@@ -569,7 +649,7 @@ class Run(object):
         self._helper(img, [(vol, "/v", False)], ["chown", "%d:%d" % (uid or self.uid, uid or self.uid), "/v"])
 
     def copy_out(self, vol, dest, img):
-        c = "moadix-%s-unload-%s" % (self.id, vol.rsplit("-", 1)[-1])
+        c = self.unique("moadix-%s-unload-%s" % (self.id, self._short(vol)))
         self._d(["create", "--name", c] + self.labels + ["--network", "none", "--mount",
                  "type=volume,src=%s,dst=/v,readonly" % vol, "--entrypoint", "true", img])
         try:
@@ -587,7 +667,7 @@ class Run(object):
         if not re.match(r"^[a-z]{1,20}$", purpose):
             raise Refused("proxy purpose %r is not a plain word" % (purpose,))
         img = image("python")
-        name = "moadix-%s-proxy-%s" % (self.id, purpose)
+        name = self.unique("moadix-%s-proxy-%s" % (self.id, purpose))
         self._d(["run", "-d", "--name", name] + self.labels + ["--network", egress_net,
                  "--user", "%d:%d" % (self.uid, self.uid), "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                  "--read-only", "--memory", "256m", "--pids-limit", "128", "--mount",
@@ -611,7 +691,7 @@ class Run(object):
             raise Refused("PATH %r is not a list of absolute directories" % (path,))
         lim = limits(tier, self.pt)
         self.check_user(img, user or "%d:%d" % (self.uid, self.uid))
-        name = name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower()))
+        name = self.unique(name or "moadix-%s-%s" % (self.id, re.sub(r"[^a-z0-9-]", "-", argv[0].rsplit("/", 1)[-1].lower())))
         # 0.7.4 (the 0.7.3 engine run): HOME is the run's own tmpfs /tmp, which exists and is writable by any uid
         # (mode 1777). It was /tmp/home, which nothing created, so a tool writing to $HOME (zap-baseline.py's
         # zap.yaml) failed before it started.

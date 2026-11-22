@@ -1,0 +1,8 @@
+# 0.7.9: the second service built with build.network: registry, in two stages. The classic builder keeps the first
+# stage's image and every step's image untagged; each must carry the run's labels (the gate sets them first).
+FROM docker.io/library/node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS stage
+COPY src/worker.js /stage/worker.mjs
+
+FROM docker.io/library/node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+COPY --from=stage /stage/worker.mjs /app/worker.mjs
+CMD ["node", "/app/worker.mjs"]

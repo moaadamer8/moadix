@@ -44,6 +44,9 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
             run's summary names its first error lines
   rel078    0.7.8: every live gate (Schemathesis, ZAP, Lighthouse CI, axe) passes against an app that accepts only the
             gate's one origin, http://sut.localhost:<port>
+  rel079    0.7.9: every live gate with two services built under build.network: registry (smoke-076's app and its
+            two-stage worker): each build has its own network and proxy, the run passes, nothing labelled is left, and
+            every image the run added (the untagged step and stage images included) carries the run's label
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
             (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
@@ -128,8 +131,8 @@ def built_images():
     """Ids of images a live gate built during this suite: listed by its own run labels only (never an inspect of
     a foreign image); never removed (ruling 3)."""
     out = []
-    for run_id in SMOKE_RUNS:
-        out += lines(["image", "ls", "-q", "--no-trunc", "--filter", "label=moadix.run=%s" % run_id])
+    for run_id in SMOKE_RUNS:  # 0.7.9: -a, so the untagged images a build keeps (each step's, each stage's) count too
+        out += lines(["image", "ls", "-a", "-q", "--no-trunc", "--filter", "label=moadix.run=%s" % run_id])
     return sorted(set(out))
 
 
@@ -678,12 +681,38 @@ def test_rel078(_node):
                "%s | fails %s | notes %s | log:\n%s" % (err, f[:4], n[:3], log[-1500:]))
 
 
+def all_images():
+    """Ids of every image, untagged ones included (ids only: the suite never inspects a foreign image)."""
+    return set(lines(["image", "ls", "-a", "-q", "--no-trunc"]))
+
+
+def test_rel079(_node):
+    """0.7.9 (the 0.7.8 product run: Schemathesis UNKNOWN, "network with name moadix-<id>-build already exists"): every
+    live gate on tests/fixtures/smoke-076, whose compose file builds two services with build.network: registry."""
+    G = "rel079"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    base = tempfile.mkdtemp(prefix="moadix-smoke079-")
+    root = smoke076_product(base)
+    for gate, label in LIVE_GATES:
+        before = all_images()
+        f, n, data, err, log, run_id = run_logged(check_exec, root, gate, label)
+        added = all_images() - before
+        tagged = set(lines(["image", "ls", "-a", "-q", "--no-trunc", "--filter", "label=moadix.run=%s" % run_id]))
+        unlabelled = sorted(added - tagged)
+        record(G, "%s (phase %s) with two registry builds passes; nothing of its run is left; all %d images it added "
+                  "carry its label" % (gate, label, len(added)),
+               not err and not f and "already exists" not in log and len(added) >= 2 and not unlabelled and
+               not labelled(run_id), "%s | fails %s | unlabelled %s | left %s | notes %s | log:\n%s" % (
+                   err, f[:4], [i[:19] for i in unlabelled], labelled(run_id), n[:3], log[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
-        "test_rel078": ("rel078", 4)}
+        "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -747,7 +776,7 @@ def main():
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
-                 (test_rel077, (node,)), (test_rel078, (node,))):
+                 (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,))):
         run_group(t, a)
     left = built_images()
     if left:

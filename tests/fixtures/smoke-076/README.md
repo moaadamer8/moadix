@@ -10,6 +10,9 @@ the real pinned tools:
 - `src/tasks.js` is covered only by `tests/tasks.test.js`, against the gate's PostgreSQL service (MF-51);
 - Stryker runs Vitest, whose configuration imports `vitest` (MF-53);
 - `build.network: registry`, so a live gate starts the install proxy and the build proxy (MF-54);
+- 0.7.9: two services are built with `build.network: registry` (`app`, and `worker` from the two-stage
+  `Dockerfile.worker`), as in the 0.7.8 product run: each build is its own step, with its own network and proxy,
+  and every image the classic builder keeps carries the run's labels;
 - `design/screen-states.csv` has a designed row with no URL, declared in `axe.checked_elsewhere` (MF-50).
 
 `package-lock.json` pins the product's tools; regenerate it with `npm install --package-lock-only` if they change.

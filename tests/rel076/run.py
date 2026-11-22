@@ -143,11 +143,13 @@ def test_proxy():
     record(G, "schemathesis (phase 8) with build.network: registry passes end to end (0.7.5: UNKNOWN, the build proxy's "
               "name was the install proxy's)", rc == 0 and "UNKNOWN" not in out, out[-900:])
     proxies = [name_of(c) for c in runs() if "/p/egress_proxy.py" in c]
-    record(G, "two proxies started, each under its own name", len(proxies) == 2 and len(set(proxies)) == 2, proxies)
+    # 0.7.9: the fixture builds two services (app and worker), each its own step with its own build proxy
+    record(G, "three proxies started (install, and one per built service), each under its own name",
+           len(proxies) == 3 and len(set(proxies)) == 3, proxies)
     rms = [c for c in calls() if c[:2] == ["rm", "-f"]]
     own = [[x for x in calls() if x[:2] == ["ps", "-aq"] and "name=^/%s$" % n in x] for n in proxies]
     record(G, "each proxy is removed as soon as its step ends (looked up by its own name and the run's label)",
-           len(proxies) == 2 and all(own) and len(rms) >= 2, (proxies, own))
+           len(proxies) == 3 and all(own) and len(rms) >= 3, (proxies, own))
     left = [n for n, v in dstate()["containers"].items()] + list(dstate()["networks"]) + list(dstate()["volumes"])
     record(G, "nothing the run created is left afterwards (containers, networks, volumes)", not left, left)
     # a refused build (an exit path before the scan): the build proxy and everything else still go
@@ -453,7 +455,7 @@ def test_engine():
     plan = es.PLAN.get("test_rel076")
     record(G, "the engine suite has a rel076 group of 7 real-engine cases on the smoke-076 fixture",
            plan == ("rel076", 7) and "smoke-076" in open(p).read(), plan)
-    record(G, "its fixed total is 63 (0.7.5: 50, plus the 7; 0.7.7: rel077 2; 0.7.8: rel078 4)", es.TOTAL == 63, es.TOTAL)
+    record(G, "its fixed total is 67 (0.7.5: 50, plus the 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4)", es.TOTAL == 67, es.TOTAL)
     src = open(p).read()
     for needle, what in (("schemathesis", "MF-54"), ("NoCoverage", "MF-51"), ("ERR_MODULE_NOT_FOUND", "MF-53"),
                          ("CSP-BYPASSED", "MF-49"), ("checked elsewhere", "MF-50"), ("08-traceability", "MF-46"),

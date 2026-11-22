@@ -8,3 +8,9 @@ services:
       # the gate's app origin (/moadix:coverage, "Live gates: the app's origin"): the only origin the app accepts
       APP_ORIGIN: http://sut.localhost:3000
     expose: ["3000"]
+  worker:
+    # 0.7.9: a second service built by the gate (build.network: registry), as in the 0.7.8 product run
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: ["node", "/app/worker.mjs"]

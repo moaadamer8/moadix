@@ -174,6 +174,51 @@ def off_path(a):
     return None
 
 
+def build_images(data, dockerfile, build_labels, classic):
+    """0.7.9: the images a build leaves, each with its labels, as the engine makes them. The classic builder
+    (DOCKER_BUILDKIT=0) keeps one image per instruction after FROM and the last image of every stage (untagged);
+    BuildKit keeps only the final image. `--label` reaches only the final image; a LABEL instruction reaches the
+    images after it in its stage. None when the Dockerfile is not in the context."""
+    import io
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tf:
+            text = tf.extractfile(tf.getmember(os.path.normpath(dockerfile))).read().decode("utf-8", "replace")
+    except (KeyError, tarfile.TarError, AttributeError):
+        return None
+    with open(os.path.join(BASE, "builds.log"), "a") as f:
+        f.write(json.dumps({"dockerfile": text, "labels": build_labels, "classic": classic}) + "\n")
+    instrs, cur = [], ""
+    for ln in text.split("\n"):
+        st = ln.strip()
+        if not st or st.startswith("#"):
+            continue
+        cur += " " + st.rstrip("\\")
+        if not st.endswith("\\"):
+            instrs.append(cur.strip())
+            cur = ""
+    images, labels, stage = [], None, []
+    for ins in instrs:
+        word = ins.split(None, 1)[0].upper()
+        if word == "FROM":
+            if stage:
+                images.append(stage)
+            labels, stage = {}, []
+            continue
+        if labels is None:
+            continue  # ARG before the first FROM
+        if word == "LABEL":
+            for kv in re.findall(r"(\S+?)=(\S+)", ins[len("LABEL"):]):
+                labels[kv[0]] = kv[1].strip('"')
+        stage.append(dict(labels))
+    if stage:
+        images.append(stage)
+    final = dict((images[-1][-1] if images and images[-1] else {}), **build_labels)
+    if not classic:
+        return [final]
+    out = [img for st in images for img in st]  # every step's image, every stage's last one among them
+    return out + [final]
+
+
 def network_ok(s, net):
     return net in BUILTIN_NETWORKS or net in s["networks"]
 
@@ -204,18 +249,28 @@ def main():
                 s["labels"].pop("v:" + v, None)
                 shutil.rmtree(os.path.join(BASE, "vols", v), ignore_errors=True)
     elif cmd == "network" and a[1] == "create":
+        if a[-1] in s["networks"]:  # 0.7.9 (the 0.7.8 product run): the engine refuses a second network of a name
+            return refuse("Error response from daemon: network with name %s already exists" % a[-1])
         s["networks"][a[-1]] = label_of(a)
         s["labels"]["n:" + a[-1]] = labels_of(a)
     elif cmd == "network" and a[1] == "ls":
         listing([(n, s["labels"].get("n:" + n) or dict([lb.split("=", 1)] if lb else [])) for n, lb in s["networks"].items()], a)
     elif cmd == "network" and a[1] == "rm":
         for n in a[2:]:
+            users = [c for c, v in s["containers"].items() if n in (v.get("nets") or [])]
+            if users:  # as the engine: a network a container is still on cannot be removed
+                save(s)
+                return refuse("Error response from daemon: error while removing network: network %s has active "
+                              "endpoints (name:%s)" % (n, users[0]))
             s["networks"].pop(n, None)
             s["labels"].pop("n:" + n, None)
     elif cmd == "network" and a[1] == "connect":
         net = [x for x in a[2:] if not x.startswith("-") and x not in opt(a, "--alias")][0]
         if net not in s["networks"]:
             return refuse("Error response from daemon: network %s not found" % net)
+        c = [x for x in a[2:] if not x.startswith("-") and x not in opt(a, "--alias")][-1]
+        if c in s["containers"]:
+            s["containers"][c].setdefault("nets", []).append(net)
     elif cmd == "network":
         pass
     elif cmd == "create":
@@ -262,6 +317,17 @@ def main():
         if "-" in a[1:] and opt(a, "-f") and not plain_tar_head(data[:512]):
             return refuse("ERROR: failed to build: ambiguous Dockerfile source: both stdin and flag correspond to "
                           "Dockerfiles")
+        built = build_images(data, (opt(a, "-f") or ["Dockerfile"])[0], labels_of(a), os.environ.get("DOCKER_BUILDKIT") == "0")
+        if built is None:
+            return refuse("ERROR: failed to build: the Dockerfile is not in the context")
+        tag = (opt(a, "-t") or [None])[0]
+        for i, labels in enumerate(built):
+            s.setdefault("images", []).append({"id": "sha256:%064x" % (len(s.get("images") or []) + 1),
+                                               "tag": tag if i == len(built) - 1 else None, "labels": labels})
+    elif cmd == "image" and a[1] == "ls":
+        imgs = [x for x in s.get("images") or [] if "-a" in a or x["tag"]]
+        filters = opt(a, "--filter")
+        print("\n".join(x["id"] for x in imgs if matches(x["labels"], filters)))
     elif cmd == "run" and "getent" in a:
         save(s)
         return 0  # 0.7.3: the runner's passwd check (confined.Run.check_user); the double's images have the entry
@@ -284,7 +350,7 @@ def main():
             # 0.7.6 (task-tracker MF-54): the engine refuses a second container with a name in use
             return refuse("docker: " + CONFLICT % (name, name), 125)
         if "-d" in a or "--rm" not in a:
-            s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": m}
+            s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": m, "nets": [net]}
         sleep = os.environ.get("MOADIX_DOUBLE_SLEEP")
         if sleep and name.rsplit("-", 1)[-1] in GATES and "-d" not in a:
             save(s)  # a test stops the gate during this run (0.7.6: the run is still removed)

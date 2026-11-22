@@ -288,8 +288,8 @@ def test_engine():
     spec = importlib.util.spec_from_file_location("es_suite077", p)
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
-    record(G, "the engine suite has a rel077 group of 2 real-engine cases, and its fixed total is 63 (0.7.8: rel078 4)",
-           es.PLAN.get("test_rel077") == ("rel077", 2) and es.TOTAL == 63, (es.PLAN.get("test_rel077"), es.TOTAL))
+    record(G, "the engine suite has a rel077 group of 2 real-engine cases, and its fixed total is 67 (0.7.8: rel078 4; 0.7.9: rel079 4)",
+           es.PLAN.get("test_rel077") == ("rel077", 2) and es.TOTAL == 67, (es.PLAN.get("test_rel077"), es.TOTAL))
     src = open(p).read()
     record(G, "rel077 checks lhci's audited address and the failure summary's first errors on the real engine",
            "BROWSER_ALIAS" in src and '"first errors:" in summary' in src and "DATABASE_URL is not set" in src, "")

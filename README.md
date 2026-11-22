@@ -104,6 +104,7 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/rel076/run.py       # 0.7.6: phase-8 blockers: proxies, Stryker (vitest, services), axe (CSP, sign-in), traceability, stale runs
 /usr/bin/python3 tests/rel077/run.py       # 0.7.7: node_modules beside read-only packages, first errors in summaries, browser gates under .localhost
 /usr/bin/python3 tests/rel078/run.py       # 0.7.8: one app origin (http://sut.localhost:<port>) for every live gate
+/usr/bin/python3 tests/rel079/run.py       # 0.7.9: unique per-step names (two registry builds), every built image labelled
 /usr/bin/python3 tests/install/no_product_strings.py   # before a push: no overlay value or home path in new commits
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)
