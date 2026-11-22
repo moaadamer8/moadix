@@ -72,7 +72,14 @@ PROXY_ENV = {"HTTPS_PROXY": "http://%s:3128" % confined.PROXY_ALIAS, "HTTP_PROXY
              "npm_config_https_proxy": "http://%s:3128" % confined.PROXY_ALIAS,
              "npm_config_cache": "/tmp/npm"}  # noqa: S108 (inside the container: its tmpfs)
 WORK = "cp -a /src/. /tmp/work/ && cd /tmp/work"  # noqa: S108 (inside the container: its tmpfs)
-LINK_PRODUCT = " && ln -s /deps/product/node_modules node_modules"
+# 0.7.7 (the 0.7.6 engine run, MF-53): node_modules is a real folder of the work copy whose entries link to the
+# installed packages in /deps (read-only). It used to be one link to /deps/product/node_modules, so a tool that
+# writes beside the packages failed: Vite bundles a configuration into <nearest node_modules>/.vite-temp, and
+# Vitest under Stryker died with "ENOENT: mkdir '/tmp/work/node_modules/.vite-temp'" (reproduced on the real
+# engine, and fixed this way there: 30 of 30 mutants killed). With a real folder Stryker also links it into its
+# sandbox, so the sandbox resolves the packages itself.
+LINK_PRODUCT = (" && mkdir node_modules && { for e in /deps/product/node_modules/* /deps/product/node_modules/.[!.]*; "
+                "do [ -e \"$e\" ] && ln -s \"$e\" node_modules/; done; true; }")
 
 
 # ------------------------------------------------------------------ parsers (raw output -> verdict)
@@ -280,7 +287,8 @@ def parse_lhr(text, budgets=None):
         elif float(v) > b[k]:
             fails.append("lighthouse: %s %.3g is above the budget %.3g (U16/H6)" % (k, float(v), b[k]))
     return fails, ["lighthouse %s: %s" % (data.get("lighthouseVersion"), ", ".join("%s %.3g" % (k, float(v)) for k, v in got.items()
-                                                                                    if v is not None))], {"metrics": got, "budgets": b}
+                                                                                    if v is not None))], {"metrics": got, "budgets": b,
+                                                                                               "url": data.get("finalDisplayedUrl") or data.get("finalUrl")}
 
 
 def _path_of(url):
@@ -471,6 +479,18 @@ def wait_for(port, out="/out"):
 ZAP_BASELINE = "/zap/zap-baseline.py"
 
 
+def browser_url(port):
+    """The app's address for the browser gates (0.7.7): under .localhost, so Chromium keeps Secure cookies."""
+    return "http://%s:%d" % (confined.BROWSER_ALIAS, port)
+
+
+def lhci_config(port):
+    """lighthouserc.json for the lhci gate (0.7.7): the app under .localhost and Chromium's resolver rule. A config
+    file, because the rule holds spaces: Lighthouse parses chromeFlags with quoting, the shell would not."""
+    flags = "--no-sandbox --headless=new --host-resolver-rules=\"%s\"" % confined.BROWSER_RULE
+    return {"ci": {"collect": {"url": [browser_url(port) + "/"], "numberOfRuns": 1, "settings": {"chromeFlags": flags}}}}
+
+
 def live_script(gate, port, spec_rel, paths, memory_mb=2048):
     url = "http://%s:%d" % (confined.SUT_ALIAS, port)
     if gate == "schemathesis":
@@ -481,12 +501,11 @@ def live_script(gate, port, spec_rel, paths, memory_mb=2048):
                 "-Xmx%dm' > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % (ZAP_BASELINE, url, max(256, memory_mb // 2)))
     if gate == "lhci":
         return (wait_for(port) + "export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -1) && "
-                "cd /tmp && node /deps/tool/node_modules/@lhci/cli/src/cli.js collect --url=%s/ --numberOfRuns=1 "
-                "--settings.chromeFlags='--no-sandbox --headless=new' > /out/run.log 2>&1; echo $? > /out/run.rc; "
-                "cp /tmp/.lighthouseci/lhr-*.json /out/ 2>/dev/null; true" % url)
+                "cd /tmp && node /deps/tool/node_modules/@lhci/cli/src/cli.js collect --config=/gx/lighthouserc.json "
+                "> /out/run.log 2>&1; echo $? > /out/run.rc; cp /tmp/.lighthouseci/lhr-*.json /out/ 2>/dev/null; true")
     if gate == "axe":
         return (wait_for(port) + "node /gx/axe-run.js %s /out/axe.json --paths-file /gx/paths.json > /out/run.log 2>&1; "
-                "echo $? > /out/run.rc" % url)
+                "echo $? > /out/run.rc" % browser_url(port))
     raise ValueError(gate)
 
 
@@ -876,10 +895,30 @@ def run_logs(dest, rc, so, se):
         if (text or "").strip():
             parts += ["--- %s (last %d lines at most)" % (name, LOG_LINES), bounded(text)]
     main = next((t for n, t in logs if n.startswith(("run", "validate"))), "") or (logs[0][1] if logs else "") or se or ""
-    tail = [ln.strip()[:200] for ln in bounded(main, TAIL_LINES, 4000).splitlines() if ln.strip()]
+    first, tail = summary_lines(main)
     codes = ", ".join("%s=%s" % kv for kv in sorted(rcs.items())) or "none written"
-    line = "container exit %s; tool exit %s; last lines: %s" % (rc, codes, " | ".join(tail[-TAIL_LINES:]) or "(no output)")
-    return "\n".join(parts) + "\n", line[:2500]
+    line = "container exit %s; tool exit %s; %slast lines: %s" % (
+        rc, codes, ("first errors: %s; " % " | ".join(first)) if first else "", " | ".join(tail) or "(no output)")
+    return "\n".join(parts) + "\n", line[:3000]
+
+
+ERROR_LINE = re.compile(r"(?i)\b(error|err_[a-z_]+|e[a-z]{3,6}:|exception|fatal|failed|cannot|not set|refused|denied)\b")
+STACK_FRAME = re.compile(r"^\s*at\s|^\s*\^+\s*$|^\s*[{}]\s*$|^\s*innerError:")
+
+
+def summary_lines(text):
+    """(first error lines, last lines) of a run's main log, both without stack frames. 0.7.7 (the 0.7.6 engine
+    run): the summary was the last 12 lines, which for a Node crash are the second copy of a stack trace; the line
+    that said what failed (ENOENT: mkdir .../.vite-temp) was cut."""
+    lines = [ln.strip() for ln in bounded(text, LOG_LINES, LOG_BYTES).splitlines() if ln.strip()]
+    lines = [ln for ln in lines if not STACK_FRAME.match(ln) and not ln.startswith("[... earlier output cut]")]
+    first = []
+    for ln in lines:
+        if ERROR_LINE.search(ln) and ln[:300] not in first:
+            first.append(ln[:300])
+        if len(first) == 3:
+            break
+    return first, [ln[:200] for ln in lines[-TAIL_LINES:]]
 
 
 def keep_logs(root, label, gate, dest, rc, so, se):
@@ -970,10 +1009,14 @@ def run_gate(root, st, gate, label, run_id=None):
             spec = next((f for f in tracked(root) if re.match(r"^%s/05-lld/.*\.(ya?ml|json)$" % re.escape(contract.doc_dir(st)), f)), None)
             if gate == "schemathesis" and not spec:
                 return ["schemathesis needs the OpenAPI description under %s/05-lld/" % contract.doc_dir(st)], [], {}, None
-            if gate == "axe":
+            if gate in ("axe", "lhci"):  # the gate's own files for the browser gates
+                if gate == "axe":
+                    files = {"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
+                             "paths.json": json.dumps(dict(plan, host_rules=confined.BROWSER_RULE)).encode()}
+                else:
+                    files = {"lighthouserc.json": json.dumps(lhci_config(port)).encode()}
                 gx = r.volume("gx")
-                r.load(gx, _write(tmp, "gx.tar", _tar_of({"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
-                                                          "paths.json": json.dumps(plan).encode()})), img)
+                r.load(gx, _write(tmp, "gx.tar", _tar_of(files)), img)
                 mounts.append((gx, "/gx", True))
             script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"],
                                  confined.limits(g["tier"], pt)["memory_mb"])

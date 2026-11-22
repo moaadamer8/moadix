@@ -1,11 +1,14 @@
-// TEST DOUBLE of Playwright for gate/exec/axe-run.js (tests/rel076). No browser: a site is described by
+// TEST DOUBLE of Playwright for gate/exec/axe-run.js (tests/rel076, tests/rel077). No browser: a site is described by
 // $FAKEPW_SITE (JSON): {"<path>": {"title", "csp": true|false, "session": true|false, "violations": []}}.
 // It models what the 0.7.5 runner met on the real engine (task-tracker MF-49, MF-50):
 //   * page.addScriptTag({content}) on a page whose policy forbids inline script throws, as Chromium does;
 //   * page.evaluate(<string>) is a DevTools evaluation, which the page's policy does not govern;
 //   * a context opened with bypassCSP runs the page's own inline script, which retitles it "CSP-BYPASSED";
-//   * POST of the sign-in form sets a __Host- Secure cookie, which Chromium keeps over http only when the
-//     browser was launched treating the origin as secure (--unsafely-treat-insecure-origin-as-secure=<origin>);
+//   * POST of the sign-in form sets a __Host- Secure cookie, which Chromium keeps over http only for a
+//     localhost or *.localhost name (0.7.7, measured on the real engine with the pinned Chromium: on
+//     sut.moadix.test it is refused as InvalidPrefix, with or without --unsafely-treat-insecure-origin-as-secure);
+//   * a *.localhost name always resolves to loopback (nothing listens there: connection refused) unless the
+//     browser was launched with --host-resolver-rules=MAP <that name> <the app's alias>;
 //   * a session page visited without the cookie redirects to /signin.
 // Every call is appended to $FAKEPW_LOG (one JSON line) so a test can see what the runner did.
 "use strict";
@@ -37,6 +40,10 @@ class Page {
   constructor(ctx) { this.ctx = ctx; this.u = "about:blank"; this.axe = false; this.t = ""; this.form = {}; this.init = []; }
   _load(url) {
     const u = new URL(url);
+    if (/(^|\.)localhost$/.test(u.hostname) &&
+        !this.ctx.browser.args.some((a) => a.startsWith("--host-resolver-rules=MAP " + u.hostname + " "))) {
+      throw new Error("page.goto: net::ERR_CONNECTION_REFUSED at " + url);
+    }
     let spec = SITE[u.pathname];
     if (spec && spec.session && !this.ctx.jar.some((c) => c.name === "__Host-session")) {
       u.pathname = "/signin";
@@ -79,9 +86,10 @@ class Page {
     if (!this.spec || !this.spec.form || sel !== "button[type=submit]") throw new Error("page.click: Timeout 30000ms exceeded waiting for " + sel);
     const ok = Object.keys(USER).every((k) => this.form[k] === USER[k]);
     if (!ok) return;
-    const origin = new URL(this.u).origin;
-    const trusted = this.ctx.browser.args.indexOf("--unsafely-treat-insecure-origin-as-secure=" + origin) >= 0;
-    if (new URL(this.u).protocol === "https:" || trusted) this.ctx.jar.push({ name: "__Host-session", value: "x", domain: new URL(this.u).hostname, secure: true });
+    const host = new URL(this.u).hostname;
+    const kept = new URL(this.u).protocol === "https:" || /(^|\.)localhost$/.test(host);
+    log("set-cookie", { kept, reason: kept ? null : "InvalidPrefix" });
+    if (kept) this.ctx.jar.push({ name: "__Host-session", value: "x", domain: new URL(this.u).hostname, secure: true });
     this._load(new URL("/tasks", this.u).toString());
   }
   async waitForURL(want, opts) {

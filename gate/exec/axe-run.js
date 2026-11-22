@@ -10,9 +10,11 @@
 // which the page's Content-Security-Policy does not govern), never added as an inline <script>, which a
 // strict policy (script-src 'self') blocks; the policy itself stays in force (the page is checked as served).
 // MF-50: with a sign-in, the runner signs in once in its own context and visits every path that is not
-// public with that session. The app's origin is treated as secure, so a Secure (__Host-) session cookie is
-// kept over the internal network's plain http, as Chromium keeps it for http://localhost. Cookie values are
-// never written out.
+// public with that session. Cookie values are never written out.
+// 0.7.7 (the 0.7.6 engine run): the gate opens the app as http://sut.localhost:<port> and gives the plan a
+// Chromium resolver rule (host_rules: "MAP sut.localhost sut.moadix.test"). Chromium keeps a Secure (__Host-)
+// cookie over http only for a .localhost name; on sut.moadix.test it refused it (InvalidPrefix), and
+// --unsafely-treat-insecure-origin-as-secure did not change that (measured with the pinned Chromium).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -34,6 +36,9 @@ function loadPlan(rest) {
   }
   if (plan.signin !== undefined && !(plan.signin && Array.isArray(plan.signin.steps) && plan.signin.steps.length)) {
     throw new Error("the plan's sign-in must list its steps");
+  }
+  if (plan.host_rules !== undefined && !/^MAP [a-z0-9-]+\.localhost [a-z0-9.-]+$/.test(String(plan.host_rules))) {
+    throw new Error("the plan's host rule must map a .localhost name to the app's alias");
   }
   return plan;
 }
@@ -119,8 +124,8 @@ async function main() {
   const plan = loadPlan(rest);
   const paths = plan.paths.length ? plan.paths : ["/"];
   const pub = new Set(plan.public || []);
-  const origin = new URL(base).origin;
-  const browser = await chromium.launch({ args: ["--no-sandbox", "--unsafely-treat-insecure-origin-as-secure=" + origin] });
+  const args = ["--no-sandbox"].concat(plan.host_rules ? ["--host-resolver-rules=" + plan.host_rules] : []);
+  const browser = await chromium.launch({ args });
   const results = [];
   let signin;
   try {

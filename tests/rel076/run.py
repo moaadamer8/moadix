@@ -63,7 +63,10 @@ PG = confined.image("postgres")
 FAKEPW = os.path.join(REPO, "tests", "lib", "fakepw")
 RUNNER = os.path.join(REPO, "gate", "exec", "axe-run.js")
 NODE = shutil.which("node") or "/opt/homebrew/bin/node"
-BASE_URL = "http://%s:3000" % confined.SUT_ALIAS
+# 0.7.7: the browser gates open the app under .localhost, mapped to its alias by a resolver rule in the plan
+BASE_URL = "http://%s:3000" % confined.BROWSER_ALIAS
+OLD_URL = "http://%s:3000" % confined.SUT_ALIAS  # what the 0.7.5 runner was given
+RULE = confined.BROWSER_RULE
 OLD = "33b8e32"  # 0.7.5
 
 
@@ -219,7 +222,7 @@ STEPS = [{"goto": "/signin"}, {"fill": "#email", "value": "axe@example.test"},
          {"fill": "#password", "value": "not-a-secret-fixture"}, {"click": "button[type=submit]"}, {"wait_url": "/tasks"}]
 
 
-def axe_run(runner_src, plan, site=None):
+def axe_run(runner_src, plan, site=None, base=None):
     d = os.path.join(E.base, "axe-%d" % len(os.listdir(E.base)))
     os.makedirs(d)
     runner = os.path.join(d, "axe-run.js")
@@ -228,7 +231,7 @@ def axe_run(runner_src, plan, site=None):
     with open(os.path.join(d, "plan.json"), "w") as f:
         json.dump(plan, f)
     log = os.path.join(d, "pw.log")
-    r = subprocess.run([NODE, runner, BASE_URL, os.path.join(d, "axe.json"), "--paths-file", os.path.join(d, "plan.json")],
+    r = subprocess.run([NODE, runner, base or BASE_URL, os.path.join(d, "axe.json"), "--paths-file", os.path.join(d, "plan.json")],
                        capture_output=True, text=True, timeout=60,
                        env=dict(os.environ, MOADIX_TOOL_MODULES=FAKEPW, FAKEPW_SITE=json.dumps(site or SITE), FAKEPW_LOG=log))
     out = json.load(open(os.path.join(d, "axe.json"))) if os.path.exists(os.path.join(d, "axe.json")) else {}
@@ -241,11 +244,11 @@ def test_axe():
     old = subprocess.run(["/usr/bin/git", "-C", REPO, "show", "%s:gate/exec/axe-run.js" % OLD], capture_output=True,
                          text=True).stdout
     new = open(RUNNER).read()
-    _r, out, _ev = axe_run(old, ["/", "/signin"])
+    _r, out, _ev = axe_run(old, ["/", "/signin"], base=OLD_URL)
     f, _n, _d = X.parse_axe(json.dumps(out))
     record(G, "control: the 0.7.5 runner cannot check a page with a strict CSP (the inline script tag is refused)",
            len(f) == 2 and all("could not be checked" in x and "Content Security Policy" in x for x in f), f)
-    r, out, ev = axe_run(new, ["/", "/signin"])
+    r, out, ev = axe_run(new, {"paths": ["/", "/signin"], "host_rules": RULE})
     f, _n, _d = X.parse_axe(json.dumps(out))
     record(G, "MF-49: the runner checks every page of a strict-CSP app (axe evaluated by the browser automation)",
            r.returncode == 0 and not f and len(out.get("results") or []) == 2 and
@@ -256,7 +259,7 @@ def test_axe():
            all(x.get("title") not in ("CSP-BYPASSED", None) for x in out.get("results") or []), (ev, out))
     record(G, "the runner names no addScriptTag and no bypassCSP", "addScriptTag" not in new and "bypassCSP" not in
            new.replace("never bypassCSP", ""), "")
-    plan = {"paths": ["/", "/signin", "/tasks"], "public": ["/", "/signin"], "signin": {"steps": STEPS}}
+    plan = {"paths": ["/", "/signin", "/tasks"], "public": ["/", "/signin"], "signin": {"steps": STEPS}, "host_rules": RULE}
     r, out, ev = axe_run(new, plan)
     f, n, data = X.parse_axe(json.dumps(out))
     tasks = next((x for x in out.get("results") or [] if x.get("path") == "/tasks"), {})
@@ -264,8 +267,8 @@ def test_axe():
            r.returncode == 0 and not f and (out.get("signin") or {}).get("ok") and tasks.get("session") is True and
            (tasks.get("final") or "").endswith("/tasks") and tasks.get("title") == "Tasks", (r.stderr[-300:], f, out))
     launch = next((e for e in ev if e["what"] == "launch"), {})
-    record(G, "Chromium treats the app's origin as secure, so the __Host- Secure session cookie is kept over http",
-           "--unsafely-treat-insecure-origin-as-secure=%s" % BASE_URL in (launch.get("args") or []), launch)
+    record(G, "Chromium opens the app under .localhost through the plan's resolver rule (0.7.7: so the __Host- Secure "
+              "session cookie is kept over http)", "--host-resolver-rules=%s" % RULE in (launch.get("args") or []), launch)
     pub = [x for x in out.get("results") or [] if x.get("path") in ("/", "/signin")]
     record(G, "axe.public paths are visited without the session", len(pub) == 2 and all(x.get("session") is False
                                                                                          for x in pub), pub)
@@ -450,7 +453,7 @@ def test_engine():
     plan = es.PLAN.get("test_rel076")
     record(G, "the engine suite has a rel076 group of 7 real-engine cases on the smoke-076 fixture",
            plan == ("rel076", 7) and "smoke-076" in open(p).read(), plan)
-    record(G, "its fixed total is 57 (0.7.5: 50, plus the 7)", es.TOTAL == 57, es.TOTAL)
+    record(G, "its fixed total is 59 (0.7.5: 50, plus the 7; 0.7.7: rel077 2)", es.TOTAL == 59, es.TOTAL)
     src = open(p).read()
     for needle, what in (("schemathesis", "MF-54"), ("NoCoverage", "MF-51"), ("ERR_MODULE_NOT_FOUND", "MF-53"),
                          ("CSP-BYPASSED", "MF-49"), ("checked elsewhere", "MF-50"), ("08-traceability", "MF-46"),

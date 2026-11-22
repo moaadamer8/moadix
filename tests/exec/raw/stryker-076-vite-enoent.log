@@ -1,0 +1,46 @@
+14:51:30 (10) INFO ProjectReader Found 2 of 17 file(s) to be mutated.
+14:51:30 (10) INFO Instrumenter Instrumented 2 source file(s) with 30 mutant(s)
+14:51:30 (10) INFO ConcurrencyTokenProvider Creating 2 test runner process(es).
+14:51:30 (10) ERROR Stryker Unexpected error occurred while running Stryker StrykerError: Error: ENOENT (mkdir) Error: ENOENT: no such file or directory, mkdir '/tmp/work/node_modules/.vite-temp'
+    at async Object.mkdir (node:internal/fs/promises:1571:10)
+    at async loadConfigFromBundledFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:38161:4)
+    at async bundleAndLoadConfigFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:38019:21)
+    at async loadConfigFromFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:37979:42)
+    at async resolveConfig (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:37580:22)
+    at async resolveConfig (file:///deps/product/node_modules/vitest/dist/chunks/index.Di8au7q4.js:9300:25)
+    at async Object.createVitest (file:///deps/product/node_modules/vitest/dist/chunks/cli-api.COfZo8lK.js:13938:17)
+    at async VitestTestRunner.init (file:///deps/product/node_modules/@stryker-mutator/vitest-runner/dist/src/vitest-test-runner.js:129:20)
+    at async ChildProcessTestRunnerWorker.init (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/test-runner/child-process-test-runner-worker.js:16:13)
+    at async ChildProcessProxyWorker.handleCall (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/child-proxy/child-process-proxy-worker.js:87:28)
+    at ChildProcess.<anonymous> (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/child-proxy/child-process-proxy.js:123:33)
+    at ChildProcess.emit (node:events:514:28)
+    at emit (node:internal/child_process:1020:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+  innerError: undefined
+}
+14:51:30 (10) INFO Stryker This might be a known problem with a solution documented in our troubleshooting guide.
+14:51:30 (10) INFO Stryker You can find it at https://stryker-mutator.io/docs/stryker-js/troubleshooting/
+14:51:30 (10) INFO Stryker Still having trouble figuring out what went wrong? Try `npx stryker run --fileLogLevel trace --logLevel debug` to get some more info.
+node:internal/process/promises:394
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+StrykerError: Error: ENOENT (mkdir) Error: ENOENT: no such file or directory, mkdir '/tmp/work/node_modules/.vite-temp'
+    at async Object.mkdir (node:internal/fs/promises:1571:10)
+    at async loadConfigFromBundledFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:38161:4)
+    at async bundleAndLoadConfigFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:38019:21)
+    at async loadConfigFromFile (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:37979:42)
+    at async resolveConfig (file:///deps/product/node_modules/vite/dist/node/chunks/node.js:37580:22)
+    at async resolveConfig (file:///deps/product/node_modules/vitest/dist/chunks/index.Di8au7q4.js:9300:25)
+    at async Object.createVitest (file:///deps/product/node_modules/vitest/dist/chunks/cli-api.COfZo8lK.js:13938:17)
+    at async VitestTestRunner.init (file:///deps/product/node_modules/@stryker-mutator/vitest-runner/dist/src/vitest-test-runner.js:129:20)
+    at async ChildProcessTestRunnerWorker.init (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/test-runner/child-process-test-runner-worker.js:16:13)
+    at async ChildProcessProxyWorker.handleCall (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/child-proxy/child-process-proxy-worker.js:87:28)
+    at ChildProcess.<anonymous> (file:///deps/product/node_modules/@stryker-mutator/core/dist/src/child-proxy/child-process-proxy.js:123:33)
+    at ChildProcess.emit (node:events:514:28)
+    at emit (node:internal/child_process:1020:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+  innerError: undefined
+}
+
+Node.js v24.22.3

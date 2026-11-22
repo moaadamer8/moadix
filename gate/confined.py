@@ -399,6 +399,15 @@ def read_json_output(d, name, max_bytes=20 << 20):
 REGISTRIES = ("registry.npmjs.org", "pypi.org", "files.pythonhosted.org")
 PROXY_ALIAS = "moadix-proxy"
 SUT_ALIAS = "sut.moadix.test"  # never a bare name: Chromium force-upgrades http://app (.app is HSTS-preloaded)
+# 0.7.7 (the 0.7.6 engine run, MF-50): the browser gates (axe, lhci) open the app as http://sut.localhost:<port>,
+# and Chromium maps that name to the app's alias on the run's network. Measured on the real engine with the
+# pinned Chromium 1.64.1: over http on sut.moadix.test the __Host- Secure session cookie is refused
+# (blockedReasons InvalidPrefix), with or without --unsafely-treat-insecure-origin-as-secure (that flag made a
+# secure context in full Chromium and none in the headless shell, and the cookie was refused in both). Under
+# .localhost, which Chromium treats as a secure context over http, the cookie is kept. A bare sut.localhost alias
+# is never asked of DNS (Chromium resolves *.localhost to loopback itself), hence the resolver rule.
+BROWSER_ALIAS = "sut.localhost"
+BROWSER_RULE = "MAP %s %s" % (BROWSER_ALIAS, SUT_ALIAS)
 
 
 def fixture_engine():

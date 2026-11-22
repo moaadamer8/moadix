@@ -273,17 +273,17 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
-## Updating from 0.7.5 to 0.7.6
+## Updating from 0.7.5 to 0.7.7
 
-0.7.6 fixes the executing gates that stopped task-tracker's phase 8 (MF-46, MF-49 to MF-54; report: `docs/release-0.7.6-report.md`). It changes the gate's Python, the gate's axe runner (`gate/exec/axe-run.js`), the tests and a new fixture. Nothing changes in the managed policy, the hook's Bash classifier, the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+0.7.7 includes 0.7.6, which was committed but not installed. Together they fix the executing gates that stopped task-tracker's phase 8 (MF-46, MF-49 to MF-54; reports: `docs/release-0.7.6-report.md`, `docs/release-0.7.7-report.md`). It changes the gate's Python, the gate's axe runner (`gate/exec/axe-run.js`), the tests and a new fixture. Nothing changes in the managed policy, the hook's Bash classifier, the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
 
 **1. Confirm the version.** Docker Desktop: not needed. Claude Code sessions: may stay open.
 
 ```
-cd ~/moadix && git log --oneline -2
+cd ~/moadix && git log --oneline -3
 ```
 
-Expected: the 0.7.6 commit on the first line and the 0.7.5 commit (`33b8e32`) on the second. `cat .claude-plugin/plugin.json` shows `"version": "0.7.6"`.
+Expected: the 0.7.7 commit, the 0.7.6 commit and the 0.7.5 commit (`33b8e32`), newest first. `cat .claude-plugin/plugin.json` shows `"version": "0.7.7"`.
 
 **2. Run the main-branch guard suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it: the installed guard refuses any script whose text names the gh or firebase CLI.
 
@@ -317,7 +317,7 @@ Expected last line: `19 checks, 19 passed`.
 cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
 ```
 
-Expected last line: `57 checks, 57 passed, 0 failed (<seconds> s)`. If an rel076 check fails, its line shows the run's error, the files it wrote and the last lines of its log. Send me that output.
+Expected last line: `59 checks, 59 passed, 0 failed (<seconds> s)`. On 0.7.6, 4 checks failed: Stryker (MF-53, MF-51: Vite could not write beside the read-only packages) and axe (MF-49, MF-50: Chromium refused the `__Host-` cookie on `sut.moadix.test`). 0.7.7 fixes both, and the new rel077 group (2 checks) runs Lighthouse CI under `sut.localhost` and checks that a failed run names its first error. If a check fails, its line shows the run's first errors and last lines. Send me that output.
 
 **6. Reinstall.** Docker Desktop: not needed. Claude Code sessions: **must all be closed**. It asks for your macOS password once and shows the overlay: answer `y`.
 
@@ -333,7 +333,7 @@ Expected last line: `MOADIX is updated.`
 cd ~/moadix && git fetch origin && /usr/bin/python3 tests/install/no_product_strings.py origin/master..HEAD
 ```
 
-Expected last line: `no product-specific string in origin/master..HEAD (1 commits, <n> strings checked)`. If it prints `FOUND` lines, stop and send them to me; do not push.
+Expected last line: `no product-specific string in origin/master..HEAD (2 commits, <n> strings checked)`. If it prints `FOUND` lines, stop and send them to me; do not push.
 
 **8. Push master and the tag.** Docker Desktop: not needed. Claude Code sessions: may stay open. Do this in **Terminal**: the guard refuses a push to the main branch from Claude Code.
 
@@ -341,13 +341,13 @@ Expected last line: `no product-specific string in origin/master..HEAD (1 commit
 cd ~/moadix && git push origin master
 ```
 
-Expected last line: `   33b8e32..<0.7.6 commit>  master -> master`.
+Expected last line: `   33b8e32..<0.7.7 commit>  master -> master`.
 
 ```
-cd ~/moadix && git tag -a v0.7.6 -m "MOADIX 0.7.6" && git push origin v0.7.6
+cd ~/moadix && git tag -a v0.7.7 -m "MOADIX 0.7.7" && git push origin v0.7.7
 ```
 
-Expected last line: ` * [new tag]         v0.7.6 -> v0.7.6`.
+Expected last line: ` * [new tag]         v0.7.7 -> v0.7.7`.
 
 **9. Refresh the plugin.** Docker Desktop: not needed. Claude Code sessions: open **one new** session in `~/moadix` and type these two commands there, not in Terminal.
 
@@ -359,7 +359,7 @@ Expected last line: ` * [new tag]         v0.7.6 -> v0.7.6`.
 /reload-plugins
 ```
 
-Then type `/plugin`. Expected: moadix is shown at version **0.7.6**.
+Then type `/plugin`. Expected: moadix is shown at version **0.7.7**.
 
 **10. Back in task-tracker.** The policy did not change, so there is no live policy check. In task-tracker's session:
 - the leftover `sdlc/08-traceability.md` no longer blocks anything (you may delete it);

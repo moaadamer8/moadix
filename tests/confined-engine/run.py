@@ -40,6 +40,8 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
             CSP, a sign-in, Vitest, PostgreSQL): two proxies (MF-54), a stale gate run removed, Stryker finds
             vitest (MF-53) and scores the database code (MF-51), axe keeps the CSP (MF-49) and signs in (MF-50),
             check-traceability leaves the tree clean (MF-46)
+  rel077    0.7.7: lhci opens the app under .localhost (as axe, so a Secure session cookie is kept), and a failed
+            run's summary names its first error lines
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
             (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
@@ -631,11 +633,34 @@ def test_rel076(node):
            (t.stdout[-400:], verify.dirty(root)))
 
 
+def test_rel077(_node):
+    """0.7.7 (the 0.7.6 engine run): Lighthouse CI opens the app under .localhost like axe, and a failed run's summary
+    names its first error lines (the 0.7.6 summary kept only the stack's tail)."""
+    G = "rel077"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    base = tempfile.mkdtemp(prefix="moadix-smoke077-")
+    root = smoke076_product(base)
+    f, n, data, err, log, _r = run_logged(check_exec, root, "lhci", "10a")
+    record(G, "lhci audits the app at http://sut.localhost:<port>/ (Chromium's resolver rule), as axe opens it",
+           not err and str(data.get("url") or "").startswith("http://%s:3000/" % confined.BROWSER_ALIAS),
+           "%s | url %s | fails %s | log:\n%s" % (err, data.get("url"), f[:3], log[-1200:]))
+    with open(os.path.join(root, SDLC, "config", "product-tools.yaml")) as fh:
+        pt = fh.read()
+    with open(os.path.join(root, SDLC, "config", "product-tools.yaml"), "w") as fh:
+        fh.write(pt.replace("  services: [postgres]\n", ""))
+    f, n, data, err, log, _r = run_logged(check_exec, root, "stryker", "8")
+    summary = " ".join(f) + " " + err  # no mutation.json: the gate refuses the run, with the summary in the reason
+    record(G, "a failed Stryker run (no database) fails the gate, and its summary names the first error "
+              "(DATABASE_URL is not set), not only the stack's tail", (f or err) and "first errors:" in summary and
+           "DATABASE_URL is not set" in summary.split("last lines:")[0], "%s | %s" % (err, summary[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
-        "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7)}
+        "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -698,7 +723,8 @@ def main():
     before = snapshot(own_img)
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
-                 (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,))):
+                 (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
+                 (test_rel077, (node,))):
         run_group(t, a)
     left = built_images()
     if left:
