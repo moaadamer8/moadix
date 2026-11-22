@@ -233,8 +233,8 @@ def test_browser():
            "/signin" in json.dumps(out.get("signin")), (f, out.get("signin")))
     script = X.live_script("axe", 3000, None, ["/"])
     base = X.browser_url(3000)
-    record(G, "the gate opens the app as http://sut.localhost:<port> and still waits for it on its alias",
-           base == "http://sut.localhost:3000" and " %s " % base in script and "/dev/tcp/sut.moadix.test/3000" in script,
+    record(G, "the gate opens the app as http://sut.localhost:<port> and waits for it at that name (0.7.8: one origin)",
+           base == "http://sut.localhost:3000" and " %s " % base in script and "/dev/tcp/%s/3000" % confined.APP_HOST in script,
            script)
     record(G, "the resolver rule maps exactly that name to the app's alias",
            confined.BROWSER_RULE == "MAP sut.localhost sut.moadix.test", confined.BROWSER_RULE)
@@ -288,8 +288,8 @@ def test_engine():
     spec = importlib.util.spec_from_file_location("es_suite077", p)
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
-    record(G, "the engine suite has a rel077 group of 2 real-engine cases, and its fixed total is 59",
-           es.PLAN.get("test_rel077") == ("rel077", 2) and es.TOTAL == 59, (es.PLAN.get("test_rel077"), es.TOTAL))
+    record(G, "the engine suite has a rel077 group of 2 real-engine cases, and its fixed total is 63 (0.7.8: rel078 4)",
+           es.PLAN.get("test_rel077") == ("rel077", 2) and es.TOTAL == 63, (es.PLAN.get("test_rel077"), es.TOTAL))
     src = open(p).read()
     record(G, "rel077 checks lhci's audited address and the failure summary's first errors on the real engine",
            "BROWSER_ALIAS" in src and '"first errors:" in summary' in src and "DATABASE_URL is not set" in src, "")

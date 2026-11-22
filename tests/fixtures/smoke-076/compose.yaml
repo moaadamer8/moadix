@@ -4,4 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["node", "/app/server.mjs"]
+    environment:
+      # the gate's app origin (/moadix:coverage, "Live gates: the app's origin"): the only origin the app accepts
+      APP_ORIGIN: http://sut.localhost:3000
     expose: ["3000"]

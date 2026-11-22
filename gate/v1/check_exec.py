@@ -467,7 +467,7 @@ def wait_for(port, out="/out"):
     on the read-only root the failed write used to skip the exit, so the loop ran to the wall clock), and the
     exit no longer depends on the note being written."""
     return ("i=0; until (echo > /dev/tcp/%s/%d) 2>/dev/null; do i=$((i+1)); if [ $i -gt 90 ]; then echo 'the app "
-            "never listened on port %d' > %s/wait.log; exit 3; fi; sleep 1; done; " % (confined.SUT_ALIAS, port, port, out))
+            "never listened on port %d' > %s/wait.log; exit 3; fi; sleep 1; done; " % (confined.APP_HOST, port, port, out))
 
 
 # 0.7.5 (the 0.7.4 engine run): the runner's PATH is fixed (/usr/local/bin:/usr/bin:/bin) and replaces the
@@ -480,8 +480,16 @@ ZAP_BASELINE = "/zap/zap-baseline.py"
 
 
 def browser_url(port):
-    """The app's address for the browser gates (0.7.7): under .localhost, so Chromium keeps Secure cookies."""
-    return "http://%s:%d" % (confined.BROWSER_ALIAS, port)
+    """The app's origin (0.7.8: the same for every live gate; confined.app_origin)."""
+    return confined.app_origin(port)
+
+
+def zap_origin_options(port):
+    """ZAP's replacer adds the app's Origin header to every request (it adds the header when it is absent)."""
+    o = "replacer.full_list(0)"
+    return ("-config %s.description=moadix-origin -config %s.enabled=true -config %s.matchtype=REQ_HEADER "
+            "-config %s.matchstr=Origin -config %s.regex=false -config %s.replacement=%s"
+            % (o, o, o, o, o, o, confined.app_origin(port)))
 
 
 def lhci_config(port):
@@ -492,13 +500,16 @@ def lhci_config(port):
 
 
 def live_script(gate, port, spec_rel, paths, memory_mb=2048):
-    url = "http://%s:%d" % (confined.SUT_ALIAS, port)
+    # 0.7.8: every live gate reaches the app at the one gate-owned origin (URL, Host, Origin); 0.7.7 sent
+    # Schemathesis and ZAP to sut.moadix.test, so an app that accepts one host failed one gate whatever it set
+    url = confined.app_origin(port)
     if gate == "schemathesis":
-        return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s --report junit "
-                "--report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url))
+        return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s -H 'Origin: %s' "
+                "--report junit --report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url, url))
     if gate == "zap":
         return (wait_for(port, "/zap/wrk") + "cd /tmp && %s -t %s -c zap-rules.tsv -J zap.json -I -m 1 -z '-dir /tmp/zaphome "
-                "-Xmx%dm' > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % (ZAP_BASELINE, url, max(256, memory_mb // 2)))
+                "-Xmx%dm %s' > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % (
+                    ZAP_BASELINE, url, max(256, memory_mb // 2), zap_origin_options(port)))
     if gate == "lhci":
         return (wait_for(port) + "export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -1) && "
                 "cd /tmp && node /deps/tool/node_modules/@lhci/cli/src/cli.js collect --config=/gx/lighthouserc.json "
@@ -616,7 +627,8 @@ def start_live(r, root, pt, export_tar, tmp, net):
         argv = svc.get("command") or []
         argv = argv if isinstance(argv, list) else str(argv).split()
         r.execute(svc["image"], [str(x) for x in argv], "L", [], network=net, env=svc.get("environment") or {},
-                  aliases=[confined.SUT_ALIAS] if name == target else [name], name="moadix-%s-svc-%s" % (r.id, name),
+                  aliases=[confined.APP_HOST, confined.SUT_ALIAS] if name == target else [name],
+                  name="moadix-%s-svc-%s" % (r.id, name),
                   detach=True)
     return port, notes
 

@@ -273,6 +273,28 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.7.7 to 0.7.8
+
+0.7.8 gives every live gate one app origin, `http://sut.localhost:<live.port>`, for its URL, Host and Origin headers: Schemathesis and ZAP now use it as well as axe and Lighthouse CI (report: `docs/release-0.7.8-report.md`). It changes the gate's Python, `/moadix:coverage` (new paragraph "Live gates: the app's origin"), the tests and the smoke-076 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.7.8 commit, then `a228485` (0.7.7). `cat .claude-plugin/plugin.json` shows `"version": "0.7.8"`.
+
+**2. Run the real-engine suite.** Docker Desktop: **must be running**, with no other container running. It needs internet (pinned images, tool installs) and takes about 30–50 minutes. New: the rel078 group (4 checks). The smoke-076 app now accepts only `Host: sut.localhost:3000` (421 otherwise) and only that Origin (403 otherwise), and Schemathesis, ZAP, Lighthouse CI and axe must each pass against it.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `63 checks, 63 passed, 0 failed (<seconds> s)`.
+
+**3. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   a228485..<0.7.8 commit>  master -> master`;
+- the tag: `git tag -a v0.7.8 -m "MOADIX 0.7.8" && git push origin v0.7.8`;
+- `/plugin` shows **0.7.8**.
+
+**4. In a product.** Set `APP_ORIGIN` (or the product's own allowed-origin setting) in the gate test stack (`live.compose`) to exactly `http://sut.localhost:<live.port>`, and allow no other host.
+
 ## Updating from 0.7.5 to 0.7.7
 
 0.7.7 includes 0.7.6, which was committed but not installed. Together they fix the executing gates that stopped task-tracker's phase 8 (MF-46, MF-49 to MF-54; reports: `docs/release-0.7.6-report.md`, `docs/release-0.7.7-report.md`). It changes the gate's Python, the gate's axe runner (`gate/exec/axe-run.js`), the tests and a new fixture. Nothing changes in the managed policy, the hook's Bash classifier, the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.

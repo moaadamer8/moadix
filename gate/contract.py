@@ -1448,6 +1448,12 @@ def size_definition(size):
     return str(((catalogue().get("sizes") or {}).get(size) or {}).get("profile") or "")
 
 
+def _app_origin_example():
+    """The gate's app origin for live.port 3000 (gate/confined.py app_origin, the one value every live gate uses)."""
+    from gate import confined
+    return confined.APP_HOST, confined.app_origin(3000)
+
+
 def coverage_doc():
     """commands/coverage.md, generated from the catalogue (tests/inc7 checks the file matches)."""
     cat = catalogue()
@@ -1558,6 +1564,14 @@ def coverage_doc():
          "`docker build -f app/Dockerfile app`, `docker run --rm -w /work <image> <command>`, `docker exec -w /app "
          "<container> <command>`, and `--env-file <file>` instead of an environment prefix. One docker command per "
          "Bash call.",
+         "",
+         "**Live gates: the app's origin.** Every gate that talks to the running app (Schemathesis, ZAP, Lighthouse "
+         "CI, axe) reaches it at one origin the gate owns, `http://%s:<port>` (product-tools.yaml `live.port`), and "
+         "uses it for its URL, its Host header and, where it sends one, its Origin header. In the gate test stack "
+         "(`live.compose`), set `APP_ORIGIN` (or the product's own allowed-origin setting) to exactly that value, "
+         "for example `APP_ORIGIN: %s` for port 3000, and allow no other host. `.localhost` is a secure context over "
+         "plain http, so `Secure` and `__Host-` cookies work there unchanged." % (
+             _app_origin_example()[0], _app_origin_example()[1]),
          "",
          "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
          "note there would reach later sessions without the operator. A lasting instruction goes in "

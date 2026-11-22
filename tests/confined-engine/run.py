@@ -42,6 +42,8 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
             check-traceability leaves the tree clean (MF-46)
   rel077    0.7.7: lhci opens the app under .localhost (as axe, so a Secure session cookie is kept), and a failed
             run's summary names its first error lines
+  rel078    0.7.8: every live gate (Schemathesis, ZAP, Lighthouse CI, axe) passes against an app that accepts only the
+            gate's one origin, http://sut.localhost:<port>
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
             (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
@@ -656,11 +658,32 @@ def test_rel077(_node):
            "DATABASE_URL is not set" in summary.split("last lines:")[0], "%s | %s" % (err, summary[-1500:]))
 
 
+LIVE_GATES = (("schemathesis", "8"), ("zap", "9"), ("lhci", "10a"), ("axe", "8"))
+
+
+def test_rel078(_node):
+    """0.7.8: one app origin for every live gate. tests/fixtures/smoke-076's app runs with APP_ORIGIN set to the gate's
+    origin, so it answers only Host sut.localhost:3000 (421 for any other) and only that Origin (403 for any other);
+    every live gate must pass against it, not merely write its report."""
+    G = "rel078"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    base = tempfile.mkdtemp(prefix="moadix-smoke078-")
+    root = smoke076_product(base)
+    origin = confined.app_origin(3000)
+    for gate, label in LIVE_GATES:
+        f, n, data, err, log, _r = run_logged(check_exec, root, gate, label)
+        record(G, "%s (phase %s) passes against the app that accepts only %s" % (gate, label, origin),
+               not err and not f and not re.search(r"\b421\b|Misdirected|wrong host", log),
+               "%s | fails %s | notes %s | log:\n%s" % (err, f[:4], n[:3], log[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
-        "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2)}
+        "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
+        "test_rel078": ("rel078", 4)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -724,7 +747,7 @@ def main():
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
-                 (test_rel077, (node,))):
+                 (test_rel077, (node,)), (test_rel078, (node,))):
         run_group(t, a)
     left = built_images()
     if left:

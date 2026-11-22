@@ -31,7 +31,29 @@ const SIGNIN = "<form method=\"post\" action=\"/signin\"><p><label for=\"email\"
   "Password</label> <input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\">" +
   "</p><p><button type=\"submit\">Sign in</button></p></form>";
 
+// 0.7.8: with APP_ORIGIN set (the gate test stack sets it to the gate's app origin, http://sut.localhost:3000),
+// the app accepts only that origin, as a product with its own origin check does: any other Host is refused with
+// 421, and an Origin header that is not exactly APP_ORIGIN with 403. Every live gate must therefore use it.
+const APP_ORIGIN = process.env.APP_ORIGIN || "";
+
+function wrongOrigin(req, res) {
+  if (!APP_ORIGIN) return false;
+  const want = new URL(APP_ORIGIN);
+  if (req.headers.host !== want.host) {
+    res.writeHead(421, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "wrong host" }));
+    return true;
+  }
+  if (req.headers.origin !== undefined && req.headers.origin !== want.origin) {
+    res.writeHead(403, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "cross-origin request refused" }));
+    return true;
+  }
+  return false;
+}
+
 http.createServer((req, res) => {
+  if (wrongOrigin(req, res)) return;
   const url = new URL(req.url, "http://placeholder");
   if (req.method === "POST" && url.pathname === "/signin") {
     let body = "";

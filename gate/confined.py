@@ -406,8 +406,19 @@ SUT_ALIAS = "sut.moadix.test"  # never a bare name: Chromium force-upgrades http
 # secure context in full Chromium and none in the headless shell, and the cookie was refused in both). Under
 # .localhost, which Chromium treats as a secure context over http, the cookie is kept. A bare sut.localhost alias
 # is never asked of DNS (Chromium resolves *.localhost to loopback itself), hence the resolver rule.
-BROWSER_ALIAS = "sut.localhost"
-BROWSER_RULE = "MAP %s %s" % (BROWSER_ALIAS, SUT_ALIAS)
+# 0.7.8: the app's origin is one gate-owned value, http://APP_HOST:<live.port>, which every live gate uses for its URL,
+# its Host header and (where it sends one) its Origin header: Schemathesis, ZAP, Lighthouse CI and axe. A product
+# sets APP_ORIGIN in its gate test stack to exactly that value (/moadix:coverage, "Live gates: the app's origin").
+# The app's service gets APP_HOST as a network alias, which Docker's DNS answers for Python, Java and bash; Chromium
+# alone resolves *.localhost to loopback itself, so it maps APP_HOST to the service's second alias, SUT_ALIAS.
+APP_HOST = "sut.localhost"
+BROWSER_ALIAS = APP_HOST  # 0.7.7 name, kept for readers of that release
+BROWSER_RULE = "MAP %s %s" % (APP_HOST, SUT_ALIAS)
+
+
+def app_origin(port):
+    """The one origin every live gate uses for the app: http://sut.localhost:<port>."""
+    return "http://%s:%d" % (APP_HOST, int(port))
 
 
 def fixture_engine():
