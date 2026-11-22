@@ -1,0 +1,9 @@
+{
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": { "configFile": "tests/vitest.config.mjs" },
+  "mutate": ["src/tasks.js", "src/sum.js"],
+  "coverageAnalysis": "perTest",
+  "concurrency": 2,
+  "timeoutMS": 30000
+}

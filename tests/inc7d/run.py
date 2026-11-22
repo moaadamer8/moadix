@@ -551,7 +551,7 @@ def test_safeguards():
     record(G, "it never starts, stops or inspects a foreign object: inspect only on its own pinned images and its own "
               "containers", '"start"' not in src and '"stop"' not in src and src.count('"inspect"') == 1, "")
     # a crashing group is one failed check plus its unrun checks reported as failed: the total stays fixed
-    # (49 since 0.7.3: the user and smoke groups; 50 since 0.7.5: the secrets control)
+    # (49 since 0.7.3: the user and smoke groups; 50 since 0.7.5: the secrets control; 57 since 0.7.6: rel076)
     saved_results = list(es.RESULTS)
     del es.RESULTS[:]
 
@@ -567,8 +567,8 @@ def test_safeguards():
     finally:
         es.RESULTS[:] = saved_results
     record(G, "engine suite: a group that crashes after 1 of its 6 checks reports 6 (1 passed, the crash, 4 not run); "
-              "the suite's total is fixed at 50 (0.7.3: user 5, smoke 13; 0.7.5: secrets 5)",
-           es.TOTAL == 50 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
+              "the suite's total is fixed at 57 (0.7.3: user 5, smoke 13; 0.7.5: secrets 5; 0.7.6: rel076 7)",
+           es.TOTAL == 57 and len(got) == 6 and [x[2] for x in got] == [True] + [False] * 5 and "crashed" in got[1][1],
            got)
 
 

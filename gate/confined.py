@@ -27,11 +27,13 @@ proxy for the install step, confined execution with OOM and wall-clock detection
 which removes everything carrying the run's label. Tested against a real engine by
 tests/confined-engine (Terminal).
 """
+import contextlib
 import json
 import os
 import re
 import stat
 import subprocess
+import time
 
 GATE_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG = os.path.join(GATE_DIR, "config", "confinement.yaml")
@@ -413,8 +415,38 @@ def engine():
     return fixture_engine() or docker_path()
 
 
+# 0.7.6: what an earlier gate run left (its process killed before close(), task-tracker phase 8) is removed when
+# the next run starts. A run is the gate's when its objects carry moadix.owner=gate (0.7.6 on) or a gate run id
+# (x + 10 hex digits, the only form check_exec uses; runs before 0.7.6 had no owner label). It is stale when the
+# process named by moadix.pid is gone, when it started more than STALE_AGE_S ago (no gate run lasts that long:
+# the longest tier's wall clock is an hour), or when it is a pre-0.7.6 run. Nothing else is ever touched: the
+# engine suite's own runs (es<hex>, no owner label), compose projects and unlabelled objects stay.
+OWNER = "gate"
+GATE_RUN_ID = re.compile(r"^x[0-9a-f]{10}$")
+STALE_AGE_S = 6 * 3600
+
+
+def pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:  # EPERM: it exists, owned by someone else
+        return True
+    return True
+
+
+def is_stale(run_id, owner, pid, started, now=None):
+    if owner == OWNER:
+        if pid.isdigit() and not pid_alive(int(pid)):
+            return True
+        return started.isdigit() and (now or time.time()) - int(started) > STALE_AGE_S
+    return not owner and not pid and bool(GATE_RUN_ID.match(run_id))
+
+
 class Run(object):
-    """One confined run: everything it creates carries the label moadix.run=<id> and is removed by close()."""
+    """One confined run: everything it creates carries the label moadix.run=<id> (and, from 0.7.6, the gate's owner
+    label, its pid and its start time) and is removed by close()."""
 
     def __init__(self, run_id, product_tools=None):
         if not re.match(r"^[a-z0-9][a-z0-9-]{3,40}$", run_id):
@@ -424,6 +456,8 @@ class Run(object):
             raise Unavailable("Docker is not installed (it is a hard requirement for the gates that run product code)")
         self.d, self.id, self.pt = d, run_id, product_tools or {}
         self.label = "moadix.run=%s" % run_id
+        self.labels = ["--label", self.label, "--label", "moadix.owner=%s" % OWNER, "--label",
+                       "moadix.pid=%d" % os.getpid(), "--label", "moadix.started=%d" % int(time.time())]
         ok, why = self._version()
         if not ok:
             raise Unavailable(why)
@@ -438,7 +472,7 @@ class Run(object):
         uid = str(user).split(":")[0]
         if (img, uid) in self._users_ok:
             return
-        p = self._d(["run", "--rm", "--label", self.label, "--network", "none", "--user", "%s:%s" % (uid, uid),
+        p = self._d(["run", "--rm"] + self.labels + ["--network", "none", "--user", "%s:%s" % (uid, uid),
                      "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
                      "--entrypoint", "getent", img, "passwd", uid], check=False, timeout=120)
         if p.returncode != 0:
@@ -468,19 +502,19 @@ class Run(object):
     # ---- resources
     def volume(self, name):
         v = "moadix-%s-%s" % (self.id, name)
-        self._d(["volume", "create", "--label", self.label, v])
+        self._d(["volume", "create"] + self.labels + [v])
         self.volumes.append(v)
         return v
 
     def network(self, name, internal=True):
         n = "moadix-%s-%s" % (self.id, name)
-        self._d(["network", "create", "--label", self.label] + (["--internal"] if internal else []) + [n])
+        self._d(["network", "create"] + self.labels + (["--internal"] if internal else []) + [n])
         self.networks.append(n)
         return n
 
     def _helper(self, img, mounts, argv, user="0"):
         """A gate-controlled helper (never product code): no network, no capabilities beyond chown."""
-        args = ["run", "--rm", "--label", self.label, "--network", "none", "--user", user, "--cap-drop", "ALL"]
+        args = ["run", "--rm"] + self.labels + ["--network", "none", "--user", user, "--cap-drop", "ALL"]
         if user == "0":
             args += ["--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER"]
         for src, dst, ro in mounts:
@@ -491,7 +525,7 @@ class Run(object):
         """Copy a tar (the git archive export, or gate files) into a volume, then hand it to the run's uid,
         read-only for everyone else. No host path is mounted: `docker cp` streams the tar."""
         c = "moadix-%s-load-%s" % (self.id, vol.rsplit("-", 1)[-1])
-        self._d(["create", "--name", c, "--label", self.label, "--network", "none", "--mount",
+        self._d(["create", "--name", c] + self.labels + ["--network", "none", "--mount",
                  "type=volume,src=%s,dst=/v" % vol, "--entrypoint", "true", img])
         try:
             with open(tar_path, "rb") as f:
@@ -516,7 +550,7 @@ class Run(object):
 
     def copy_out(self, vol, dest, img):
         c = "moadix-%s-unload-%s" % (self.id, vol.rsplit("-", 1)[-1])
-        self._d(["create", "--name", c, "--label", self.label, "--network", "none", "--mount",
+        self._d(["create", "--name", c] + self.labels + ["--network", "none", "--mount",
                  "type=volume,src=%s,dst=/v,readonly" % vol, "--entrypoint", "true", img])
         try:
             os.makedirs(dest, exist_ok=True)
@@ -525,10 +559,16 @@ class Run(object):
             self._rm_own(c)
 
     # ---- the egress proxy and the install step (3.4)
-    def proxy(self, install_net, egress_net, proxy_src_vol):
+    def proxy(self, install_net, egress_net, proxy_src_vol, purpose="install"):
+        """Start the allowlisting egress proxy for one step (`purpose`: install, build). 0.7.6 (task-tracker MF-54):
+        each proxy has its own name; a live gate with build.network: registry starts two, and the second used to
+        get the first one's name, which the engine refuses (the gate ended UNKNOWN). The caller removes it with
+        remove() when its step ends; close() removes it on every other exit path."""
+        if not re.match(r"^[a-z]{1,20}$", purpose):
+            raise Refused("proxy purpose %r is not a plain word" % (purpose,))
         img = image("python")
-        name = "moadix-%s-proxy" % self.id
-        self._d(["run", "-d", "--name", name, "--label", self.label, "--network", egress_net,
+        name = "moadix-%s-proxy-%s" % (self.id, purpose)
+        self._d(["run", "-d", "--name", name] + self.labels + ["--network", egress_net,
                  "--user", "%d:%d" % (self.uid, self.uid), "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                  "--read-only", "--memory", "256m", "--pids-limit", "128", "--mount",
                  "type=volume,src=%s,dst=/p,readonly" % proxy_src_vol, img, "python3", "/p/egress_proxy.py", "3128"]
@@ -536,6 +576,11 @@ class Run(object):
         self.containers.append(name)
         self._d(["network", "connect", "--alias", PROXY_ALIAS, install_net, name])
         return name
+
+    def remove(self, name):
+        """Remove one of this run's containers (looked up by its name and this run's label) when its step ends."""
+        with contextlib.suppress(Unavailable):
+            self._rm_own(name)
 
     def execute(self, img, argv, tier, mounts, network="none", env=None, user=None, aliases=(), name=None,
                 detach=False, tmpfs=(), path=None):
@@ -557,7 +602,7 @@ class Run(object):
             if SECRETISH.search(k) or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", k):
                 raise Refused("environment variable %s may not be passed into a confined run" % k)
             e[k] = str(v)
-        args = ["run", "--name", name, "--label", self.label, "--user", user or "%d:%d" % (self.uid, self.uid),
+        args = ["run", "--name", name] + self.labels + ["--user", user or "%d:%d" % (self.uid, self.uid),
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
                 "--tmpfs", "/tmp:rw,nosuid,nodev,size=%dm,uid=%d,gid=%d" % (lim["tmp_mb"], self.uid, self.uid),  # noqa: S108
                 "--network", network, "--cpus", str(lim["cpus"]), "--memory", "%dm" % lim["memory_mb"],
@@ -599,16 +644,41 @@ class Run(object):
                           % (lim["memory_mb"], p.returncode, ", OOMKilled" if state == "true" else ""))
         return p.returncode, p.stdout[-20000:], p.stderr[-20000:]
 
+    def _remove_label(self, label):
+        """Remove every container, then network, then volume carrying `label`. 0.7.6: one engine call that times
+        out no longer stops the rest (each step is attempted)."""
+        with contextlib.suppress(Unavailable):
+            out = self._d(["ps", "-aq", "--filter", "label=%s" % label], check=False).stdout.decode().split()
+            if out:
+                self._d(["rm", "-f"] + out, check=False, timeout=300)
+        with contextlib.suppress(Unavailable):
+            for n in self._d(["network", "ls", "-q", "--filter", "label=%s" % label], check=False).stdout.decode().split():
+                with contextlib.suppress(Unavailable):
+                    self._d(["network", "rm", n], check=False)
+        with contextlib.suppress(Unavailable):
+            vols = self._d(["volume", "ls", "-q", "--filter", "label=%s" % label], check=False).stdout.decode().split()
+            if vols:
+                self._d(["volume", "rm", "-f"] + vols, check=False, timeout=300)
+
     def close(self):
         """Remove everything this run created, by label (containers, then networks, then volumes)."""
-        out = self._d(["ps", "-aq", "--filter", "label=%s" % self.label], check=False).stdout.decode().split()
-        if out:
-            self._d(["rm", "-f"] + out, check=False, timeout=300)
-        for n in self._d(["network", "ls", "-q", "--filter", "label=%s" % self.label], check=False).stdout.decode().split():
-            self._d(["network", "rm", n], check=False)
-        vols = self._d(["volume", "ls", "-q", "--filter", "label=%s" % self.label], check=False).stdout.decode().split()
-        if vols:
-            self._d(["volume", "rm", "-f"] + vols, check=False, timeout=300)
+        self._remove_label(self.label)
+
+    def sweep_stale(self):
+        """0.7.6: remove what earlier gate runs left (see is_stale). Returns the run ids removed."""
+        fmt = '{{.Label "moadix.run"}}\t{{.Label "moadix.owner"}}\t{{.Label "moadix.pid"}}\t{{.Label "moadix.started"}}'
+        seen = {}
+        for kind in (["ps", "-a"], ["network", "ls"], ["volume", "ls"]):
+            p = self._d(kind + ["--filter", "label=moadix.run", "--format", fmt], check=False)
+            for ln in p.stdout.decode(errors="replace").splitlines():
+                f = (ln.split("\t") + ["", "", "", ""])[:4]
+                if f[0] and f[0] != self.id and re.match(r"^[a-z0-9][a-z0-9-]{3,40}$", f[0]):
+                    seen.setdefault(f[0], f[1:])
+        now = time.time()
+        stale = sorted(rid for rid, (owner, pid, started) in seen.items() if is_stale(rid, owner, pid, started, now))
+        for rid in stale:
+            self._remove_label("moadix.run=%s" % rid)
+        return stale
 
     def leftovers(self):
         found = []

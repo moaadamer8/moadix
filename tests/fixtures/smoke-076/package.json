@@ -1,0 +1,15 @@
+{
+  "name": "moadix-smoke-076",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fixture product for the 0.7.6 smoke runs in tests/confined-engine: a strict Content-Security-Policy, a sign-in with a __Host- Secure cookie, a PostgreSQL-backed module and Vitest under Stryker.",
+  "dependencies": {
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
+    "vitest": "5.1.0"
+  }
+}

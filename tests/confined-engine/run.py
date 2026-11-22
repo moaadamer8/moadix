@@ -36,7 +36,12 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
             (installs go through the egress proxy, so the host needs internet). Images a live gate builds
             carry the suite's label and are left in place (ruling 3: nothing removes images); they are
             listed at the end and excluded from the foreign-object comparison
+  rel076    0.7.6: the phase-8 blockers of the first product run, end to end on tests/fixtures/smoke-076 (strict
+            CSP, a sign-in, Vitest, PostgreSQL): two proxies (MF-54), a stale gate run removed, Stryker finds
+            vitest (MF-53) and scores the database code (MF-51), axe keeps the CSP (MF-49) and signs in (MF-50),
+            check-traceability leaves the tree clean (MF-46)
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
+            (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
 import json
 import os
@@ -124,15 +129,25 @@ def built_images():
     return sorted(set(out))
 
 
+def gates(run_label):
+    """0.7.6: an object an earlier real gate run left (run label x + 10 hex digits). The gate's own sweep removes
+    such objects when their run is stale, so they are listed, not compared; the suite itself never removes them."""
+    return bool(run_label) and bool(confined.GATE_RUN_ID.match(run_label))
+
+
 def snapshot(own_img):
-    """Every container, volume, network and image that is not the suite's: names, ids (and container state)."""
+    """Every container, volume, network and image that is not the suite's (nor a gate run's): names, ids (and
+    container state)."""
     cs, vols, nets = inventory()
     own_img = set(own_img) | set(built_images())
     imgs = lines(["image", "ls", "-a", "--no-trunc", "--format", "{{.ID}}\t{{.Repository}}:{{.Tag}}"])
+
+    def mine(lab):
+        return ours(lab) or gates(lab)
     return {
-        "containers": sorted("%s %s %s" % (c["id"], c["name"], c["state"]) for c in cs if not ours(c["run"])),
-        "volumes": sorted(v.split("\t")[0] for v in vols if not ours((v.split("\t") + [""])[1])),
-        "networks": sorted(" ".join(n.split("\t")[:2]) for n in nets if not ours((n.split("\t") + ["", ""])[2])),
+        "containers": sorted("%s %s %s" % (c["id"], c["name"], c["state"]) for c in cs if not mine(c["run"])),
+        "volumes": sorted(v.split("\t")[0] for v in vols if not mine((v.split("\t") + [""])[1])),
+        "networks": sorted(" ".join(n.split("\t")[:2]) for n in nets if not mine((n.split("\t") + ["", ""])[2])),
         "images": sorted(i.replace("\t", " ") for i in imgs if i.split("\t")[0] not in own_img),
     }
 
@@ -513,11 +528,114 @@ def test_smoke(_node):
                    err, f[:3], n[:4], written, log[-1500:]))
 
 
+# ------------------------------------------------------------------ 0.7.6: the phase-8 blockers, end to end
+FIX76 = os.path.join(REPO, "tests", "fixtures", "smoke-076")  # strict CSP, a sign-in, vitest, pg (smoke-076/README.md)
+
+
+def smoke076_product(base):
+    import shutil
+    p = os.path.join(base, "r076")
+    shutil.copytree(FIX76, p, ignore=shutil.ignore_patterns(".claude", "README.md", "product-tools.yaml"))
+    git = ["/usr/bin/git", "-C", p]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "smoke-076 fixture"], check=True)
+    os.makedirs(os.path.join(p, SDLC, "config"))
+    with open(os.path.join(FIX76, "product-tools.yaml")) as f, \
+            open(os.path.join(p, SDLC, "config", "product-tools.yaml"), "w") as g:
+        g.write(f.read())
+    return p
+
+
+def run_logged(check_exec, root, gate, label):
+    """run_gate as the gate calls it, under one of the suite's run ids; (fails, notes, data, error, log, run id)."""
+    st = {"current_phase": label, "feature": None, "mode": "greenfield"}
+    run_id = rid()
+    SMOKE_RUNS.append(run_id)
+    try:
+        f, n, data, _dest = check_exec.run_gate(root, st, gate, label, run_id=run_id)
+        err = ""
+    except (confined.Refused, confined.Unavailable) as e:
+        f, n, data, err = [], [], {}, "%s: %s" % (type(e).__name__, e)
+    logrel = next((x[len("run log "):] for x in n if x.startswith("run log ")), None)
+    if not logrel:
+        m = re.search(r"kept at (\S+)", err)
+        logrel = m.group(1) if m else None
+    log = open(os.path.join(root, logrel)).read() if logrel and os.path.exists(os.path.join(root, logrel)) else ""
+    return f, n, data or {}, err, log, run_id
+
+
+def labelled(run_id):
+    lab = "label=moadix.run=%s" % run_id
+    return lines(["ps", "-aq", "--filter", lab]) + lines(["network", "ls", "-q", "--filter", lab]) + \
+        lines(["volume", "ls", "-q", "--filter", lab])
+
+
+def test_rel076(node):
+    """Each 0.7.6 fix, end to end on the real engine with the real pinned tools, on the smoke-076 fixture."""
+    G = "rel076"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    from gate import verify
+    base = tempfile.mkdtemp(prefix="moadix-smoke076-")
+    root = smoke076_product(base)
+    # stale: an earlier gate run that was killed before its cleanup (its process is gone); the suite's own run id,
+    # so the suite's accounting still owns it, with the labels a 0.7.6 gate run puts on everything it creates
+    p = subprocess.Popen(["/usr/bin/true"])
+    p.wait()
+    sid = rid()
+    labels = ["--label", "moadix.run=%s" % sid, "--label", "moadix.owner=gate", "--label", "moadix.pid=%d" % p.pid,
+              "--label", "moadix.started=%d" % int(time.time() - 120)]
+    seeded = [docker(["create", "--name", "moadix-%s-svc-postgres" % sid] + labels + ["--network", "none", node, "true"]),
+              docker(["network", "create", "--internal"] + labels + ["moadix-%s-svc" % sid]),
+              docker(["volume", "create"] + labels + ["moadix-%s-out" % sid])]
+    # MF-54: schemathesis with build.network: registry starts the install proxy and the build proxy
+    f, n, _data, err, log, run_id = run_logged(check_exec, root, "schemathesis", "8")
+    written = next((ln for ln in log.splitlines() if ln.startswith("files written:")), "")
+    record(G, "MF-54: schemathesis (build.network: registry, two proxies) runs to its report, and nothing of its run "
+              "is left", not err and re.search(r"st/junit[^ ]*\.xml", written) and not labelled(run_id),
+           "%s | fails %s | %s | left %s | log:\n%s" % (err, f[:3], written, labelled(run_id), log[-1200:]))
+    record(G, "stale: the run removed what a killed gate run left (labelled as the gate's, moadix.pid of a process "
+              "that is gone)", all(x.returncode == 0 for x in seeded) and not labelled(sid) and
+           any(sid in x for x in n), ([x.stderr[-200:] for x in seeded], labelled(sid), n[:3]))
+    # MF-53 and MF-51: Stryker runs Vitest, with the gate's PostgreSQL service
+    f, n, data, err, log, _r = run_logged(check_exec, root, "stryker", "8")
+    written = next((ln for ln in log.splitlines() if ln.startswith("files written:")), "")
+    record(G, "MF-53: Stryker's sandbox finds vitest (no ERR_MODULE_NOT_FOUND) and writes mutation.json",
+           not err and "mutation.json" in written and "ERR_MODULE_NOT_FOUND" not in log,
+           "%s | fails %s | %s | log:\n%s" % (err, f[:3], written, log[-1500:]))
+    counts = data.get("counts") or {}
+    record(G, "MF-51: the database-backed module is scored with the gate's PostgreSQL service (no NoCoverage mutant, "
+              "some killed)", not err and counts and counts.get("NoCoverage", 0) == 0 and counts.get("Killed", 0) > 0,
+           "%s | counts %s | fails %s | log:\n%s" % (err, counts, f[:3], log[-800:]))
+    # MF-49 and MF-50: axe on the strict-CSP app, with the declared sign-in
+    f, n, data, err, log, _r = run_logged(check_exec, root, "axe", "8")
+    res = data.get("results") or []
+    record(G, "MF-49: axe checks every page of the strict-CSP app, the policy kept (the inline canary never ran: no "
+              "title CSP-BYPASSED)", not err and not f and len(res) == 3 and not any(r.get("error") for r in res) and
+           all(r.get("title") not in (None, "CSP-BYPASSED") for r in res), "%s | fails %s | results %s | log:\n%s" % (
+               err, f[:4], res, log[-1200:]))
+    tasks = next((r for r in res if r.get("path") == "/tasks"), {})
+    record(G, "MF-50: axe signs in (a __Host- Secure cookie over the internal http), checks /tasks with the session, "
+              "and names the row checked elsewhere", data.get("signin") and tasks.get("session") and
+           tasks.get("final") == "/tasks" and tasks.get("title") == "Tasks" and
+           any("Edit task" in x and "checked elsewhere" in x for x in n), "%s | %s | %s | notes %s" % (
+               err, data.get("signin"), tasks, n[:4]))
+    # MF-46: the phase-8 validator, with no test results yet (as after REOPEN 7), leaves the tree clean
+    t = subprocess.run([sys.executable, "-I", os.path.join(REPO, "gate", "v1", "check_traceability.py")], cwd=root,
+                       capture_output=True, text=True, timeout=120, env=dict(os.environ, MOADIX_PRODUCT_ROOT=root))
+    record(G, "MF-46: check-traceability writes its matrix to the gate's cache; the tree stays clean, so a verifier "
+              "may launch", os.path.exists(os.path.join(root, SDLC, "cache", "08-traceability.md")) and
+           not os.path.exists(os.path.join(root, "sdlc", "08-traceability.md")) and not verify.dirty(root),
+           (t.stdout[-400:], verify.dirty(root)))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
-        "test_smoke": ("smoke", 13)}
+        "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -580,7 +698,7 @@ def main():
     before = snapshot(own_img)
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
-                 (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,))):
+                 (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,))):
         run_group(t, a)
     left = built_images()
     if left:

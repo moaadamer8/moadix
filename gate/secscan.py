@@ -160,7 +160,7 @@ def schedule(root, st):
         head = _git(root, "rev-parse", "--verify", "HEAD")
         from gate import validation
         dirty = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *validation.status_pathspec())
-        if dirty:
+        if validation.changed_paths(root, dirty):  # 0.7.6 (MF-46): not the gate's own generated leftover
             return "tree is dirty; no scan"
         s, h = status(root)
         if s == "running" or (s == "done" and h == head):

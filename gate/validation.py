@@ -77,6 +77,39 @@ def status_pathspec():
         ":(exclude,glob)**/%s" % n for n in OS_METADATA] + [":(exclude,glob)**/%s/**" % n for n in OS_METADATA[2:4]]
 
 
+# 0.7.6 (task-tracker MF-46): check-traceability wrote its generated matrix to sdlc/08-traceability.md (phase 8's
+# path) through 0.7.5, untracked. In a reopened phase 7 that file blocked a verifier launch and the clean-tree
+# check, and the agent could neither remove nor commit it. 0.7.6 writes it into the gate's cache; a leftover copy
+# is not counted as a change while it is untracked and is still the gate's own output (its generated header).
+GATE_GENERATED = {"sdlc/08-traceability.md": ("# Traceability Matrix", "Do not hand-edit: it is regenerated on every "
+                                                                         "phase-8 validation.")}
+
+
+def gate_generated(root, rel):
+    """True when rel is an untracked file the gate itself generated (a 0.7.5 leftover)."""
+    marks = GATE_GENERATED.get(rel)
+    if not marks:
+        return False
+    try:
+        with open(os.path.join(root, rel), encoding="utf-8", errors="replace") as f:
+            head = f.read(1024)
+    except OSError:
+        return False
+    return head.startswith(marks[0]) and marks[1] in head
+
+
+def changed_paths(root, porcelain):
+    """The paths of `git status --porcelain=v1` output, without an untracked file the gate generated."""
+    out = []
+    for ln in porcelain.splitlines():
+        if not ln.strip():
+            continue
+        if ln.startswith("?? ") and gate_generated(root, ln[3:]):
+            continue
+        out.append(ln[3:])
+    return out
+
+
 def exclude_os_metadata(root):
     """Append the OS metadata names missing from the repository's local exclude file (never
     committed). Returns the names added; [] when there was nothing to add or git cannot say
@@ -112,7 +145,7 @@ def tree_state(root):
     rc, out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *status_pathspec())
     if rc != 0:
         return head, ["(git status failed)"]
-    return head, [ln[3:] for ln in out.splitlines() if ln.strip()]
+    return head, changed_paths(root, out)
 
 
 def _digest_files(paths):

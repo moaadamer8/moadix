@@ -273,6 +273,101 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.7.5 to 0.7.6
+
+0.7.6 fixes the executing gates that stopped task-tracker's phase 8 (MF-46, MF-49 to MF-54; report: `docs/release-0.7.6-report.md`). It changes the gate's Python, the gate's axe runner (`gate/exec/axe-run.js`), the tests and a new fixture. Nothing changes in the managed policy, the hook's Bash classifier, the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.
+
+**1. Confirm the version.** Docker Desktop: not needed. Claude Code sessions: may stay open.
+
+```
+cd ~/moadix && git log --oneline -2
+```
+
+Expected: the 0.7.6 commit on the first line and the 0.7.5 commit (`33b8e32`) on the second. `cat .claude-plugin/plugin.json` shows `"version": "0.7.6"`.
+
+**2. Run the main-branch guard suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it: the installed guard refuses any script whose text names the gh or firebase CLI.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/mainguard/run.py
+```
+
+Expected last line: `281 checks, 281 passed, 0 failed`.
+
+**3. Run the increment-6 suite.** Docker Desktop: not needed. Claude Code sessions: may stay open. The agent could not run it either, for the same reason.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/inc6/run.py
+```
+
+Expected last line: `70 checks, 70 passed, 0 failed (<seconds> s)`.
+
+**4. Run the install dry run.** Docker Desktop: not needed. Claude Code sessions: may stay open.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/install/dryrun.py
+```
+
+Expected last line: `19 checks, 19 passed`.
+
+**5. Run the real-engine suite.** Docker Desktop: **must be running**, with no other container running (a stopped one, such as the stale gate container from task-tracker, may stay). Claude Code sessions: may stay open, but none may start a container during the run. It needs internet: it pulls the pinned images, and the smoke runs install each pinned tool and the new fixture's packages (Vitest, Stryker, pg) through the egress proxy. It takes about 25–50 minutes.
+- **New: the rel076 group (7 checks)** on `tests/fixtures/smoke-076`, an app with `script-src 'self'`, a sign-in with a `__Host-` Secure cookie, a PostgreSQL-backed module and Vitest under Stryker. Each 0.7.6 fix runs end to end: Schemathesis with two proxies (MF-54), a stale gate run removed, Stryker finds vitest (MF-53) and scores the database code (MF-51), axe keeps the CSP (MF-49) and signs in (MF-50), and check-traceability leaves the tree clean (MF-46).
+- **Objects an earlier real gate run left** (run label `x` + 10 hex digits) are the gate's own. The suite lists them and does not compare them, because the gate's new sweep removes the stale ones. The suite itself still removes nothing that is not its own.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `57 checks, 57 passed, 0 failed (<seconds> s)`. If an rel076 check fails, its line shows the run's error, the files it wrote and the last lines of its log. Send me that output.
+
+**6. Reinstall.** Docker Desktop: not needed. Claude Code sessions: **must all be closed**. It asks for your macOS password once and shows the overlay: answer `y`.
+
+```
+cd ~/moadix && managed/install.sh
+```
+
+Expected last line: `MOADIX is updated.`
+
+**7. Check that no product-specific string is in the commit you are about to push.** Docker Desktop: not needed. Claude Code sessions: may stay open.
+
+```
+cd ~/moadix && git fetch origin && /usr/bin/python3 tests/install/no_product_strings.py origin/master..HEAD
+```
+
+Expected last line: `no product-specific string in origin/master..HEAD (1 commits, <n> strings checked)`. If it prints `FOUND` lines, stop and send them to me; do not push.
+
+**8. Push master and the tag.** Docker Desktop: not needed. Claude Code sessions: may stay open. Do this in **Terminal**: the guard refuses a push to the main branch from Claude Code.
+
+```
+cd ~/moadix && git push origin master
+```
+
+Expected last line: `   33b8e32..<0.7.6 commit>  master -> master`.
+
+```
+cd ~/moadix && git tag -a v0.7.6 -m "MOADIX 0.7.6" && git push origin v0.7.6
+```
+
+Expected last line: ` * [new tag]         v0.7.6 -> v0.7.6`.
+
+**9. Refresh the plugin.** Docker Desktop: not needed. Claude Code sessions: open **one new** session in `~/moadix` and type these two commands there, not in Terminal.
+
+```
+/plugin marketplace update moadix
+```
+
+```
+/reload-plugins
+```
+
+Then type `/plugin`. Expected: moadix is shown at version **0.7.6**.
+
+**10. Back in task-tracker.** The policy did not change, so there is no live policy check. In task-tracker's session:
+- the leftover `sdlc/08-traceability.md` no longer blocks anything (you may delete it);
+- the stale gate container is removed by the next executing gate;
+- for axe to sign in and to accept the Edit and Delete task screens, the agent proposes an `axe:` block in `product-tools.yaml` (`docs/release-0.7.6-report.md`, section MF-50) for you to ADOPT. The block holds the sign-in steps with a fixture user of the gate's test stack, never a real credential, plus `axe.public` and `axe.checked_elsewhere`.
+
+Then run `REVIEW 8`.
+
 ## Updating from 0.7.0 to 0.7.5
 
 0.7.5 includes 0.7.1, 0.7.2, 0.7.3 and 0.7.4, which were committed but not installed. It changes the gate's Python, its configuration, the gap critic's agent text, the plugin's docs, and the managed policy: new read rules in the sandbox's `denyRead` and in the managed `Read()` deny rules. Nothing changes in the checker program, the Keychain or the overlay, so this is an ordinary update. Your Authenticator entry, secrets, ledgers and overlay are kept, and no product's `phase.yaml` changes. Run each command in **Terminal** unless the step says otherwise. Do the steps in order and stop at the first one whose last line differs.

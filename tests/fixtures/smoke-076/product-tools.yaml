@@ -1,0 +1,26 @@
+# Copied by tests/confined-engine (group rel076) into the throwaway product's gate configuration.
+tests:
+  command: [node, node_modules/vitest/vitest.mjs, run, --config, tests/vitest.config.mjs, --reporter=junit, --outputFile.junit=/out/junit.xml]
+  services: [postgres]
+build:
+  network: registry
+live:
+  compose: compose.yaml
+  service: app
+  port: 3000
+  paths: ["/"]
+axe:
+  public: ["/", "/signin"]
+  signin:
+    steps:
+      - goto: /signin
+      - fill: "#email"
+        value: axe@example.test
+      - fill: "#password"
+        value: not-a-secret-fixture
+      - click: "button[type=submit]"
+      - wait_url: /tasks
+  checked_elsewhere:
+    - screen: Edit task
+      state: default
+      how: "its address holds a random task id; the product's own signed-in test opens the dialog and runs axe"

@@ -56,6 +56,43 @@ def label_of(args):
     return None
 
 
+def labels_of(args):
+    """Every --label k=v of a call (0.7.6: the runner labels its objects with owner, pid and start time too)."""
+    return dict(v.split("=", 1) if "=" in v else (v, "") for v in opt(args, "--label"))
+
+
+def matches(labels, filters):
+    """docker's label filters: label=k (present) or label=k=v, all of them."""
+    for f in filters:
+        if not f.startswith("label="):
+            continue
+        kv = f[len("label="):]
+        k, v = kv.split("=", 1) if "=" in kv else (kv, None)
+        if k not in labels or (v is not None and labels[k] != v):
+            return False
+    return True
+
+
+def render(fmt, name, labels):
+    """--format with {{.Names}}, {{.Name}}, {{.ID}} and {{.Label "k"}} (the forms the runner and the suite use)."""
+    out = re.sub(r'\{\{\s*\.Label\s+"([^"]+)"\s*\}\}', lambda m: labels.get(m.group(1), ""), fmt)
+    out = re.sub(r"\{\{\s*\.(Names|Name|ID)\s*\}\}", name, out)
+    return out.replace("\\t", "\t")
+
+
+def listing(objs, a):
+    """ps / volume ls / network ls: filter by labels (and name), print names or the --format template."""
+    filters = opt(a, "--filter")
+    nm = next((x.split("name=", 1)[1] for x in filters if x.startswith("name=")), None)
+    fmt = (opt(a, "--format") or [None])[0]
+    rows = []
+    for name, labels in objs:
+        if not matches(labels, filters) or (nm is not None and "^/%s$" % name != nm):
+            continue
+        rows.append(render(fmt, name, labels) if fmt else name)
+    print("\n".join(rows))
+
+
 def mounts(args):
     m = {}
     for v in opt(args, "--mount"):
@@ -67,6 +104,8 @@ def mounts(args):
 # 0.7.4 (the 0.7.3 engine run): the double now refuses what the real engine or the pinned images refuse, so
 # the sandbox suites catch the argument combinations the 0.7.3 run met for the first time.
 BUILTIN_NETWORKS = ("none", "bridge", "host", "default")
+CONFLICT = 'Error response from daemon: Conflict. The container name "/%s" is already in use by container %s.'
+
 
 
 def refuse(msg, code=1):
@@ -151,25 +190,28 @@ def main():
     if cmd == "version":
         print("double-1.0")
         return 0
+    s.setdefault("labels", {})
     if cmd == "volume" and a[1] == "create":
         s["volumes"][a[-1]] = label_of(a)
+        s["labels"]["v:" + a[-1]] = labels_of(a)
         vol_dir(a[-1])
     elif cmd == "volume" and a[1] == "ls":
-        lab = next((x.split("label=", 1)[1] for x in a if x.startswith("label=")), None)
-        print("\n".join(v for v, lb in s["volumes"].items() if lb == lab))
+        listing([(v, s["labels"].get("v:" + v) or dict([lb.split("=", 1)] if lb else [])) for v, lb in s["volumes"].items()], a)
     elif cmd == "volume" and a[1] == "rm":
         for v in a[2:]:
             if not v.startswith("-"):
                 s["volumes"].pop(v, None)
+                s["labels"].pop("v:" + v, None)
                 shutil.rmtree(os.path.join(BASE, "vols", v), ignore_errors=True)
     elif cmd == "network" and a[1] == "create":
         s["networks"][a[-1]] = label_of(a)
+        s["labels"]["n:" + a[-1]] = labels_of(a)
     elif cmd == "network" and a[1] == "ls":
-        lab = next((x.split("label=", 1)[1] for x in a if x.startswith("label=")), None)
-        print("\n".join(n for n, lb in s["networks"].items() if lb == lab))
+        listing([(n, s["labels"].get("n:" + n) or dict([lb.split("=", 1)] if lb else [])) for n, lb in s["networks"].items()], a)
     elif cmd == "network" and a[1] == "rm":
         for n in a[2:]:
             s["networks"].pop(n, None)
+            s["labels"].pop("n:" + n, None)
     elif cmd == "network" and a[1] == "connect":
         net = [x for x in a[2:] if not x.startswith("-") and x not in opt(a, "--alias")][0]
         if net not in s["networks"]:
@@ -178,7 +220,9 @@ def main():
         pass
     elif cmd == "create":
         name = opt(a, "--name")[0]
-        s["containers"][name] = {"label": label_of(a), "mounts": mounts(a)}
+        if name in s["containers"]:
+            return refuse(CONFLICT % (name, name), 125)
+        s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": mounts(a)}
     elif cmd == "cp":
         src, dst = a[1], a[2]
         if src == "-":
@@ -199,10 +243,8 @@ def main():
             if not c.startswith("-"):
                 s["containers"].pop(c, None)
     elif cmd == "ps":
-        lab = next((x.split("label=", 1)[1] for x in a if x.startswith("label=")), None)
-        nm = next((x.split("name=", 1)[1] for x in a if x.startswith("name=")), None)
-        print("\n".join(c for c, v in s["containers"].items() if v.get("label") == lab and
-                        (nm is None or "^/%s$" % c == nm)))
+        listing([(c, v.get("labels") or dict([v["label"].split("=", 1)] if v.get("label") else []))
+                 for c, v in s["containers"].items()], a)
     elif cmd == "inspect":
         print("false" if len(a) > 3 else "")
     elif cmd == "build":
@@ -238,8 +280,16 @@ def main():
             return refuse(missing, 127)
         name = (opt(a, "--name") or ["anon"])[0]
         m = mounts(a)
+        if name in s["containers"]:
+            # 0.7.6 (task-tracker MF-54): the engine refuses a second container with a name in use
+            return refuse("docker: " + CONFLICT % (name, name), 125)
         if "-d" in a or "--rm" not in a:
-            s["containers"][name] = {"label": label_of(a), "mounts": m}
+            s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": m}
+        sleep = os.environ.get("MOADIX_DOUBLE_SLEEP")
+        if sleep and name.rsplit("-", 1)[-1] in GATES and "-d" not in a:
+            save(s)  # a test stops the gate during this run (0.7.6: the run is still removed)
+            import time
+            time.sleep(float(sleep))
         suffix = name.rsplit("-", 1)[-1]
         out_vol = m.get("/out") or m.get("/zap/wrk")
         if suffix in GATES and out_vol and "-d" not in a:

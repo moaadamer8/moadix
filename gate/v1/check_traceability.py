@@ -21,7 +21,8 @@ The default JUnit glob is exactly what harness/bin/run-product-tests.sh writes
 (<governed_root>/test-results/junit.xml), so the sanctioned front door and this
 gate share one contract: the door produces the evidence, the gate consumes it.
 
-Writes the matrix to sdlc/08-traceability.md unless --no-write.
+Writes the matrix to the gate's cache (<product>/.sdlc/cache/08-traceability.md; 0.7.6, MF-46)
+unless --no-write.
 
 Exit 0 = every story has a passing test. Non-zero = fail.
 """
@@ -290,13 +291,18 @@ def parse_junit(paths):
     return cases
 
 
+def report_path(root):
+    """Where the generated matrix is written (0.7.6: the gate's cache, never a phase's path)."""
+    return os.path.join(root, "." + "sdlc", "cache", "08-traceability.md")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="check-traceability.sh", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dir", default=None, help="sdlc directory (default <governed_root>/sdlc)")
     ap.add_argument("--junit", default=None,
                     help="glob for JUnit XML (default <governed_root>/test-results/*.xml)")
-    ap.add_argument("--no-write", action="store_true", help="do not write sdlc/08-traceability.md")
+    ap.add_argument("--no-write", action="store_true", help="do not write the generated matrix")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -635,18 +641,19 @@ def main():
             lines += ["", "---", "",
                       "<!-- appended verbatim from 08-coverage-notes.md; edit that file, not this one -->",
                       "", notes, ""]
-        # A validator must not become a write primitive. --dir could otherwise
-        # be pointed at a protected directory to create files there (bypass N13).
-        out_path = os.path.abspath(os.path.join(d, "08-traceability.md"))
-        governed = os.path.abspath(os.path.join(root, groot)) if groot else os.path.abspath(root)
-        if not (out_path == governed or out_path.startswith(governed + os.sep)):
-            print("check-traceability: refusing to write %s -- outside the governed root %s. "
-                  "Use --no-write, or point --dir inside the product tree."
-                  % (out_path, governed), file=sys.stderr)
-            return 2
-        os.makedirs(d, exist_ok=True)
-        with open(out_path, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines) + "\n")
+        # A validator must not become a write primitive: the path is fixed, never taken from --dir.
+        # 0.7.6 (task-tracker MF-46): the generated matrix goes to the gate's own cache, not to
+        # sdlc/08-traceability.md. There it was an untracked file in phase 8's path, written by any
+        # phase-8 validation (also one run while phase 7 was reopened), and it blocked the clean-tree
+        # check and every verifier launch; the agent could neither remove nor commit it.
+        out_path = report_path(root)
+        try:
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+        except OSError as exc:  # a feedback run without write access to the cache: the verdict stands
+            info.append("the matrix was not written (%s)" % exc)
+            args.no_write = True
 
     if not args.quiet:
         print("check-traceability: %s" % d)
@@ -682,7 +689,7 @@ def main():
             print("  PASS  all %d PRD story/stories have at least one passing test at a level "
                   "that can observe it." % len(stories))
         if not args.no_write:
-            print("  wrote %s/08-traceability.md" % d)
+            print("  wrote %s" % report_path(root))
     return 1 if errs else 0
 
 

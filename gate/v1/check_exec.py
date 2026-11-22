@@ -15,7 +15,9 @@
   tsc (7)               the product's TypeScript, --noEmit; every `error TS` line fails
   stryker (8, B)        the product's Stryker (JSON config only), mutation.json; the gate computes the
                         score (killed + timeout over killed + timeout + survived + no coverage) and
-                        compares it with the size rule's threshold (TS10: M 70%, L 80%)
+                        compares it with the size rule's threshold (TS10: M 70%, L 80%); the same
+                        gate-started services as the tests gate (tests.services), so database-backed
+                        code is scored (0.7.6, MF-51)
   tests (8, B)          the product's test command (product-tools.yaml tests.command) writing JUnit to
                         /out/junit.xml; service containers the gate starts (tests.services: postgres)
                         on an internal network; failures, errors, skipped tests and zero tests fail
@@ -26,7 +28,12 @@
                         and TBT against product-tools.yaml budgets (defaults 2500 ms, 0.1, 200 ms)
   axe (6, 8, 10a)       the gate's own axe runner (gate/exec/axe-run.js) on live.paths, every designed
                         screen of design/screen-states.csv and (10a) every LV-INVENTORY.csv row that is
-                        not n/a, each by its `url` column; any critical or serious violation fails
+                        not n/a, each by its `url` column; any critical or serious violation fails.
+                        0.7.6: axe-core is evaluated through the browser automation, so a strict
+                        Content-Security-Policy stays in force (MF-49); product-tools.yaml `axe:` may
+                        declare a sign-in (axe.signin.steps), the paths visited without it (axe.public)
+                        and designed screens with no URL that are checked another way
+                        (axe.checked_elsewhere: screen, state, how) (MF-50)
 
 A gate applies unless its coverage topic is N/A in the phase's COVERAGE.md (the gap critic judges the
 reason). Every run goes through gate/confined.py: Docker is required (UNKNOWN without it), images are
@@ -44,6 +51,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -275,18 +283,42 @@ def parse_lhr(text, budgets=None):
                                                                                     if v is not None))], {"metrics": got, "budgets": b}
 
 
+def _path_of(url):
+    m = re.match(r"^[a-z]+://[^/]+(/[^?#]*)?", str(url or ""))
+    return (m.group(1) or "/") if m else str(url or "")
+
+
 def parse_axe(text):
+    """0.7.6: the runner also reports its sign-in (signin: ok, error, page) and, per page, whether it was visited
+    with the session, where it landed and its title. A failed sign-in fails; a page visited with the session that
+    landed on the sign-in page fails (the session did not hold)."""
     data = json.loads(text)
     results = data.get("results") if "results" in data else [{"url": data.get("url"), "violations": data.get("violations")}]
     fails, notes = [], []
+    si = data.get("signin")
+    if isinstance(si, dict):
+        if si.get("ok"):
+            notes.append("axe: signed in through product-tools.yaml axe.signin (%s cookie(s) for the app)" % si.get("cookies"))
+        else:
+            fails.append("axe sign-in (product-tools.yaml axe.signin) failed: %s" % str(si.get("error") or "no reason")[:500])
+    page = _path_of(si.get("page")) if isinstance(si, dict) and si.get("page") else None
     for r in results:
         if r.get("error"):
             fails.append("axe %s: the page could not be checked: %s" % (r.get("url"), r["error"]))
+        elif r.get("session") and page and r.get("final") and _path_of(r["final"]) == page and \
+                _path_of(r.get("url")) != page:
+            fails.append("axe %s: visited with the session but landed on %s, the sign-in page: the session did not "
+                         "hold, so the screen was not checked" % (r.get("url"), r["final"]))
         for v in r.get("violations") or []:
             line = "axe %s [%s] %s (%d node(s))" % (r.get("url"), v.get("impact"), v.get("id"), len(v.get("nodes") or []))
             (fails if v.get("impact") in ("critical", "serious") else notes).append(line)
-    notes.append("axe: %d page(s)" % len(results))
-    return fails, notes, {"pages": len(results)}
+    notes.append("axe: %d page(s), %d with the session" % (len(results), sum(1 for r in results if r.get("session"))))
+    return fails, notes, {"pages": len(results), "signin": bool(isinstance(si, dict) and si.get("ok")),
+                          "results": [{"path": r.get("path") or _path_of(r.get("url")), "session": bool(r.get("session")),
+                                       "final": _path_of(r.get("final")) if r.get("final") else None,
+                                       "title": str(r.get("title"))[:120] if r.get("title") is not None else None,
+                                       "error": bool(r.get("error")), "violations": len(r.get("violations") or [])}
+                                      for r in results]}
 
 
 # ------------------------------------------------------------------ the gates
@@ -368,6 +400,8 @@ def threshold(root, st):
 
 
 NO_SOURCE_DIR = ".moadix-no-source"
+STRYKER_TMP = ".stryker-tmp"  # relative to the work folder /tmp/work (MF-53)
+SERVICE_GATES = ("tests", "stryker")  # 0.7.6 (MF-51): the gates that get tests.services
 
 
 def depcruise_paths(pt, files):
@@ -403,9 +437,13 @@ def tool_script(gate, root, pt, files=None):
         return (WORK + LINK_PRODUCT + " && node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json --pretty false "
                 "> /out/tsc.txt 2>&1; echo $? > /out/run.rc")
     if gate == "stryker":
+        # 0.7.6 (task-tracker MF-53): Stryker's sandbox is a copy of the project without node_modules (it makes no
+        # link when node_modules is itself a link, as here), so packages resolve only by Node walking up from the
+        # sandbox. Under /tmp/stryker-tmp nothing above it had them ("Cannot find package 'vitest'"); inside the
+        # work folder Node finds its node_modules link. Stryker leaves its own temporary folder out of the copy.
         return (WORK + LINK_PRODUCT + " && node node_modules/@stryker-mutator/core/bin/stryker.js run --reporters json "
-                "--tempDirName /tmp/stryker-tmp > /out/run.log 2>&1; echo $? > /out/run.rc; "
-                "cp reports/mutation/mutation.json /out/mutation.json 2>/dev/null; true")
+                "--tempDirName %s > /out/run.log 2>&1; echo $? > /out/run.rc; "
+                "cp reports/mutation/mutation.json /out/mutation.json 2>/dev/null; true" % STRYKER_TMP)
     if gate == "tests":
         cmd = (pt.get("tests") or {}).get("command")
         if not isinstance(cmd, list) or not cmd or not all(isinstance(x, str) for x in cmd):
@@ -541,11 +579,17 @@ def start_live(r, root, pt, export_tar, tmp, net):
                 pvol = r.volume("build-proxy")
                 r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
                        confined.image("python"))
-                r.proxy(bnet, benet, pvol)
+                bproxy = r.proxy(bnet, benet, pvol, "build")  # 0.7.6 (MF-54): its own name, not the install proxy's
+            else:
+                bproxy = None
             args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt, network=bnet)
-            with open(ctx_tar, "rb") as f:
-                p = subprocess.run([r.d] + args, stdin=f, capture_output=True, timeout=confined.limits("build", pt)["wall_s"],
-                                   env=dict(os.environ, **envb))
+            try:
+                with open(ctx_tar, "rb") as f:
+                    p = subprocess.run([r.d] + args, stdin=f, capture_output=True,
+                                       timeout=confined.limits("build", pt)["wall_s"], env=dict(os.environ, **envb))
+            finally:
+                if bproxy:
+                    r.remove(bproxy)  # the build's way out ends with the build
             if p.returncode != 0:
                 err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
                 err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
@@ -632,12 +676,36 @@ def _head_csv(root, rel):
     return [{head[i]: (r[i].strip() if i < len(r) else "") for i in range(len(head))} for r in rows[1:]]
 
 
-def axe_urls(root, st, pt, label):
+def checked_elsewhere(pt):
+    """{(screen, state) lower-case: (how, "screen, state" as written)} from product-tools.yaml
+    axe.checked_elsewhere, and the problems."""
+    out, probs = {}, []
+    for n, e in enumerate((pt.get("axe") or {}).get("checked_elsewhere") or [], 1):
+        if not isinstance(e, dict) or not str(e.get("screen") or "").strip() or not str(e.get("state") or "").strip():
+            probs.append("product-tools.yaml axe.checked_elsewhere entry %d needs a screen and a state" % n)
+            continue
+        how = " ".join(str(e.get("how") or "").split())
+        key = (str(e["screen"]).strip().lower(), str(e["state"]).strip().lower())
+        if len(how.split()) < 4 or len(how) > 300:
+            probs.append("product-tools.yaml axe.checked_elsewhere entry %d (%s %s): `how` must say, in four words or "
+                         "more (300 characters at most), how the screen is checked" % (n, e["screen"], e["state"]))
+            continue
+        out[key] = (how, "%s, %s" % (str(e["screen"]).strip(), str(e["state"]).strip()))
+    return out, probs
+
+
+def axe_urls(root, st, pt, label, notes=None):
     """(paths, problems). axe visits product-tools.yaml live.paths, every designed row of design/screen-states.csv
     and, from phase 10a, every row of LV-INVENTORY.csv that is not n/a. A row gives its URL in a `url` column
     (an app-relative path) or names a path itself; a row that gives neither is a problem (the gate never guesses
-    a screen's address)."""
+    a screen's address), unless product-tools.yaml axe.checked_elsewhere declares, with a reason, how that
+    screen and state are checked instead (0.7.6, task-tracker MF-50: an address that holds a random id, an error
+    no plain GET produces); each such row is named in `notes`. A declaration that matches no designed row
+    without a URL is a problem too."""
     paths, probs = [], []
+    elsewhere, eprobs = checked_elsewhere(pt)
+    probs += eprobs
+    used = set()
 
     def add(p, where):
         if not URL_PATH.match(p) or "//" in p or "/../" in p + "/":
@@ -657,12 +725,90 @@ def axe_urls(root, st, pt, label):
             if not wanted(r):
                 continue
             u = r.get("url") or (r.get(key) if (r.get(key) or "").startswith("/") else "")
+            ek = ((r.get(key) or "").strip().lower(), (r.get("state") or "").strip().lower())
             if u:
                 add(u, "%s line %d" % (rel, n))
+            elif key == "screen" and ek in elsewhere:
+                used.add(ek)
+                if notes is not None:
+                    notes.append("axe: %s line %d (%s, %s) is not visited; checked elsewhere: %s (product-tools.yaml "
+                                 "axe.checked_elsewhere)" % (rel, n, r.get(key), r.get("state"), elsewhere[ek][0]))
             else:
                 probs.append("%s line %d (%s %s, %s): no URL; give it a `url` column (an app-relative path such as "
-                             "/notes) so axe can visit it" % (rel, n, key, r.get(key), r.get("state")))
+                             "/notes) so axe can visit it, or declare how it is checked in product-tools.yaml "
+                             "axe.checked_elsewhere" % (rel, n, key, r.get(key), r.get("state")))
+    for ek in sorted(set(elsewhere) - used):
+        probs.append("product-tools.yaml axe.checked_elsewhere (%s) matches no designed screen without a URL in "
+                     "design/screen-states.csv" % elsewhere[ek][1])
     return paths, probs
+
+
+AXE_ACTIONS = ("goto", "fill", "click", "wait_url")
+AXE_MAX_STEPS = 20
+
+
+def _app_path(p, where):
+    p = str(p if p is not None else "")
+    if not URL_PATH.match(p) or "//" in p or "/../" in p + "/":
+        raise confined.Refused("%s: %r is not an app-relative path (it must start with / and name no host)" % (where, p))
+    return p
+
+
+def axe_plan(pt, paths):
+    """The plan the gate hands the axe runner (0.7.6, task-tracker MF-50): the paths, the paths visited without a
+    session (axe.public) and the sign-in steps (axe.signin.steps), each checked here before the engine is called.
+    A step is one of goto: <path>, fill: <selector> with value: <text>, click: <selector>, wait_url: <path>; the
+    first is a goto. Values are fixture text for the gate's throwaway stack: a value that looks like a secret or a
+    token is refused (no secret enters a run)."""
+    axe = pt.get("axe") or {}
+    if not isinstance(axe, dict):
+        raise confined.Refused("product-tools.yaml axe must be a mapping")
+    doc = {"paths": list(paths)}
+    if "public" in axe:
+        pub = axe.get("public") or []
+        if not isinstance(pub, list):
+            raise confined.Refused("product-tools.yaml axe.public must be a list of app-relative paths")
+        doc["public"] = [_app_path(p, "product-tools.yaml axe.public") for p in pub]
+    signin = axe.get("signin")
+    if signin is None:
+        return doc
+    steps = (signin or {}).get("steps") if isinstance(signin, dict) else None
+    if not isinstance(steps, list) or not steps:
+        raise confined.Refused("product-tools.yaml axe.signin.steps must be a list of steps")
+    if len(steps) > AXE_MAX_STEPS:
+        raise confined.Refused("product-tools.yaml axe.signin.steps has %d steps; at most 20" % len(steps))
+    out = []
+    for n, s in enumerate(steps, 1):
+        where = "product-tools.yaml axe.signin.steps[%d]" % n
+        acts = [k for k in (s or {}) if k in AXE_ACTIONS] if isinstance(s, dict) else []
+        extra = [k for k in (s or {}) if k not in AXE_ACTIONS and k != "value"] if isinstance(s, dict) else []
+        if len(acts) != 1 or extra:
+            raise confined.Refused("%s: a step is exactly one of %s (%r is not one of them)" % (
+                where, ", ".join(AXE_ACTIONS), sorted(s) if isinstance(s, dict) else s))
+        act = acts[0]
+        if n == 1 and act != "goto":
+            raise confined.Refused("%s: the first step is a goto (the sign-in page)" % where)
+        if ("value" in s) != (act == "fill"):
+            raise confined.Refused("%s: `value` goes with fill, and only with fill" % where)
+        if act in ("goto", "wait_url"):
+            out.append({act: _app_path(s[act], where)})
+            continue
+        sel = s[act]
+        if not isinstance(sel, str) or not sel.strip() or len(sel) > 200 or re.search(r"[\r\n\0]", sel):
+            raise confined.Refused("%s: the selector must be one line of at most 200 characters" % where)
+        step = {act: sel}
+        if act == "fill":
+            v = s.get("value")
+            v = str(v) if isinstance(v, (str, int, float)) and not isinstance(v, bool) else None
+            if v is None or len(v) > 200 or re.search(r"[\r\n\0]", v):
+                raise confined.Refused("%s: the value must be one line of at most 200 characters" % where)
+            if redact(v) != v:
+                raise confined.Refused("%s: the value looks like a secret or a token; the sign-in uses fixture text "
+                                       "for the gate's throwaway stack, never a credential" % where)
+            step["value"] = v
+        out.append(step)
+    doc["signin"] = {"steps": out}
+    return doc
 
 
 # ------------------------------------------------------------------ 0.7.3: a run's logs are kept, bounded and redacted
@@ -750,11 +896,13 @@ def run_gate(root, st, gate, label, run_id=None):
     run_id = run_id or "x" + secrets.token_hex(5)
     tmp = toolrun.mkdtemp("moadix-exec-")
     r = None
+    pre_notes = []
     try:
-        if gate == "axe":  # every URL is resolved before the engine is called
-            paths, probs = axe_urls(root, st, pt, label)
+        if gate == "axe":  # every URL is resolved, and the sign-in checked, before the engine is called
+            paths, probs = axe_urls(root, st, pt, label, pre_notes)
             if probs:
                 return ["axe: %s" % x for x in probs], [], {}, None
+            plan = axe_plan(pt, paths)
         export = os.path.join(tmp, "export.tar")
         p = subprocess.run([state.GIT, "-C", root, "archive", "--format=tar", "-o", export, "HEAD"], capture_output=True)
         if p.returncode != 0:
@@ -762,6 +910,10 @@ def run_gate(root, st, gate, label, run_id=None):
         img = confined.image(g["image"])
         user = (confined.config().get("images") or {}).get(g["image"], {}).get("user")
         r = confined.Run(run_id, pt)
+        swept = r.sweep_stale()  # 0.7.6: what an earlier gate run left (its process was stopped before its cleanup)
+        if swept:
+            pre_notes.append("removed what %d earlier gate run(s) left (their process is gone): %s" % (
+                len(swept), ", ".join(swept)))
         src = r.volume("src")
         r.load(src, export, img)
         out = r.volume("out")
@@ -778,27 +930,30 @@ def run_gate(root, st, gate, label, run_id=None):
             pyimg = confined.image("python")
             pvol = r.volume("proxy")
             r.load(pvol, _write(tmp, "proxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})), pyimg)
-            r.proxy(inet, enet, pvol)
+            iproxy = r.proxy(inet, enet, pvol, "install")
             steps = []
             if g.get("product"):
                 steps.append(("npm-product", None))
             if g.get("tool"):
                 steps.append(g["tool"])
-            for kind, name in steps:
-                imounts = [(src, "/src", True), (deps, "/deps", False)]
-                if name:
-                    tvol = r.volume("lock-%s" % re.sub(r"[^a-z0-9]", "", name))
-                    r.load(tvol, _write(tmp, "lock.tar", _tar_of(lock_files(kind, name))), img)
-                    imounts.append((tvol, "/tools", True))
-                rc, so, se = r.execute(img, ["sh", "-c", install_script(kind if name else kind, name,
-                                                                        confined.install_scripts(pt))],
-                                       "install", imounts, network=inet, env=PROXY_ENV,
-                                       name="moadix-%s-install-%s" % (run_id, (name or "product").replace("-", "")))
-                if rc != 0:
-                    tail = (se or so)[-400:]
-                    if re.search(r"ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|403 Not on the MOADIX|ProxyError", tail):
-                        raise confined.Unavailable("the install step could not reach the registry: %s" % tail)
-                    return ["%s: the install step failed (npm ci / pip from the lockfile): %s" % (gate, tail)], [], {}, None
+            try:
+                for kind, name in steps:
+                    imounts = [(src, "/src", True), (deps, "/deps", False)]
+                    if name:
+                        tvol = r.volume("lock-%s" % re.sub(r"[^a-z0-9]", "", name))
+                        r.load(tvol, _write(tmp, "lock.tar", _tar_of(lock_files(kind, name))), img)
+                        imounts.append((tvol, "/tools", True))
+                    rc, so, se = r.execute(img, ["sh", "-c", install_script(kind if name else kind, name,
+                                                                            confined.install_scripts(pt))],
+                                           "install", imounts, network=inet, env=PROXY_ENV,
+                                           name="moadix-%s-install-%s" % (run_id, (name or "product").replace("-", "")))
+                    if rc != 0:
+                        tail = (se or so)[-400:]
+                        if re.search(r"ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|403 Not on the MOADIX|ProxyError", tail):
+                            raise confined.Unavailable("the install step could not reach the registry: %s" % tail)
+                        return ["%s: the install step failed (npm ci / pip from the lockfile): %s" % (gate, tail)], [], {}, None
+            finally:
+                r.remove(iproxy)  # 0.7.6 (MF-54): the install step's way out ends with the install step
             mounts.append((deps, "/deps", True))
         net, env = "none", {}
         if g.get("live"):
@@ -818,12 +973,12 @@ def run_gate(root, st, gate, label, run_id=None):
             if gate == "axe":
                 gx = r.volume("gx")
                 r.load(gx, _write(tmp, "gx.tar", _tar_of({"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
-                                                          "paths.json": json.dumps(paths).encode()})), img)
+                                                          "paths.json": json.dumps(plan).encode()})), img)
                 mounts.append((gx, "/gx", True))
             script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"],
                                  confined.limits(g["tier"], pt)["memory_mb"])
         else:
-            if gate == "tests" and (pt.get("tests") or {}).get("services"):
+            if gate in SERVICE_GATES and (pt.get("tests") or {}).get("services"):
                 net = r.network("svc")
                 env.update(start_services(r, pt, net))
             env["MOADIX_JUNIT"] = "/out/junit.xml"
@@ -851,7 +1006,7 @@ def run_gate(root, st, gate, label, run_id=None):
             raise confined.Refused("%s; %s; the run's log is kept at %s" % (e, line, rel)) from None
         if f:
             f = list(f) + ["%s: %s (the run's log is kept at %s)" % (gate, line, rel)]
-        return f, list(n) + ["run log %s" % rel], data, dest
+        return f, pre_notes + list(n) + ["run log %s" % rel], data, dest
     finally:
         if r is not None:
             r.close()
@@ -924,7 +1079,17 @@ def verdict(gate, d, pt, root, st):
     raise ValueError(gate)
 
 
+class Stopped(Exception):
+    """0.7.6: the gate was stopped (SIGTERM); run_gate's cleanup still runs, and the result is UNKNOWN."""
+
+
+def _stopped(signum, _frame):
+    raise Stopped("the gate was stopped (signal %d) before the run ended; its run was removed" % signum)
+
+
 def main(argv):
+    with contextlib.suppress(ValueError):  # not the main thread: nothing to install
+        signal.signal(signal.SIGTERM, _stopped)
     if len(argv) != 4 or argv[0] != "--gate" or argv[2] != "--phase" or argv[1] not in GATES:
         print("UNKNOWN usage: check_exec.py --gate <%s> --phase <label>" % "|".join(sorted(GATES)))
         return 2
@@ -955,6 +1120,8 @@ def main(argv):
                 notes.append("evidence %s (sha256 %s)" % (rel, digest[:12]))
     except confined.Unavailable as e:
         unknown.append("%s cannot run confined: %s" % (gate, e))
+    except Stopped as e:
+        unknown.append("%s: %s" % (gate, e))
     except confined.Refused as e:
         errs.append("%s: %s" % (gate, e))
     except Exception as e:  # unknown, never a pass

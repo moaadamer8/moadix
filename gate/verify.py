@@ -170,7 +170,7 @@ def head(root):
 def dirty(root):
     from . import validation  # late: validation imports this module late too
     out = _git(root, "status", "--porcelain=v1", "--untracked-files=all", *validation.status_pathspec())
-    return [ln[3:] for ln in out.splitlines() if ln.strip()]
+    return validation.changed_paths(root, out)  # 0.7.6 (MF-46): not the gate's own generated leftover
 
 
 def base_commit(st, label):

@@ -1,0 +1,5 @@
+screen,state,status,reference,url
+Home,default,designed,design/screens.md,/
+Sign in,default,designed,design/screens.md,/signin
+Tasks,default,designed,design/screens.md,/tasks
+Edit task,default,designed,design/screens.md,
