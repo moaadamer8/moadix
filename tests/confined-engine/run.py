@@ -772,12 +772,84 @@ def test_rel080(_node):
            "%s | %s | left %s | log:\n%s" % (err, f[:3], labelled(run_id), log[-1500:]))
 
 
+FIX81 = os.path.join(REPO, "tests", "fixtures", "smoke-081")
+
+
+def smoke081_product(base, tools=""):
+    """smoke-076 with the smoke-080 (official postgres database) and smoke-081 (POST /notes, 413 in its contract)
+    overlays; `tools` is added to the product-tools.yaml."""
+    import shutil
+    p = os.path.join(base, "r081")
+    shutil.copytree(FIX76, p, ignore=shutil.ignore_patterns(".claude", "README.md", "product-tools.yaml"))
+    shutil.copytree(FIX80, p, dirs_exist_ok=True)
+    shutil.copytree(FIX81, p, dirs_exist_ok=True)
+    git = ["/usr/bin/git", "-C", p]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "smoke-081 fixture"], check=True)
+    os.makedirs(os.path.join(p, SDLC, "config"))
+    with open(os.path.join(FIX76, "product-tools.yaml")) as f, \
+            open(os.path.join(p, SDLC, "config", "product-tools.yaml"), "w") as g:
+        g.write(f.read() + tools)
+    return p
+
+
+def volume_names():
+    return set(lines(["volume", "ls", "-q"]))
+
+
+def test_rel081(_node):
+    """0.8.1: the official postgres image's anonymous volume goes with its container (the 0.8.0 engine run left one per
+    live run), and Schemathesis's ST201 accepts 413 for an operation whose contract documents it, by the operator's
+    refusal-statuses (task-tracker MF-60)."""
+    G = "rel081"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    pg = confined.image("postgres")
+    r = confined.Run(rid())
+    before = volume_names()
+    made, after_fixed = [], []
+    control, fixed = "moadix-%s-volcontrol" % r.id, "moadix-%s-volfixed" % r.id
+    try:
+        for c in (control, fixed):
+            docker(["create", "--label", r.label, "--name", c, pg], timeout=120)
+        docker(["rm", "-f", control])  # 0.8.0's removal: no -v
+        docker(["rm", "-f", "--volumes", fixed])  # 0.8.1's removal (rm -v)
+        made = sorted(volume_names() - before)
+    finally:
+        r.close()
+        for v in made:  # the control's leftover carries no label: removed here, by its exact name
+            docker(["volume", "rm", v])
+        after_fixed = sorted(volume_names() - before)
+    record(G, "control: a container of the official postgres image removed without --volumes (0.8.0) leaves its "
+              "anonymous volume; removed with it (0.8.1) it leaves none (one volume left of two containers)",
+           len(made) == 1 and not after_fixed, (made, after_fixed))
+    base = tempfile.mkdtemp(prefix="moadix-smoke081-")
+    vols = volume_names()
+    root = smoke081_product(base, "schemathesis:\n  refusal-statuses: [413]\n")
+    f, n, data, err, log, run_id = run_logged(check_exec, root, "schemathesis", "8")
+    left = sorted(volume_names() - vols)
+    record(G, "MF-60: with refusal-statuses: [413], Schemathesis passes on smoke-081 (POST /notes refuses an over-long "
+              "title with 413, which its contract documents): no ST201; no volume or labelled object is left",
+           not err and not f and "ST201 also accepts 413 for POST /notes" in log and not left and not labelled(run_id),
+           "%s | fails %s | left %s %s | log:\n%s" % (err, f[:4], left, labelled(run_id), log[-1500:]))
+    root = smoke081_product(tempfile.mkdtemp(prefix="moadix-smoke081b-"))
+    f, n, data, err, log, run_id = run_logged(check_exec, root, "schemathesis", "8")
+    record(G, "control: without refusal-statuses, the same run fails ST201 (Schema-violating request accepted) on "
+              "POST /notes, as the product's did",
+           not err and f and ("/notes" in " ".join(f) or "/notes" in log) and
+           ("Schema-violating request accepted" in log or "ST201" in " ".join(f)) and not labelled(run_id),
+           "%s | fails %s | log:\n%s" % (err, f[:4], log[-1500:]))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
-        "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4), "test_rel080": ("rel080", 3)}
+        "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4), "test_rel080": ("rel080", 3),
+        "test_rel081": ("rel081", 3)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -841,7 +913,8 @@ def main():
     print("recorded before: %s" % ", ".join("%d %s" % (len(v), k) for k, v in before.items()))
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
-                 (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,)), (test_rel080, (node,))):
+                 (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,)), (test_rel080, (node,)),
+                 (test_rel081, (node,))):
         run_group(t, a)
     left = built_images()
     if left:

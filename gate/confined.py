@@ -677,7 +677,10 @@ class Run(object):
     def _rm_own(self, name):
         ids = self._own_ids(name)
         if ids:
-            self._d(["rm", "-f"] + ids, check=False)
+            # 0.8.1 (the 0.8.0 engine run): --volumes (rm -v) also removes the anonymous volumes an image declares with
+            # VOLUME (the official postgres image: /var/lib/postgresql/data); they carry no label, so close() never
+            # found them
+            self._d(["rm", "-f", "--volumes"] + ids, check=False)
 
     def own(self, vol, img, uid=None):
         self._helper(img, [(vol, "/v", False)], ["chown", "%d:%d" % (uid or self.uid, uid or self.uid), "/v"])
@@ -804,7 +807,8 @@ class Run(object):
         with contextlib.suppress(Unavailable):
             out = self._d(["ps", "-aq", "--filter", "label=%s" % label], check=False).stdout.decode().split()
             if out:
-                self._d(["rm", "-f"] + out, check=False, timeout=300)
+                # 0.8.1: --volumes, with each container its anonymous volumes (an image's VOLUME; they carry no label)
+                self._d(["rm", "-f", "--volumes"] + out, check=False, timeout=300)
         with contextlib.suppress(Unavailable):
             for n in self._d(["network", "ls", "-q", "--filter", "label=%s" % label], check=False).stdout.decode().split():
                 with contextlib.suppress(Unavailable):

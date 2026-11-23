@@ -273,6 +273,46 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.8.0 to 0.8.1
+
+0.8.1 fixes what stopped the first product's phase 9 on 0.8.0 (report: `docs/release-0.8.1-report.md`):
+
+- **MF-63:** a test fixture's value quoted in another tracked file (a findings log) can be allowlisted, history included, by an entry with `same-value-as: <the tests/ fixture entry's fingerprint>`; the gate applies it only when the quoted value is that fixture's, and never under `src/` or in configuration.
+- **MF-65:** check-security's own secret scan applies the same adopted allowlist, and its message no longer asks for a waiver no command records.
+- **MF-64:** the surface enumerator runs with the gate's pinned Node first on its PATH, so `[node, scripts/list-routes.ts]` runs as declared.
+- **MF-60:** `schemathesis: refusal-statuses: [413]` in `product-tools.yaml` (adopted with ADOPT) makes ST201 accept 413 for each operation whose contract documents it, and only there.
+- **MF-62:** a verifier launched at the commit that has not written its evidence is STALE, never MISSING; the validator run waits for it at its end (up to 20 minutes) and reads it.
+- **MF-52:** a gap critic's fix over 1,000 characters is cut with a marker; the findings are read.
+- **The 0.8.0 engine run:** a run's containers are removed with `--volumes`, so the official postgres image's anonymous volume goes with them.
+
+It changes the gate's Python, a new gate-owned `gate/exec/st_config.py`, `/moadix:coverage` (the phase 9 paragraph), the gap critic's brief, the tests, the engine double, smoke-076's app (a `POST /notes` route) and the new smoke-081 fixture. Nothing changes in the managed policy, the hook, the checker program, the Keychain or the overlay. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.8.1 commit, then `c39a878` (0.8.0). `cat .claude-plugin/plugin.json` shows `"version": "0.8.1"`.
+
+**2. Run the 0.8.1 suite in Terminal.** There, `sandbox-exec` can nest, so its one check that is skipped inside Claude Code (the enumerator under the real confinement) runs too.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/rel081/run.py
+```
+
+Expected last line: `45 checks, 45 passed, 0 failed, 0 skipped (<seconds> s)`.
+
+**3. Run the real-engine suite.** Docker Desktop: **must be running**, with no other container running. It needs internet and takes about 45–75 minutes. The new rel081 group (3 checks) shows that a postgres container removed without `--volumes` leaves its anonymous volume and with it leaves none; that Schemathesis passes on smoke-081 with `refusal-statuses: [413]` and leaves no volume; and that without it the same run fails ST201 on `POST /notes`.
+
+```
+cd ~/moadix && /usr/bin/python3 tests/confined-engine/run.py
+```
+
+Expected last line: `73 checks, 73 passed, 0 failed (<seconds> s)`. Afterwards, `docker volume ls -q | wc -l` shows the same count as before the run.
+
+**4. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   c39a878..<0.8.1 commit>  master -> master`;
+- the tag: `git tag -a v0.8.1 -m "MOADIX 0.8.1" && git push origin v0.8.1`;
+- `/plugin` shows **0.8.1**.
+
+**5. In the product (phase 9).** The agent proposes the whole `product-tools.yaml` again in `.sdlc-proposals/config/`, adding (a) for the history hit in `docs/moadix-findings.md`, an entry with its fingerprint, `path`, a reason and `same-value-as:` the `tests/` fixture entry whose value it quotes, and (b) `schemathesis: refusal-statuses: [413]`. Read each entry before `ADOPT <code>`. Then `/moadix:request-review 9` (and 8): REVIEW lists the quote under "Allowlisted test-fixture findings", check-security's fixture hits no longer fail, and check-exec-schemathesis-8 no longer reports the 11 ST201 failures.
+
 ## Updating from 0.7.9 to 0.8.0
 
 0.8.0 fixes the four findings that stopped the first product's phase 9 (report: `docs/release-0.8.0-report.md`):

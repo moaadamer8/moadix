@@ -213,8 +213,8 @@ def test_engine():
     spec = importlib.util.spec_from_file_location("es_suite078", p)
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
-    record(G, "the engine suite has a rel078 group (every live gate against the strict app), and its total is 70 (0.7.9: rel079 4; 0.8.0: rel080 3)",
-           es.PLAN.get("test_rel078") == ("rel078", 4) and es.TOTAL == 70 and
+    record(G, "the engine suite has a rel078 group (every live gate against the strict app), and its total is 73 (0.7.9: rel079 4; 0.8.0: rel080 3; 0.8.1: rel081 3)",
+           es.PLAN.get("test_rel078") == ("rel078", 4) and es.TOTAL == 73 and
            [g for g, _l in es.LIVE_GATES] == ["schemathesis", "zap", "lhci", "axe"], (es.PLAN.get("test_rel078"), es.TOTAL))
 
 

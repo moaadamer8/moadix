@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info: {title: smoke, version: "1"}
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: the service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [ok]}
+  /notes:
+    post:
+      operationId: addNote
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title]
+              properties:
+                title: {type: string, maxLength: 32, pattern: "^[a-z]*$"}
+      responses:
+        "303":
+          description: saved; back to the home page
+        "400":
+          description: not a valid note
+        "413":
+          description: the body is over the form limit (38 bytes, the field limit)
+        "415":
+          description: not a form

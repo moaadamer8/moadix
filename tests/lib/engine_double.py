@@ -138,6 +138,10 @@ OFF_PATH = {
 IMAGE_PATH = {"zaproxy": "/usr/lib/jvm/java-17-openjdk-arm64/bin:/zap/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
               "postgres": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/17/bin"}
 DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"  # Debian's, as the node and python images
+# 0.8.1 (the 0.8.0 engine run): the volumes an image declares with VOLUME. A container of it gets an anonymous volume
+# (no label) for each one no --mount covers; `docker rm --volumes` (-v), or a `run --rm` ending, removes it; `rm`
+# without it leaves it.
+IMAGE_VOLUMES = {"postgres": ["/var/lib/postgresql/data"]}
 KEYWORDS = ("do", "then", "else", "until", "while", "if", "!", "{", "exec", "time")
 
 
@@ -325,7 +329,10 @@ def main():
     elif cmd == "rm":
         for c in a[1:]:
             if not c.startswith("-"):
-                s["containers"].pop(c, None)
+                gone = s["containers"].pop(c, None) or {}
+                if "-v" in a[1:] or "--volumes" in a[1:]:  # 0.8.1: as the engine, with its anonymous volumes
+                    for v in gone.get("anon") or []:
+                        s["volumes"].pop(v, None)
     elif cmd == "ps":
         listing([(c, v.get("labels") or dict([v["label"].split("=", 1)] if v.get("label") else []))
                  for c, v in s["containers"].items()], a)
@@ -401,6 +408,14 @@ def main():
             return refuse("docker: " + CONFLICT % (name, name), 125)
         if "-d" in a or "--rm" not in a:
             s["containers"][name] = {"label": label_of(a), "labels": labels_of(a), "mounts": m, "nets": [net]}
+            anon = []
+            for d in IMAGE_VOLUMES.get(image_key(run_image(a, s), s) or "", []):
+                if d not in m:
+                    v = "%064x" % (len(s["volumes"]) + 1 + len(s.get("anon_made") or []))
+                    s.setdefault("anon_made", []).append(v)
+                    s["volumes"][v] = ""
+                    anon.append(v)
+            s["containers"][name]["anon"] = anon
         if "-d" in a:
             # 0.8.0 (task-tracker MF-56, MF-57): as the engine, a detached run starts; a command its PATH cannot find
             # stops the container with 127 and its message. MOADIX_DOUBLE_SVC ({service: {exit, stdout, stderr}})

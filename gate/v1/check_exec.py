@@ -62,6 +62,7 @@ sys.path.insert(0, os.path.dirname(GATE))
 sys.path.insert(0, os.path.join(GATE, "v1"))
 
 from gate import confined, contract, state  # noqa: E402
+import st_refusal  # noqa: E402
 import toolrun  # noqa: E402
 
 LOCKS = os.path.join(GATE, "config", "locks")
@@ -499,13 +500,23 @@ def lhci_config(port):
     return {"ci": {"collect": {"url": [browser_url(port) + "/"], "numberOfRuns": 1, "settings": {"chromeFlags": flags}}}}
 
 
-def live_script(gate, port, spec_rel, paths, memory_mb=2048):
+def live_script(gate, port, spec_rel, paths, memory_mb=2048, refusals=None):
     # 0.7.8: every live gate reaches the app at the one gate-owned origin (URL, Host, Origin); 0.7.7 sent
     # Schemathesis and ZAP to sut.moadix.test, so an app that accepts one host failed one gate whatever it set
     url = confined.app_origin(port)
     if gate == "schemathesis":
-        return (wait_for(port) + "PYTHONPATH=/deps/tool python -m schemathesis.cli run /src/%s --url %s -H 'Origin: %s' "
-                "--report junit --report-dir /out/st > /out/run.log 2>&1; echo $? > /out/run.rc" % (spec_rel, url, url))
+        # 0.8.1 (task-tracker MF-60): with the operator's adopted refusal statuses, the gate's own st_config.py (in /gx)
+        # first writes Schemathesis's per-operation configuration from the contract: ST201 also accepts a listed
+        # status for an operation whose responses document it. A configuration that cannot be written is the run's
+        # failure (exit 97 in run.rc, its reason in run.log), never a run without it.
+        cfg, sink = "", ">"
+        if refusals:
+            cfg = ("PYTHONPATH=/deps/tool python /gx/st_config.py /src/%s /tmp/st.toml '%s' > /out/run.log 2>&1 || "
+                   "{ echo 97 > /out/run.rc; exit 0; }; " % (spec_rel, json.dumps([int(s) for s in refusals])))
+            sink = ">>"
+        return (wait_for(port) + cfg + "PYTHONPATH=/deps/tool python -m schemathesis.cli %srun /src/%s --url %s "
+                "-H 'Origin: %s' --report junit --report-dir /out/st %s /out/run.log 2>&1; echo $? > /out/run.rc" % (
+                    "--config-file /tmp/st.toml " if refusals else "", spec_rel, url, url, sink))
     if gate == "zap":
         return (wait_for(port, "/zap/wrk") + "cd /tmp && %s -t %s -c zap-rules.tsv -J zap.json -I -m 1 -z '-dir /tmp/zaphome "
                 "-Xmx%dm %s' > /zap/wrk/run.log 2>&1; echo $? > /zap/wrk/run.rc" % (
@@ -984,6 +995,14 @@ def run_gate(root, st, gate, label, run_id=None):
             if probs:
                 return ["axe: %s" % x for x in probs], [], {}, None
             plan = axe_plan(pt, paths)
+        refusals = []
+        if gate == "schemathesis":  # 0.8.1 (task-tracker MF-60): the operator's refusal statuses, checked before the engine
+            refusals, rprobs = st_refusal.from_tools(pt)
+            if rprobs:
+                return ["schemathesis: product-tools.yaml %s" % x for x in rprobs], [], {}, None
+            if refusals:
+                pre_notes.append("schemathesis: ST201 also accepts %s for each operation whose contract documents it "
+                                 "(product-tools.yaml schemathesis.refusal-statuses)" % ", ".join(map(str, refusals)))
         export = os.path.join(tmp, "export.tar")
         p = subprocess.run([state.GIT, "-C", root, "archive", "--format=tar", "-o", export, "HEAD"], capture_output=True)
         if p.returncode != 0:
@@ -1057,17 +1076,19 @@ def run_gate(root, st, gate, label, run_id=None):
             spec = next((f for f in tracked(root) if re.match(r"^%s/05-lld/.*\.(ya?ml|json)$" % re.escape(contract.doc_dir(st)), f)), None)
             if gate == "schemathesis" and not spec:
                 return ["schemathesis needs the OpenAPI description under %s/05-lld/" % contract.doc_dir(st)], [], {}, None
-            if gate in ("axe", "lhci"):  # the gate's own files for the browser gates
+            if gate in ("axe", "lhci") or refusals:  # the gate's own files for the browser gates (and st_config.py)
                 if gate == "axe":
                     files = {"axe-run.js": _rb(os.path.join(EXEC, "axe-run.js")),
                              "paths.json": json.dumps(dict(plan, host_rules=confined.BROWSER_RULE)).encode()}
+                elif gate == "schemathesis":
+                    files = {"st_config.py": _rb(os.path.join(EXEC, "st_config.py"))}
                 else:
                     files = {"lighthouserc.json": json.dumps(lhci_config(port)).encode()}
                 gx = r.volume("gx")
                 r.load(gx, _write(tmp, "gx.tar", _tar_of(files)), img)
                 mounts.append((gx, "/gx", True))
             script = live_script(gate, port, spec, (pt.get("live") or {}).get("paths") or ["/"],
-                                 confined.limits(g["tier"], pt)["memory_mb"])
+                                 confined.limits(g["tier"], pt)["memory_mb"], refusals)
         else:
             if gate in SERVICE_GATES and (pt.get("tests") or {}).get("services"):
                 net = r.network("svc")

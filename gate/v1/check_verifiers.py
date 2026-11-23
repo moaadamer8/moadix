@@ -12,7 +12,8 @@ severity. See gate/verify.py.
     check_verifiers.py --phase <label>
 
 Exit 0: every required verifier's evidence holds. 1: missing, stale or failing.
-2: the check could not run (unknown).
+2: the check could not run (unknown). 3 (0.8.1): only verifiers that were launched and
+have not written their evidence yet (STALE: the result is read again when they have).
 """
 import os
 import sys
@@ -41,7 +42,7 @@ def main(argv):
     if not rows:
         print("OK no verifier is scheduled for phase %s at this commit" % label)
         return 0
-    bad = 0
+    bad = pending = 0
     for name, status, probs, info in rows:
         for m in info.get("minors") or []:  # increment 7: the gap critic's MINORs go to the operator's file
             print("MINOR %s:%s: %s" % (verify.PLUGIN, name, m))
@@ -55,10 +56,13 @@ def main(argv):
                 info.get("findings", 0), ", %d acceptance criteria mapped" % info["acs"] if "acs" in info else ""))
             continue
         bad += 1
-        tag = {"missing": "MISSING", "stale": "FAIL stale", "failing": "FAIL"}[status]
+        pending += status == "pending"
+        # 0.8.1 (task-tracker MF-62): launched and not written yet is STALE (the result is read again when it is
+        # written), never MISSING
+        tag = {"missing": "MISSING", "stale": "FAIL stale", "failing": "FAIL", "pending": "STALE"}[status]
         for p in probs[:12]:
             print("%s %s:%s: %s" % (tag, verify.PLUGIN, name, p))
-    return 1 if bad else 0
+    return (3 if pending == bad else 1) if bad else 0
 
 
 if __name__ == "__main__":

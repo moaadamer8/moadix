@@ -72,6 +72,44 @@ http.createServer((req, res) => {
     });
     return;
   }
+  if (url.pathname === "/notes") {
+    // 0.8.1 (task-tracker MF-60): a form whose field limit equals the body limit, as the product's forms. A body over
+    // NOTE_BODY bytes is refused with 413 Content Too Large before it is read further (RFC 9110); the smoke-081
+    // contract documents 413, so the gate's adopted refusal statuses let Schemathesis's ST201 count it as a refusal.
+    if (req.method !== "POST") {
+      res.writeHead(405, { allow: "POST", "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "method not allowed" }));
+      return;
+    }
+    const NOTE_BODY = 38; // "title=" and the 32-character field limit
+    let body = "";
+    let refused = false;
+    req.on("data", (c) => {
+      if (refused) return;
+      body += c;
+      if (Buffer.byteLength(body) > NOTE_BODY) {
+        refused = true;
+        html(res, 413, "Too large", "<p>That note is too long.</p>");
+      }
+    });
+    req.on("end", () => {
+      if (refused) return;
+      if (!/^application\/x-www-form-urlencoded(;|$)/.test(req.headers["content-type"] || "")) {
+        html(res, 415, "Not a form", "<p>Send the form.</p>");
+        return;
+      }
+      const f = new URLSearchParams(body);
+      const keys = [...f.keys()];
+      const title = f.get("title");
+      if (keys.length !== 1 || keys[0] !== "title" || title === null || !/^[a-z]{0,32}$/.test(title)) {
+        html(res, 400, "Not saved", "<p>A title is up to 32 lowercase letters.</p>");
+        return;
+      }
+      res.writeHead(303, { location: "/" });
+      res.end();
+    });
+    return;
+  }
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { allow: "GET, HEAD", "content-type": "application/json" });
     res.end(JSON.stringify({ error: "method not allowed" }));

@@ -150,6 +150,55 @@ def secrets_scan(base):
     return hits
 
 
+# 0.8.1 (task-tracker MF-65): the value a generic-secret-assignment hit assigns (the quoted string), to compare a quote of
+# a test fixture with the fixture itself
+ASSIGNED = re.compile(r"""(?i)\b(?:api[_-]?key|secret|password|passwd|token|access[_-]?key)\b\s*[:=]\s*"""
+                      r"""['"]([A-Za-z0-9/+_\-]{16,})['"]""")
+
+
+def _line_at(root, commit, path, line):
+    """Line `line` of `path` in the working tree (commit None) or at `commit`, or None."""
+    try:
+        if commit:
+            import subprocess
+            p = subprocess.run(["/usr/bin/git", "-C", root, "show", "%s:%s" % (commit, path)], capture_output=True,
+                               timeout=60)
+            text = p.stdout.decode("utf-8", "replace") if p.returncode == 0 else None
+        else:
+            text = read(os.path.join(root, path))
+    except Exception:  # noqa: BLE001 (unreadable: no value, so nothing is allowlisted)
+        return None
+    lines = (text or "").splitlines()
+    return lines[line - 1] if text is not None and 0 < line <= len(lines) else None
+
+
+def _assigned(text):
+    return set(ASSIGNED.findall(text or ""))
+
+
+def allowlist_covers(root, allow, rel, ln):
+    """0.8.1 (MF-65): (fingerprint, entry, how) when the adopted gitleaks allowlist covers this scan's hit at rel:ln (a
+    repo-relative path in the HEAD tree), else None. A test-fixture tree entry covers its own file and line; a
+    same-value-as tree entry covers its line only when the value assigned there is a value assigned at the fixture
+    finding it names (read from the tree, or from the commit of a history fingerprint)."""
+    import gitleaks_allow
+    for fp, e in allow.items():
+        if gitleaks_allow.tree_line(fp) != (rel, ln) or e.get("path") != rel:
+            continue
+        if gitleaks_allow.tests_fixture(e) or (e.get("fixture") is True and gitleaks_allow.fixture_path(rel)):
+            return fp, e, "a test fixture"
+        ref = str(e.get("same-value-as") or "")
+        m = gitleaks_allow.FINGERPRINT.match(ref)
+        if m and gitleaks_allow.tests_fixture(allow.get(ref)) and gitleaks_allow.quote_path(rel):
+            mine = _assigned(_line_at(root, None, rel, ln))
+            theirs = _assigned(_line_at(root, m.group("commit"), m.group("path"), int(m.group("line"))))
+            if mine and mine <= theirs:
+                return fp, e, "the same value as the adopted test fixture %s" % ref
+    return None
+
+
+
+
 def waivers(root, rule="security"):
     try:
         doc = hlib.load_phase_doc(root)
@@ -258,8 +307,30 @@ def main():
     # ---- 2. independent secrets scan (run by the gate, not read) ---------
     hits = secrets_scan(scan_root)
     live = [h for h in hits if ("%s:%d" % (h[0], h[1])) not in wv and h[0] not in wv]
-    notes.append("secrets scan: %d file-line hit(s) across %s"
-                 % (len(hits), os.path.relpath(scan_root, root)))
+    # 0.8.1 (task-tracker MF-65): the operator's adopted gitleaks allowlist applies here too (one allowlist for both
+    # secret scans); every hit it covers is listed for REVIEW, and an allowlist that cannot be applied is named
+    import gitleaks_allow
+    import toolrun
+    allow, aprobs = gitleaks_allow.adopted_allowlist(root, toolrun.product_tools)
+    allowlisted = []
+    if allow:
+        kept = []
+        for h in live:
+            rel = os.path.relpath(os.path.join(scan_root, h[0]), root).replace(os.sep, "/")
+            cov = allowlist_covers(root, allow, rel, h[1])
+            if cov is None:
+                kept.append(h)
+                continue
+            fp, e, how = cov
+            allowlisted.append("ALLOWLISTED %s tree %s:%d: check-security's secret scan (%s), %s, by the operator's "
+                               "adopted allowlist (%s)" % (fp, rel, h[1], h[2], how,
+                                                          " ".join(str(e.get("reason")).split())[:200]))
+        live = kept
+    elif aprobs and live:
+        notes.append("the adopted gitleaks allowlist is not applied to this scan either: %s" % "; ".join(aprobs[:3]))
+    notes.append("secrets scan: %d file-line hit(s) across %s%s"
+                 % (len(hits), os.path.relpath(scan_root, root),
+                    ", %d covered by the adopted allowlist" % len(allowlisted) if allowlisted else ""))
     # Say what was covered, so a future reader can tell a clean scan from a
     # narrow one. "0 hits" over source-only is a different statement from
     # "0 hits" over source AND every verification artifact.
@@ -269,8 +340,12 @@ def main():
                  "device log or console dump during 10a/10b/10c is committed evidence."
                  % (", ".join(_ev) if _ev else "none present"))
     for rel, ln, kind in live:
-        errs.append("SECRET DETECTED by the gate's own scan: %s:%d (%s). Remove it and rotate the "
-                    "credential, or waive with a reason and an approver." % (rel, ln, kind))
+        # 0.8.1 (MF-65): no operator command records the v1 waiver the old message named; a test fixture (or a
+        # quote of one) goes in the gitleaks allowlist, adopted with ADOPT, which this scan applies too
+        errs.append("SECRET DETECTED by the gate's own scan: %s:%d (%s). Remove it and rotate the credential; a "
+                    "test fixture, or a quote of one outside src/ and configuration, is allowlisted by an entry "
+                    "for this file and line in the gitleaks allowlist the operator adopts (product-tools.yaml "
+                    "gitleaks.allow)." % (rel, ln, kind))
 
     # ---- 3. dependency audit ---------------------------------------------
     sec_dir = os.path.join(root, groot, "security")
@@ -328,6 +403,8 @@ def main():
                 errs.append("finding %s is %s severity and still %r with no waiver."
                             % (fid, sevr, status))
 
+    for ln in allowlisted:  # 0.8.1: shown in REVIEW (gate/validate.py collects them); never the first line
+        print(ln)
     if not args.quiet:
         print("check-security: %s" % report_path)
         for n in notes:

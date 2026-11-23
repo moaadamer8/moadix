@@ -425,7 +425,9 @@ def group_evidence(p):
     record(G, "evidence that is not JSON -> fails", rc == 1 and "not JSON" in out, short(out))
     os.unlink(os.path.join(vdir(p, "7", "code-reviewer"), "evidence", "findings.json"))
     rc, out = run_check(p, "7")
-    record(G, "no evidence -> MISSING", rc == 1 and "MISSING moadix:code-reviewer" in out, short(out))
+    # 0.8.1 (task-tracker MF-62): launched at this commit with no evidence yet is STALE (exit 3), never MISSING
+    record(G, "no evidence after a launch -> STALE (not yet written), never MISSING", rc == 3 and
+           "STALE moadix:code-reviewer: launched at" in out and "MISSING" not in out, short(out))
     write_evidence(p, "7", "code-reviewer", good_evidence(p, "code-reviewer", pr))
     with open(os.path.join(vdir(p, "7", "code-reviewer"), "brief.md"), "a") as f:
         f.write("tampered\n")
@@ -433,8 +435,8 @@ def group_evidence(p):
     record(G, "a brief.md changed after launch -> fails", rc == 1 and "no longer matches" in out, short(out))
     _d, _w, ui, _ = launch(p, "moadix:code-reviewer")
     rc, out = run_check(p, "7")
-    record(G, "a new launch supersedes the old evidence (old receipt) -> missing until the verifier writes again",
-           rc == 1 and "no evidence" in out and os.path.exists(os.path.join(
+    record(G, "a new launch supersedes the old evidence (old receipt) -> STALE until the verifier writes again (0.8.1)",
+           rc == 3 and "has not written its evidence yet" in out and os.path.exists(os.path.join(
                vdir(p, "7", "code-reviewer"), "evidence", "findings.json.superseded")), short(out))
     write_evidence(p, "7", "code-reviewer", good_evidence(p, "code-reviewer", ui["prompt"]))
     rc, out = run_check(p, "7")

@@ -1265,6 +1265,29 @@ def _quote_in(root, hd, citation, quote):
     return norm(quote) in norm(win)
 
 
+FIX_CUT = " [... cut by the gate: the fix ran %d characters over the %d-character limit]"
+
+
+def truncate_fixes(ev):
+    """0.8.1 (task-tracker MF-52): a finding's fix longer than the schema's limit is cut to the limit, ending with a
+    marker that says so, in place; the run's findings are read as findings instead of the whole file failing the schema
+    ("findings[3].fix is longer than 1000 characters" dropped four BLOCKERs). Returns one note per cut fix."""
+    try:
+        lim = int(schema()["properties"]["findings"]["items"]["properties"]["fix"]["maxLength"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    found = ev.get("findings") if isinstance(ev, dict) else None
+    out = []
+    for i, f in enumerate(found if isinstance(found, list) else []):
+        fix = f.get("fix") if isinstance(f, dict) else None
+        if isinstance(fix, str) and len(fix) > lim:
+            mark = FIX_CUT % (len(fix) - lim, lim)
+            f["fix"] = fix[:lim - len(mark)].rstrip() + mark
+            out.append("finding %s: its fix was %d characters; the gate kept the first %d and marked the cut "
+                       "(the limit is %d)" % (f.get("id") or "#%d" % (i + 1), len(fix), lim - len(mark), lim))
+    return out
+
+
 def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=None):
     """(problems, blocking, info) for the gap critic's CRITIC.json: the schema, every topic of
     the phase (and every carry addressed to it) checked, each finding's topic one of them, its
@@ -1274,6 +1297,7 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
     operator's file. `run` is the gate's archive of this evidence (critic.ingest): stable ids,
     late findings, regressions."""
     from . import critic
+    cut = truncate_fixes(ev)  # 0.8.1 (task-tracker MF-52): a long fix is cut with a marker, never the whole file refused
     probs = validate_schema(ev, schema())
     feature = bool(st and st.get("feature"))
     want = {t for t, _ in topics(label, feature)}
@@ -1362,7 +1386,7 @@ def critic_check(root, st, label, ev, hd, citation_problem, active_waivers, run=
     if carried and big and len(carried) / float(big) > critic.rules()["carry_note_ratio"]:
         note = ("this run carries %d of its %d MAJOR-or-worse findings (more than %d%%); the operator may UNCARRY any "
                 "of them" % (len(carried), big, int(critic.rules()["carry_note_ratio"] * 100)))
-    minors += frozen_minor + severity_notes
+    minors += frozen_minor + severity_notes + cut
     info = {"blockers": blocking, "majors": [m for m, _g in majors], "minors": minors, "waived": waived,
             "frozen": len(frozen_minor), "frozen_blockers": frozen_blockers,
             "carried": carried, "lapsed": sorted(set(lapsed)), "late": list(run.get("late") or []),
@@ -1586,7 +1610,12 @@ def coverage_doc():
          "{fingerprint: \"<commit>:<path>:<rule>:<line>\" (history) or \"<path>:<rule>:<line>\" (tree), path: "
          "<path>, reason: \"<why it is not a credential>\", fixture: true}`. check-gitleaks prints each finding's "
          "fingerprint. A whole rule or path is never allowlisted; REVIEW lists every finding the allowlist lets "
-         "through.",
+         "through. A quote of such a fixture's value in another tracked file (a findings log, a README; never under "
+         "`src/`, never configuration) takes an entry with `same-value-as: \"<the tests/ fixture entry's "
+         "fingerprint>\"` in place of `fixture: true`; the gate applies it only when the quoted value is that "
+         "fixture's. check-security's own secret scan applies the same allowlist. **Schemathesis:** an operation "
+         "whose contract documents a refusal status ST201 does not count (413 for a body over the limit) is accepted "
+         "by `schemathesis: refusal-statuses: [413]` in the same file, adopted the same way.",
          "",
          "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
          "note there would reach later sessions without the operator. A lasting instruction goes in "

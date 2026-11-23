@@ -410,6 +410,10 @@ def _proceed_gate(root, st, label):
     if unknown:
         return False, "validator(s) %s could not reach their instrument (UNKNOWN), so the result says nothing " \
                       "about the product; UNKNOWN is not a basis for proceeding" % ", ".join(unknown), data
+    stale = [r["validator"] for r in data["results"] if r["result"] == "stale"]
+    if stale:  # 0.8.1 (task-tracker MF-62): a verifier had not written its evidence yet; that is not a known failure
+        return False, "validator(s) %s read verifier evidence that was still being written (STALE); send REVIEW %s " \
+                      "again once every launched verifier has finished" % (", ".join(stale), label), data
     failing = [r["validator"] for r in data["results"] if r["result"] == "fail"]
     if not failing:
         return False, "every validator passed, so there is nothing to proceed past; APPROVE %s instead" % label, data

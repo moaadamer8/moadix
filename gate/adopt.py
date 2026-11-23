@@ -311,8 +311,9 @@ def _validate_overrides(doc):
 
 def _validate_tools(doc):
     """0.8.0 (task-tracker MF-59): the gitleaks test-fixture allowlist is checked before it is adopted."""
-    from .v1 import gitleaks_allow
+    from .v1 import gitleaks_allow, st_refusal
     _entries, probs = gitleaks_allow.from_tools(doc)
+    probs = probs + st_refusal.from_tools(doc)[1]  # 0.8.1 (task-tracker MF-60): Schemathesis refusal statuses
     if probs:
         raise ProposalError("product-tools.yaml: %s" % "; ".join(probs[:6]) + (
             "; and %d more" % (len(probs) - 6) if len(probs) > 6 else ""))

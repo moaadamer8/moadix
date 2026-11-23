@@ -108,6 +108,23 @@ def contract_surface(path):
     return out
 
 
+def enumerator_env(environ=None):
+    """0.8.1 (task-tracker MF-64): the enumerator's environment. The validator worker's PATH holds no node, so an
+    enumerator declared the usual way ([node, scripts/list-routes.ts]) failed with execvp() of 'node'. The gate's own
+    pinned Node (the tools cache, as the exec checks use it) goes first on PATH; a product never names a machine path.
+    No pinned Node: the enumerator still runs (it may not need node), and its failure names why. Returns (env, why)."""
+    import toolrun
+    env = dict(os.environ if environ is None else environ)
+    path = env.get("PATH") or "/usr/bin:/bin:/usr/sbin:/sbin"
+    try:
+        node_dir = os.path.dirname(toolrun.node())
+    except toolrun.ToolUnavailable as exc:
+        env["PATH"] = path
+        return env, str(exc)[:200]
+    env["PATH"] = node_dir + ":" + ":".join(d for d in path.split(":") if d and d != node_dir)
+    return env, None
+
+
 def run_enumerator(root, groot, spec):
     """(state, surfaces, detail). state in declared|none|missing|failed."""
     if not isinstance(spec, dict):
@@ -153,16 +170,23 @@ def run_enumerator(root, groot, spec):
                               "enumerator is product code and is not run "
                               "unconfined." % (exc,))
     try:
+        env, why = enumerator_env()
+    except Exception as exc:                                    # noqa: BLE001
+        with contextlib.suppress(OSError):
+            os.unlink(prof)
+        return "failed", [], str(exc)
+    try:
         p = subprocess.run([str(a) for a in argv], cwd=wd, capture_output=True,
-                           text=True, timeout=120)
+                           text=True, timeout=120, env=env)
     except Exception as exc:                                    # noqa: BLE001
         return "failed", [], "enumerator did not run: %r" % (exc,)
     finally:
         with contextlib.suppress(OSError):
             os.unlink(prof)
     if p.returncode != 0:
-        return "failed", [], ("enumerator exited %d: %s"
-                              % (p.returncode, (p.stderr or "").strip()[:200]))
+        return "failed", [], ("enumerator exited %d: %s%s"
+                              % (p.returncode, (p.stderr or "").strip()[:200],
+                                 " (the gate's pinned Node is not installed: %s)" % why if why else ""))
     return "declared", parse_surface_lines(p.stdout), ""
 
 

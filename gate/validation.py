@@ -363,10 +363,10 @@ def findings(data, limit=6):
     """The failing/unknown validators' own output lines (the 'findings')."""
     out = []
     for r in (data or {}).get("results") or []:
-        if r.get("result") in ("fail", "unknown"):
+        if r.get("result") in ("fail", "unknown", "stale"):
             lines = [ln.strip() for ln in (r.get("output") or "").splitlines()
                      if not ln.strip().startswith("MINOR") and (
-                         ln.strip().startswith(("FAIL", "ERR", "MISSING", "UNKNOWN", "BLOCKER", "MAJOR"))
+                         ln.strip().startswith(("FAIL", "ERR", "MISSING", "UNKNOWN", "BLOCKER", "MAJOR", "STALE"))
                          or "FAIL" in ln[:12])]
             out.append("%s %s: %s" % (r.get("validator"), r.get("result").upper(),
                                        "; ".join(lines[:limit]) or (r.get("first_line") or "")[:200]))

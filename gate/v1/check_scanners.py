@@ -88,19 +88,43 @@ ALLOWLISTED: list = []  # 0.8.0: "ALLOWLISTED ..." lines, printed for REVIEW (ga
 def gitleaks_allowlist(root):
     """0.8.0 (task-tracker MF-59): ({fingerprint: entry}, findings). The operator's test-fixture allowlist
     (gitleaks_allow), applied only when every entry passes and product-tools.yaml is as ADOPT recorded it; otherwise
-    nothing is allowlisted and each reason is a high finding."""
-    entries, probs = gitleaks_allow.from_tools(toolrun.product_tools(root))
-    if not entries and not probs:
-        return {}, []
-    sys.path.insert(0, os.path.dirname(toolrun.GATE))
-    from gate import adopt  # noqa: E402 (late: the gate package, as check_exec imports it)
-    if not adopt.adopted(root, TOOLS_REL):
-        probs = probs + ["the gitleaks allowlist in %s was not adopted (the file is not what ADOPT recorded), so it is "
-                         "not applied; propose it in .sdlc-proposals/config/product-tools.yaml for the operator to "
-                         "ADOPT" % TOOLS_REL]
-    if probs:
-        return {}, [("high", "gitleaks:allowlist", p) for p in probs]
-    return {str(e["fingerprint"]): e for e in entries}, []
+    nothing is allowlisted and each reason is a high finding. 0.8.1: shared with check-security
+    (gitleaks_allow.adopted_allowlist)."""
+    allow, probs = gitleaks_allow.adopted_allowlist(root, toolrun.product_tools)
+    return allow, [("high", "gitleaks:allowlist", p) for p in probs]
+
+
+def _repo_rel(loc, target):
+    for base in (target.rstrip("/") + "/", os.path.realpath(target).rstrip("/") + "/"):
+        loc = loc[len(base):] if loc.startswith(base) else loc  # repo-relative, not the scratch export
+    return loc
+
+
+def secret_digests(mode, target, out, common):
+    """0.8.1 (task-tracker MF-63): {fingerprint: sha256 of the matched secret} for one scan, from a second, unredacted
+    gitleaks run whose JSON report stays in a private scratch directory and is deleted at once. Run only when the
+    allowlist has a same-value-as entry; the values are compared, never printed or kept."""
+    import hashlib
+    priv = os.path.join(out, "values-%s" % mode)
+    os.makedirs(priv, mode=0o700)
+    rep = os.path.join(priv, "values.json")
+    args = [a for a in common if a != "--redact"]
+    i = args.index("--report-format")
+    args[i + 1] = "json"
+    try:
+        rc, so, se, _info = toolrun.run("gitleaks", [mode, target, "--report-path", rep] + args, cwd=out,
+                                        writable=[out])
+        if rc != 0 or not os.path.exists(rep):
+            raise RuntimeError("gitleaks %s (value check) exited %d: %s" % (mode, rc, (se or so).strip()[-300:]))
+        out_map = {}
+        for f in read_json(rep) or []:
+            path = _repo_rel(str(f.get("File") or ""), target)
+            fp = gitleaks_allow.fingerprint(mode, str(f.get("Commit") or ""), path, str(f.get("RuleID") or ""),
+                                            f.get("StartLine"))
+            out_map[fp] = hashlib.sha256(str(f.get("Secret") or "").encode("utf-8", "replace")).hexdigest()
+        return out_map
+    finally:
+        shutil.rmtree(priv, ignore_errors=True)
 
 
 def run_gitleaks(root, out, notes):
@@ -108,6 +132,8 @@ def run_gitleaks(root, out, notes):
     allow, refused = gitleaks_allowlist(root)
     findings += refused
     used = set()
+    same = any("same-value-as" in e for e in allow.values())  # 0.8.1 (MF-63)
+    values, pending = {}, []
     empty = os.path.join(out, "no-ignore")
     os.makedirs(empty)
     common = ["--config", os.path.join(CONFIG, "gitleaks.toml"), "--gitleaks-ignore-path", empty,
@@ -131,26 +157,46 @@ def run_gitleaks(root, out, notes):
                                    "not a clean result" % ((se or so).strip().splitlines() or ["no output"])[-1][-200:])
             notes.append("gitleaks history: %s commits scanned" % m.group(1))
         files.append((name, rep, info))
+        if same:
+            values.update(secret_digests(mode, target, out, common))
         for r in sarif_results(read_json(rep)):
-            loc = r["loc"]
-            for base in (target.rstrip("/") + "/", os.path.realpath(target).rstrip("/") + "/"):
-                loc = loc[len(base):] if loc.startswith(base) else loc  # repo-relative, not the scratch export
+            loc = _repo_rel(r["loc"], target)
             path, line = (loc.rsplit(":", 1) + [""])[:2] if re.search(r":\d+$", loc) else (loc, "")
             fp = gitleaks_allow.fingerprint(mode, r.get("commit_full") or "", path, r["rule"], line)
             where = "%s %s (%s)" % (mode == "git" and "history" or "tree", loc, r.get("commit") or "HEAD")
             e = allow.get(fp)
-            if e is not None and e.get("path") == path and gitleaks_allow.fixture_path(path):
+            if e is not None and e.get("path") == path and "same-value-as" in e:
+                pending.append((fp, where, r["rule"], e))  # judged once both scans' values are known
+                continue
+            if e is not None and e.get("path") == path and gitleaks_allow.fixture_path(path) and e.get("fixture") is True:
                 used.add(fp)
                 ALLOWLISTED.append("ALLOWLISTED %s %s: gitleaks:%s, a test fixture by the operator's adopted allowlist "
                                    "(%s)" % (fp, where, r["rule"], " ".join(str(e.get("reason")).split())[:200]))
                 continue
             # A secret in the history or the tree is HIGH: remove it and rotate it.
             findings.append(("high", "gitleaks:%s" % r["rule"], "%s [fingerprint %s]" % (where, fp)))
+    for fp, where, rule, e in pending:
+        ref = str(e.get("same-value-as"))
+        why = None
+        if not gitleaks_allow.tests_fixture(allow.get(ref)) or not gitleaks_allow.quote_path(e.get("path")):
+            why = "its entry's same-value-as %s is not an adopted test fixture under tests/" % ref
+        elif ref not in values:
+            why = "the fixture finding %s it names was not found by this scan, so its value cannot be compared" % ref
+        elif fp not in values or values[fp] != values[ref]:
+            why = "its matched value is not the value of the fixture finding %s" % ref
+        if why:
+            findings.append(("high", "gitleaks:%s" % rule, "%s [fingerprint %s] (not allowlisted: %s)" % (
+                where, fp, why)))
+            continue
+        used.add(fp)
+        ALLOWLISTED.append("ALLOWLISTED %s %s: gitleaks:%s, the same value as the adopted test fixture %s, by the "
+                           "operator's adopted allowlist (%s)" % (fp, where, rule, ref,
+                                                                 " ".join(str(e.get("reason")).split())[:200]))
     notes.append("gitleaks scanned the full history and the HEAD tree with the gate's config; inline "
                  "gitleaks:allow and .gitleaksignore are ignored")
     if allow:
         unused = sorted(set(allow) - used)
-        notes.append("gitleaks: %d finding(s) allowlisted as test fixtures by the adopted allowlist (%d entries)%s" % (
+        notes.append("gitleaks: %d finding(s) allowlisted by the adopted allowlist (%d entries)%s" % (
             len(ALLOWLISTED), len(allow), "; %d entries match no finding: %s" % (len(unused), ", ".join(unused[:5]))
             if unused else ""))
     return findings, files

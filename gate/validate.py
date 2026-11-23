@@ -139,6 +139,57 @@ def result_of(rc):
     return "pass" if rc == 0 else "unknown" if rc == 2 else "fail"
 
 
+VERIFIER_WAIT = 1200  # 0.8.1 (MF-62): seconds the worker waits, at its end, for verifiers still running
+VERIFIER_POLL = 2
+
+
+def verifier_wait():
+    """VERIFIER_WAIT; a test fixture's gate copy (only) may shorten it."""
+    if os.path.exists(os.path.join(GATE_DIR, "_testguard.py")) and os.environ.get("MOADIX_TEST_VERIFIER_WAIT"):
+        return float(os.environ["MOADIX_TEST_VERIFIER_WAIT"])
+    return VERIFIER_WAIT
+
+
+def pending_verifiers(root, st, label):
+    """The verifiers launched at this commit that have not written their evidence yet (gate/verify.py "pending")."""
+    from gate import verify
+    out = []
+    try:  # files only (polled while waiting): a schedule and brief at this commit, and no evidence file yet
+        for name, (role, _base, _hd, _req) in sorted(verify.scheduled(root, st, label).items()):
+            d = verify._dir(root, str(role["phase"]), name)
+            if role.get("triage") or not os.path.exists(os.path.join(d, "schedule.json")):
+                continue
+            if not os.path.exists(verify.evidence_file(root, str(role["phase"]), name)):
+                out.append(name)
+    except Exception:  # noqa: BLE001 (check-verifiers itself reports what it cannot read)
+        return []
+    return out
+
+
+def wait_for_verifiers(root, st, label):
+    deadline = time.time() + verifier_wait()
+    while pending_verifiers(root, st, label) and time.time() < deadline:
+        time.sleep(VERIFIER_POLL)
+
+
+def verify_digest(root, label):
+    from gate import verify
+    return verify.evidence_digest(root, label)
+
+
+def row_of(vid, cmd, c, rc, out):
+    lines = [ln for ln in out.splitlines() if ln.strip() and not ln.strip().startswith(
+        ("MINOR ", "FROZEN-BLOCKER ", "ALLOWLISTED "))]
+    first = lines[0] if lines else ""
+    verifiers = str(c.get("module")) == "check_verifiers"
+    if verifiers and rc != 0:  # 0.8.1: the line that says why, not an OK line of another verifier
+        first = next((ln for ln in lines if not ln.strip().startswith("OK ")), first)
+    # 0.8.1 (MF-62): check-verifiers exits 3 when its only problem is a verifier still writing: STALE, not a failure
+    res = "stale" if rc == 3 and verifiers else result_of(rc)
+    return {"validator": vid, "command": cmd, "exit_code": rc, "result": res, "first_line": first[:200],
+            "output": out[-6000:]}
+
+
 def main():
     if len(sys.argv) != 3:
         sys.stderr.write("usage: validate.py <product-root> <phase-label>\n")
@@ -173,6 +224,7 @@ def main():
             minor = []  # increment 7 (Amendment 3 section 5): MINOR findings go to a file, not the summary
             frozen_blockers = []  # 0.7.2 (ruling A1): shown in full in REVIEW and APPROVE, never blocking
             allowed = []  # 0.8.0 (task-tracker MF-59): allowlisted test-fixture findings, shown in REVIEW
+            rows = {}  # 0.8.1: validator id -> (component, full output), for the end-of-run verifier re-check
             for c in validators_for(label, "feature" if st.get("feature") else "product"):
                 vid = str(c.get("id"))
                 cmd = " ".join([str(c.get("module"))] + [str(a) for a in (c.get("args") or [])])
@@ -181,16 +233,31 @@ def main():
                                     "first_line": ("ruling %s: %s" % (ruling, na[vid][0]))[:200], "output": ""})
                     continue
                 rc, out = run_one(root, c, env)
+                rows[vid] = (c, out)
+                results.append(row_of(vid, cmd, c, rc, out))
+            # 0.8.1 (task-tracker MF-62): check-verifiers ran when the run started, perhaps before a verifier launched
+            # just before it had written its evidence (the critics wrote theirs a minute later, and the result said
+            # MISSING for good). At the end of the run it runs again, after waiting for every verifier still running
+            # (launched at this commit, no evidence yet); one that has not written by then is STALE, never MISSING.
+            for i, r in enumerate(results):
+                c = (rows.get(r["validator"]) or (None, ""))[0]
+                if c is None or str(c.get("module")) != "check_verifiers":
+                    continue
+                if r["exit_code"] == 0 and not pending_verifiers(root, st, label) and \
+                        verify_digest(root, label) == k.get("verifiers"):
+                    continue  # it passed, and no verifier has written or been launched since
+                wait_for_verifiers(root, st, label)
+                rc, out = run_one(root, c, env)
+                rows[r["validator"]] = (c, out)
+                results[i] = row_of(r["validator"], r["command"], c, rc, out)
+                k["verifiers"] = verify_digest(root, label)  # the evidence this result read
+            for vid, (_c, out) in rows.items():
                 minor += ["%s: %s" % (vid, ln.strip()[len("MINOR "):]) for ln in out.splitlines()
                           if ln.strip().startswith("MINOR ")]
                 frozen_blockers += [ln.strip()[len("FROZEN-BLOCKER "):] for ln in out.splitlines()
                                     if ln.strip().startswith("FROZEN-BLOCKER ")]
                 # 0.8.0 (MF-59): from the whole output (the stored output keeps only its tail)
                 allowed += validation.allowlisted([{"validator": vid, "output": out}])
-                first = next((ln for ln in out.splitlines() if ln.strip() and not ln.strip().startswith(
-                    ("MINOR ", "FROZEN-BLOCKER ", "ALLOWLISTED "))), "")
-                results.append({"validator": vid, "command": cmd, "exit_code": rc, "result": result_of(rc),
-                                "first_line": first[:200], "output": out[-6000:]})
         verdict = "pass" if all(r["result"] in ("pass", "n/a-by-profile") for r in results) else (
             "unknown" if any(r["result"] == "unknown" for r in results) and
             not any(r["result"] == "fail" for r in results) else "fail")

@@ -674,7 +674,8 @@ def critic_brief(root, st, name, role, base, hd, required):
           "- topics_checked: [every topic ID listed above, and every carry id under \"Carried into this phase\"]",
           "- findings: [{\"id\": \"C1\", \"topic\": \"<topic ID or carry id>\", \"severity\": \"BLOCKER\" | "
           "\"MAJOR\" | \"MINOR\" | \"CARRY\", \"quote\": \"<the exact words of the document you object to>\", "
-          "\"citation\": \"path:line\" or \"path:start-end\", \"fix\": \"<what would close the gap>\"}]; findings "
+          "\"citation\": \"path:line\" or \"path:start-end\", \"fix\": \"<what would close the gap, at most 1,000 "
+          "characters (0.8.1: the gate cuts a longer one)>\"}]; findings "
           "may be []. A CARRY adds \"defer_rule\" (a defers rule above), \"to\" (the phase it names) and \"class\" "
           "(security, privacy, tenant-isolation or other); a known issue adds \"ac\". A finding the gate listed under "
           "earlier runs adds \"same_as\": \"<GC id>\" (raised again) or \"regression_of\": \"<GC id>\" (a fix or "
@@ -921,7 +922,12 @@ def check_role(root, st, name, role, base, hd, required):
         with open(ef, "rb") as f:
             raw = f.read()
     except OSError:
-        return "missing", ["no evidence at %s" % os.path.relpath(ef, root)], {}
+        # 0.8.1 (task-tracker MF-62): launched at this commit (its brief is current) and not written yet: the verifier
+        # may still be running, so this is never "missing"; the validator worker waits for it, and a result read before
+        # it wrote says stale (gate/validate.py)
+        return "pending", ["launched at %s and has not written its evidence yet (%s); this result is stale until it "
+                           "does, and the validators read it again then" % (
+                               sch.get("scheduled_at") or "?", os.path.relpath(ef, root))], {}
     info = {"evidence_sha256": hashlib.sha256(raw).hexdigest(), "brief_sha256": sch.get("brief_sha256")}
     try:
         ev = json.loads(raw.decode("utf-8"))
