@@ -135,8 +135,8 @@ def test_secrets():
     spec = importlib.util.spec_from_file_location("es_suite", p)
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
-    record(G, "the engine suite's total is 77 (0.7.5: 50, secrets 5 with the control; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3; 0.8.1: rel081 3; 0.8.2: rel082 4)",
-           es.TOTAL == 77 and es.PLAN["test_secrets"][1] == 5, (es.TOTAL, es.PLAN["test_secrets"]))
+    record(G, "the engine suite's total is 79 (0.7.5: 50, secrets 5 with the control; 0.7.6: rel076 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3; 0.8.1: rel081 3; 0.8.2: rel082 4; 0.8.3: rel083 2)",
+           es.TOTAL == 79 and es.PLAN["test_secrets"][1] == 5, (es.TOTAL, es.PLAN["test_secrets"]))
 
 
 # ------------------------------------------------------------------ path

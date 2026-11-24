@@ -362,6 +362,10 @@ def main():
                 return refuse("ERROR: network %s not found" % net)
         elif net not in ("none", "default", "host"):
             return refuse("ERROR: network mode %r not supported by buildkit" % net)
+        if os.environ.get("MOADIX_DOUBLE_BUILD_LOG"):  # 0.8.3: a failing build with the engine output a test gives
+            sys.stdout.write(os.environ["MOADIX_DOUBLE_BUILD_LOG"] + "\n")
+            return refuse("ERROR: failed to build: process \"/bin/sh -c apk add\" did not complete successfully: "
+                          "exit code: 1")
         if os.environ.get("MOADIX_DOUBLE_BUILD_FAIL"):  # a test asks for a failing build, with engine output
             sys.stdout.write("#5 [2/2] RUN npm ci\n#5 npm ERR! token=npm_" + "Q1w2E3r4T5y6" * 3 + "\n")
             return refuse("ERROR: failed to build: process \"/bin/sh -c npm ci\" did not complete successfully: exit "

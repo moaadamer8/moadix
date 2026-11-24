@@ -57,6 +57,10 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
             trivy-built.json by the image ID the engine reports, before the run's cleanup; a second build of the
             same Dockerfile gets a new image ID, and the first run's acceptance (CVE, package, installed version,
             Dockerfile path) still holds
+  rel083    0.8.3: a build under build.network: registry installs one OS package pinned to its exact version (a tiny
+            Alpine image, the package's current version read from the Alpine index on the host) through the build
+            proxy, with the gate's own code; and a build cannot reach a host off the list (refused by the proxy),
+            nor anything without the proxy, while it reaches an Alpine package server
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
             (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
@@ -100,6 +104,10 @@ class Tee:
         self.stream.flush()
         self.f.flush()
 NEEDED = ("node", "node-full", "python", "chromium", "zap", "postgres")
+# 0.8.3: the rel083 group builds FROM a pinned Alpine image (not a gate image; pulled with the others, before the
+# foreign-object record, and counted as the suite's own)
+ALPINE = "alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f"
+ALPINE_BRANCH = "v3.22"
 PREFIX = "es"
 
 
@@ -141,8 +149,9 @@ def ours(run_label):
 
 
 def inspect_pinned(name, fmt):
-    """The suite's only inspect: a pinned image of its own, named as in confinement.yaml (never a foreign object)."""
-    return docker(["image", "inspect", "--format", fmt, confined.image(name)]).stdout
+    """The suite's only inspect: a pinned image of its own, named as in confinement.yaml, or 0.8.3's pinned ALPINE
+    (never a foreign object)."""
+    return docker(["image", "inspect", "--format", fmt, ALPINE if name == "alpine" else confined.image(name)]).stdout
 
 
 def own_images():
@@ -150,6 +159,7 @@ def own_images():
     ids = set()
     for name in NEEDED:
         ids.update(inspect_pinned(name, "{{.Id}}").split())
+    ids.update(inspect_pinned("alpine", "{{.Id}}").split())
     return ids
 
 
@@ -999,13 +1009,109 @@ def test_rel082(_node):
     shutil.rmtree(out2, ignore_errors=True)
 
 
+def alpine_version(pkg, arch):
+    """The version of `pkg` the Alpine package server has now (its APKINDEX, read on the host), or None."""
+    import io
+    import tarfile
+    import urllib.request
+    for repo in ("main", "community"):
+        url = "https://dl-cdn.alpinelinux.org/alpine/%s/%s/%s/APKINDEX.tar.gz" % (ALPINE_BRANCH, repo, arch)
+        with urllib.request.urlopen(url, timeout=60) as f:  # noqa: S310 (a fixed https URL)
+            data = f.read()
+        with tarfile.open(fileobj=io.BytesIO(data)) as tf:
+            idx = tf.extractfile("APKINDEX").read().decode("utf-8", "replace")
+        for block in idx.split("\n\n"):
+            fields = dict(ln.split(":", 1) for ln in block.splitlines() if len(ln) > 2 and ln[1] == ":")
+            if fields.get("P") == pkg:
+                return fields.get("V")
+    return None
+
+
+def build083(check_exec, dockerfile, tools):
+    """Build `dockerfile` as the gate builds a product's Dockerfile (check_exec.build_image, the adopted
+    product-tools.yaml `tools`), in a run of the suite's own: (run, tag, error or None, its log). The run is open."""
+    base = tempfile.mkdtemp(prefix="moadix-rel083-")
+    root = os.path.join(base, "r083")
+    os.makedirs(root)
+    with open(os.path.join(root, "Dockerfile"), "w") as f:
+        f.write(dockerfile)
+    git = ["/usr/bin/git", "-C", root]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "rel083 fixture"], check=True)
+    tmp = os.path.join(base, "tmp")
+    os.makedirs(tmp)
+    export = os.path.join(tmp, "export.tar")
+    subprocess.run(git + ["archive", "--format=tar", "-o", export, "HEAD"], check=True)
+    run_id = rid()
+    SMOKE_RUNS.append(run_id)  # its images carry the suite's label: listed at the end, never removed (ruling 3)
+    r = confined.Run(run_id, tools)
+    tag = "moadix/%s-app:%s" % (run_id, run_id)
+    err, log = None, ""
+    try:
+        check_exec.build_image(r, tools, export, tmp, "app", ".", "Dockerfile", tag)
+    except (confined.Refused, confined.Unavailable) as e:
+        err = str(e)
+        log = "\n".join(str(x) for x in (getattr(e, "log", None) or ())[:2])
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+    return r, tag, err, log
+
+
+def test_rel083(_node):
+    """0.8.3: OS packages in a gate build. A tiny Alpine image with one package pinned to its exact version, built
+    with build.network: registry through the build proxy; and that build cannot reach a host off the list."""
+    G = "rel083"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_exec
+    arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(docker(["version", "--format", "{{.Server.Arch}}"]).stdout.strip())
+    ver = alpine_version("tini", arch) if arch else None
+    tools = {"build": {"network": "registry"}}
+    df = "FROM %s\nRUN apk add --no-cache tini=%s\nUSER 65534\nCMD [\"true\"]\n" % (ALPINE, ver)
+    lint = confined.dockerfile_problems(df, tools)
+    r, tag, err, log = build083(check_exec, df, tools)
+    got = ""
+    try:
+        if not err:
+            _rc, got, _e = r.execute(tag, ["sh", "-c", "apk info -v 2>/dev/null | grep '^tini-'; /sbin/tini --version"],
+                                     "E-lint", [])
+    finally:
+        r.close()
+    record(G, "a tiny Alpine image with one package pinned to its exact version (tini=%s, the server's current one) "
+              "passes the linter and builds through the build proxy; the image has exactly that version" % ver,
+           ver and not lint and not err and ("tini-%s" % ver) in got and "tini version" in got and
+           not r.leftovers(), (arch, ver, lint, err, log[-1500:], got, r.leftovers()))
+
+    # The build reaches only the listed hosts: an off-list host is refused by the proxy (https and plain http), and
+    # nothing is reachable without the proxy; a listed package server is (the control). The RUN prints each result
+    # and ends with exit 1, so the build fails and its output comes back with the error.
+    probe = ("wget -q -T 15 -O /dev/null http://dl-cdn.alpinelinux.org/alpine/%s/main/%s/APKINDEX.tar.gz; "
+             "echo listed=$?; "
+             "wget -T 15 -O /dev/null https://example.com/ 2>&1; echo offlist_https=$?; "
+             "wget -T 15 -O /dev/null http://example.com/ 2>&1; echo offlist_http=$?; "
+             "wget -Y off -q -T 8 -O /dev/null http://1.1.1.1/; echo direct=$?; exit 1") % (ALPINE_BRANCH, arch)
+    df2 = "FROM %s\nRUN %s\n" % (ALPINE, probe)
+    r2, _tag2, err2, log2 = build083(check_exec, df2, tools)
+    r2.close()
+
+    def code(k):
+        m = re.search(r"(?m)^%s=(\d+)" % k, log2)
+        return int(m.group(1)) if m else None
+    record(G, "during a build, a host off the list is refused by the proxy (example.com over https and http: 403), "
+              "nothing is reachable without the proxy, and a listed Alpine package server is reached (the control)",
+           err2 and code("listed") == 0 and code("offlist_https") not in (None, 0) and
+           code("offlist_http") not in (None, 0) and code("direct") not in (None, 0) and
+           "403" in log2 and not r2.leftovers(), (err2, log2[-1500:], r2.leftovers()))
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
         "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4), "test_rel080": ("rel080", 3),
-        "test_rel081": ("rel081", 3), "test_rel082": ("rel082", 4)}
+        "test_rel081": ("rel081", 3), "test_rel082": ("rel082", 4), "test_rel083": ("rel083", 2)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -1065,7 +1171,7 @@ def main():
         print("found stopped compose projects (they do not block; left untouched, never started, stopped or "
               "inspected): %s" % ", ".join(stopped))
     node, py = confined.image("node"), confined.image("python")
-    for img in [confined.image(x) for x in NEEDED]:
+    for img in [confined.image(x) for x in NEEDED] + [ALPINE]:
         p = docker(["pull", "-q", img], timeout=900)
         if p.returncode != 0:
             print("REFUSED: pulling %s failed: %s" % (img, p.stderr.strip()[:300]))
@@ -1089,7 +1195,7 @@ def main():
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
                  (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,)), (test_rel080, (node,)),
-                 (test_rel081, (node,)), (test_rel082, (node,))):
+                 (test_rel081, (node,)), (test_rel082, (node,)), (test_rel083, (node,))):
         if only is None or PLAN[t.__name__][0] in only:
             run_group(t, a)
     left = built_images()

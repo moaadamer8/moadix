@@ -417,9 +417,10 @@ def test_built():
     rc, out = trivy(p, home=old)
     record(G, "control (0.8.1): the built image's fixable High is not seen; only the declared base is scanned",
            rc == 0 and CVE_BUILT not in out, out[-500:])
-    diff = subprocess.run(["/usr/bin/git", "-C", REPO, "diff", OLD, "--", "gate/egress_proxy.py",
+    # 0.8.3 widened the build proxy (the OS package servers); 0.8.2 itself left it as in 0.8.1
+    diff = subprocess.run(["/usr/bin/git", "-C", REPO, "diff", OLD, "70ad949", "--", "gate/egress_proxy.py",
                            "gate/config/confinement.yaml"], capture_output=True, text=True).stdout
-    record(G, "the build proxy's allowed hosts are unchanged (egress_proxy.py and confinement.yaml as in 0.8.1)",
+    record(G, "0.8.2 left the build proxy's allowed hosts unchanged (egress_proxy.py and confinement.yaml as in 0.8.1)",
            diff == "", diff[:400])
 
 
@@ -731,8 +732,8 @@ def test_engine():
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
     text = open(p).read()
-    record(G, "the engine suite has a rel082 group (4 checks), and its total is 77",
-           es.PLAN.get("test_rel082") == ("rel082", 4) and es.TOTAL == 77 and "test_rel082, (node,)" in text,
+    record(G, "the engine suite has a rel082 group (4 checks), and its total is 79 (0.8.3: rel083 2)",
+           es.PLAN.get("test_rel082") == ("rel082", 4) and es.TOTAL == 79 and "test_rel082, (node,)" in text,
            (es.PLAN.get("test_rel082"), es.TOTAL))
     body = text.split("def test_rel082", 1)[1].split("\n# ", 1)[0] if "def test_rel082" in text else ""
     record(G, "it builds a tiny image FROM a pinned image with the gate's own code, scans it with the real pinned trivy "

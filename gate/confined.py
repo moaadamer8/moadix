@@ -17,7 +17,8 @@ anything it cannot establish raises Unavailable (the gate reports UNKNOWN) or Re
   compose_project(doc, run)         section 3.8: the product's compose file is never run as
                                     written; the allowlisted keys are taken into a project the
                                     gate generates and hardens; every other key is refused
-  dockerfile_problems(text)         section 3.9: FROM by digest only; no secret or ssh mounts
+  dockerfile_problems(text)         section 3.9: FROM by digest only; no secret or ssh mounts; 0.8.3: every
+                                    apk add / apt-get install pinned (pkg=version), no upgrades, no fallback
   label_stages(text, run_id)        0.7.9: the run's labels set first in every stage, so every image a build
                                     makes (intermediate, untagged, earlier stages) carries them
   check_output(dir, max_bytes)      no links, devices or oversize output
@@ -34,6 +35,7 @@ import contextlib
 import json
 import os
 import re
+import shlex
 import stat
 import subprocess
 import time
@@ -315,6 +317,274 @@ def dockerfile_problems(text, product_tools=None):
         probs.append("RUN --mount=type=secret|ssh: builds get no secrets and no SSH agent")
     if re.search(r"(?im)^\s*ADD\s+https?://", text or ""):
         probs.append("ADD <url> downloads during the build; builds have no network unless build.network: registry")
+    probs += os_package_problems(text, product_tools)
+    return probs
+
+
+# ------------------------------------------------------------------ OS packages in a build (0.8.3)
+# Every apk add and apt-get install the gate builds names each package at an exact version (pkg=version); an
+# upgrade (apk upgrade, apt-get upgrade, dist-upgrade, full-upgrade) and an unpinned install are refused, naming the
+# line. A pinned version the package server no longer has fails the build (apk: "unable to select packages", apt:
+# "Version ... was not found"); nothing in the RUN may let that failure pass (|| after it, a pipe, a background &,
+# a ; with no set -e before it, an if/while/! test of it, apt-get --ignore-missing), so it never falls back.
+APK_ARG_OPTS = {"-X", "--repository", "-t", "--virtual", "-p", "--root", "--arch", "--keys-dir", "--repositories-file",
+                "--cache-dir", "--wait", "--timeout", "--cache-max-age", "--progress-fd"}
+APT_ARG_OPTS = {"-o", "--option", "-c", "--config-file", "-t", "--target-release", "--default-release"}
+APT_NO_FALLBACK = {"-m", "--ignore-missing", "--fix-missing"}
+APT_TOOLS = ("apt-get", "apt", "aptitude")
+UPGRADES = {"apk": ("upgrade",), "apt": ("upgrade", "dist-upgrade", "full-upgrade", "safe-upgrade")}
+INSTALLS = {"apk": ("add",), "apt": ("install", "reinstall")}
+WRAPPERS = ("sudo", "env", "command", "exec", "nice", "nohup", "time", "then", "do", "else", "{", "(")
+TESTED = ("if", "elif", "while", "until", "!")
+EXACT_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$")
+
+
+PIN_GONE = re.compile(r"(?m)^.*(unable to select packages|E: Version '[^']*' for '[^']*' was not found|"
+                      r"E: Unable to locate package|(required by|breaks): +world\[).*$")
+
+
+def missing_pins(log):
+    """0.8.3: the lines of a failed build's output saying a pinned package version is not on the package server."""
+    return [m.group(0).strip()[:300] for m in PIN_GONE.finditer(log or "")][:10]
+
+
+def dockerfile_instructions(text):
+    """[(line, KEYWORD, rest)] of a Dockerfile: continuation lines joined (comment lines inside one skipped), the
+    escape directive honoured, and a RUN heredoc's body appended to its rest after a newline."""
+    lines = (text or "").split("\n")
+    esc = "\\"
+    for ln in lines:
+        m = re.match(r"^\s*#\s*([A-Za-z]+)\s*=\s*(\S+)\s*$", ln)
+        if not m:
+            break
+        if m.group(1).lower() == "escape" and m.group(2) in ("\\", "`"):
+            esc = m.group(2)
+    out, i = [], 0
+    while i < len(lines):
+        s = lines[i].strip()
+        if not s or s.startswith("#"):
+            i += 1
+            continue
+        start, parts = i + 1, []
+        while i < len(lines):
+            ln = lines[i].rstrip()
+            i += 1
+            if not ln.endswith(esc):
+                parts.append(ln)
+                break
+            parts.append(ln[:-1])
+            while i < len(lines) and (not lines[i].strip() or lines[i].strip().startswith("#")):
+                i += 1
+        whole = "".join(parts).strip()
+        kw, _, rest = whole.partition(" ")
+        kw = kw.split("\t", 1)[0].upper()
+        rest = rest.strip()
+        if kw == "RUN":
+            for m in list(re.finditer(r"<<(-?)([\"']?)([A-Za-z_][A-Za-z0-9_]*)\2", rest)):
+                body = []
+                while i < len(lines):
+                    ln = lines[i]
+                    i += 1
+                    if (ln.lstrip("\t") if m.group(1) else ln).rstrip() == m.group(3):
+                        break
+                    body.append(ln)
+                rest = rest.replace(m.group(0), "", 1)
+                if re.match(r"^\s*((/usr)?/bin/)?(sh|bash|ash|dash)?\s*$", rest):
+                    rest = rest.strip() + "\n" + _heredoc_script(body)
+                    rest = re.sub(r"^\s*((/usr)?/bin/)?(sh|bash|ash|dash)\s*\n", "\n", rest)
+        out.append((start, kw, rest))
+    return out
+
+
+def _heredoc_script(body):
+    """A heredoc's lines as one shell script whose commands end with ; (continuations joined; a line that ends with
+    an operator or a keyword continues on the next)."""
+    text = re.sub(r"\\\n", "", "\n".join(body))
+    out = []
+    for ln in text.split("\n"):
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        cont = re.search(r"(&&|\|\||\||;|\{|\(|\bthen|\bdo|\belse)$", s)
+        out.append(s if cont else s + " ;")
+    return " ".join(out)
+
+
+def _arg_values(instructions, upto, product_tools):
+    """The ARG and ENV values written in the Dockerfile before line `upto` (build.args of the adopted
+    product-tools.yaml override an ARG's default)."""
+    over = {str(k): str(v) for k, v in (((product_tools or {}).get("build") or {}).get("args") or {}).items()}
+    vals = {}
+    for line, kw, rest in instructions:
+        if line >= upto or kw not in ("ARG", "ENV"):
+            continue
+        try:
+            words = shlex.split(rest)
+        except ValueError:
+            continue
+        if kw == "ENV" and len(words) >= 2 and "=" not in words[0]:
+            vals[words[0]] = " ".join(words[1:])
+            continue
+        for w in words:
+            k, eq, v = w.partition("=")
+            if kw == "ARG" and k in over:
+                vals[k] = over[k]
+            elif eq:
+                vals[k] = v
+    return vals
+
+
+def _shell_commands(script):
+    """[(words, op_after)] of a shell script, top level only, redirections dropped; None when it cannot be read."""
+    lex = shlex.shlex(script, posix=True, punctuation_chars=";&|()<>")
+    lex.whitespace_split = True
+    try:
+        toks = list(lex)
+    except ValueError:
+        return None
+    out, words, skip = [], [], False
+    for t in toks:
+        if skip:
+            skip = False
+            continue
+        if t and set(t) <= set(";&|()<>"):
+            if "<" in t or ">" in t:
+                if words and words[-1].isdigit():
+                    words.pop()  # the file descriptor of 2>/dev/null
+                skip = True
+                continue
+            if t in ("(", ")"):
+                out.append((words, ";"))
+                words = []
+                continue
+            out.append((words, t))
+            words = []
+            continue
+        words.append(t)
+    out.append((words, ""))
+    return out
+
+
+def _substitute(word, vals):
+    """$NAME and ${NAME} replaced by the values the Dockerfile gives them; any other $ is left as written."""
+    return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)",
+                  lambda m: vals.get(m.group(1) or m.group(2), m.group(0)), word)
+
+
+def _pin_problem(tok):
+    if "$" in tok or "`" in tok:
+        return "%s has an unresolved variable or command substitution; write the exact version out" % tok
+    m = re.search(r"[=<>~/*?\[]", tok)
+    if not m or m.start() == 0:
+        return "%s is not pinned to an exact version (write %s=<version>)" % (tok, tok if not m else "<package>")
+    name, rest = tok[:m.start()], tok[m.start():]
+    if not rest.startswith("=") or rest.startswith("==") or not EXACT_VERSION.match(rest[1:]):
+        return "%s is not pinned to an exact version (write %s=<version>: no range, release or wildcard)" % (tok, name)
+    return None
+
+
+def _package_command(words):
+    """(family, tool, subcommand, [packages], [problems]) of an apk or apt-get/apt command, else None."""
+    if not words:
+        return None
+    tool = words[0].rsplit("/", 1)[-1]
+    fam = "apk" if tool == "apk" else "apt" if tool in APT_TOOLS else None
+    if not fam:
+        return None
+    argopts = APK_ARG_OPTS if fam == "apk" else APT_ARG_OPTS
+    sub, pkgs, probs, i = None, [], [], 1
+    while i < len(words):
+        w = words[i]
+        i += 1
+        if w.startswith("-") and w != "-":
+            flag = w.split("=", 1)[0]
+            if fam == "apt" and (flag in APT_NO_FALLBACK or (re.match(r"^-[a-zA-Z]+$", w) and "m" in w)):
+                probs.append("%s %s lets a missing version pass; a pinned version that does not exist must fail" %
+                             (tool, w))
+            if "=" in w:
+                continue
+            if flag in argopts or (re.match(r"^-[a-zA-Z]+$", w) and w[-1] in ("oct" if fam == "apt" else "Xtp")):
+                i += 1  # the option's value
+            continue
+        if sub is None:
+            sub = w
+        else:
+            pkgs.append(w)
+    return fam, tool, sub, pkgs, probs
+
+
+def os_package_problems(text, product_tools=None):
+    """0.8.3: the OS package installs of a Dockerfile, each problem naming its line."""
+    probs = []
+    ins = dockerfile_instructions(text)
+    for line, kw, rest in ins:
+        if kw != "RUN":
+            continue
+        rest = re.sub(r"^(--\S+\s+)+", "", rest + " ").strip() if rest.startswith("--") else rest
+        vals = _arg_values(ins, line, product_tools)
+        cmds = None
+        if rest.startswith("["):
+            try:
+                argv = [str(x) for x in json.loads(rest)]
+            except ValueError:
+                argv = None
+            if argv is not None:
+                if len(argv) >= 3 and argv[0].rsplit("/", 1)[-1] in ("sh", "bash", "ash", "dash") and argv[1] == "-c":
+                    rest = argv[2]
+                else:
+                    cmds = [(argv, "")]
+        if cmds is None:
+            cmds = _shell_commands(rest)
+        if cmds is None:
+            if re.search(r"\b(apk|apt-get|apt|aptitude)\b", rest):
+                probs.append("line %d: the RUN cannot be read as a shell command (unbalanced quotes), so its package "
+                             "installs cannot be checked" % line)
+            continue
+        set_e = False
+        for k, (words, op) in enumerate(cmds):
+            tested = False
+            while words and (words[0] in WRAPPERS or words[0] in TESTED or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0])):
+                tested = tested or words[0] in TESTED
+                if words[0] == "env":
+                    words = words[1:]
+                    while words and words[0].startswith("-"):
+                        words = words[1:]
+                    continue
+                words = words[1:]
+            if words[:1] == ["set"] and any(re.match(r"^-[a-zA-Z]*e", w) for w in words[1:]) or \
+                    words[:3] == ["set", "-o", "errexit"]:
+                set_e = True
+            words = [_substitute(w, vals) for w in words]
+            pc = _package_command(words)
+            if not pc:
+                continue
+            fam, tool, sub, pkgs, cprobs = pc
+            shown = " ".join(words)[:120]
+            if sub in UPGRADES[fam]:
+                probs.append("line %d: %s upgrades packages to whatever is newest; install each one pinned instead "
+                             "(%s)" % (line, shown, "apk add <pkg>=<version>" if fam == "apk" else
+                                       "apt-get install <pkg>=<version>"))
+                continue
+            if sub not in INSTALLS[fam]:
+                continue
+            for p in cprobs:
+                probs.append("line %d: %s" % (line, p))
+            for p in pkgs:
+                why = _pin_problem(p)
+                if why:
+                    probs.append("line %d: %s: %s" % (line, shown, why))
+            rest_ops = [cmds[j][1] for j in range(k, len(cmds)) if any(c[0] for c in cmds[j + 1:])]
+            if tested:
+                probs.append("line %d: %s is tested by if/while/!, so a pinned version that does not exist would not "
+                             "fail the build" % (line, shown))
+            elif op in ("|", "|&", "&"):
+                probs.append("line %d: %s is followed by %s, so its failure would not fail the build" % (line, shown, op))
+            elif "||" in rest_ops:
+                probs.append("line %d: %s has || after it, so a pinned version that does not exist would fall back "
+                             "instead of failing the build" % (line, shown))
+            elif ";" in rest_ops and not set_e:
+                probs.append("line %d: %s is followed by ; with no set -e before it, so its failure would not fail "
+                             "the build (use &&)" % (line, shown))
     return probs
 
 
@@ -456,6 +726,21 @@ def read_json_output(d, name, max_bytes=20 << 20):
 
 # ------------------------------------------------------------------ the engine (increment 7d)
 REGISTRIES = ("registry.npmjs.org", "pypi.org", "files.pythonhosted.org")
+# 0.8.3: a build (build.network: registry) may also reach the Alpine and Debian package servers, through its own
+# proxy only; the install step's proxy and every runtime container are unchanged. Debian's images name their
+# sources over plain http (a slim image has no CA bundle), so the build proxy also forwards plain-http GET and HEAD
+# to these hosts on port 80 (apk and apt check the signed package indexes and each package's hash themselves).
+OS_PACKAGE_HOSTS = ("dl-cdn.alpinelinux.org", "deb.debian.org", "security.debian.org")
+
+
+def proxy_hosts(purpose):
+    """The egress proxy's arguments after its port: the hosts it tunnels (CONNECT :443), then, for a build, --http and
+    the hosts it also forwards plain-http GET/HEAD to (:80)."""
+    if purpose == "build":
+        return list(REGISTRIES) + list(OS_PACKAGE_HOSTS) + ["--http"] + list(OS_PACKAGE_HOSTS)
+    return list(REGISTRIES)
+
+
 PROXY_ALIAS = "moadix-proxy"
 SUT_ALIAS = "sut.moadix.test"  # never a bare name: Chromium force-upgrades http://app (.app is HSTS-preloaded)
 # 0.7.7 (the 0.7.6 engine run, MF-50): the browser gates (axe, lhci) open the app as http://sut.localhost:<port>,
@@ -709,7 +994,7 @@ class Run(object):
                  "--user", "%d:%d" % (self.uid, self.uid), "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                  "--read-only", "--memory", "256m", "--pids-limit", "128", "--mount",
                  "type=volume,src=%s,dst=/p,readonly" % proxy_src_vol, img, "python3", "/p/egress_proxy.py", "3128"]
-                + list(REGISTRIES))
+                + proxy_hosts(purpose))
         self.containers.append(name)
         self._d(["network", "connect", "--alias", PROXY_ALIAS, install_net, name])
         return name

@@ -273,6 +273,61 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.8.2 to 0.8.3
+
+0.8.3 changes how the gate builds a product's Dockerfiles (report: `docs/release-0.8.3-report.md`):
+
+- **OS package servers, during builds only:**
+  - A build under `build.network: registry` may now also reach the Alpine and Debian package servers: `dl-cdn.alpinelinux.org`, `deb.debian.org` and `security.debian.org`, like npm and PyPI. Every other host is still refused.
+  - Only the build's own proxy gets them. The install step's proxy (npm and PyPI) is unchanged, and runtime containers stay without network.
+  - Debian images name their sources over plain http, so the build proxy also forwards a plain-http GET or HEAD to those three hosts on port 80. apk and apt check the signed indexes and each package's hash.
+- **A linter on every Dockerfile the gate builds** (the live gates' builds and check-trivy's):
+  - Each `apk add` and `apt-get install` must pin every package to an exact version: `curl=8.14.1-r2`, not `curl`, `curl~8.14`, `curl/bookworm` or `tzdata=2024*`.
+  - `apk upgrade`, `apt-get upgrade`, `dist-upgrade` and `full-upgrade` fail.
+  - Each failure names the Dockerfile line, for example `line 4: apk add --no-cache curl: curl is not pinned to an exact version (write curl=<version>)`.
+  - A version written as `${VAR}` is read from the Dockerfile's `ARG`/`ENV` or the adopted `build.args`. An unset variable fails.
+  - A pinned version the server no longer has fails the build, and the gate says so ("a pinned OS package version is not on the package server ..."). It never falls back: `|| ...` after an install, a pipe, a `;` with no `set -e` before it, an `if` test and `apt-get --ignore-missing` are refused.
+
+It changes:
+- `gate/confined.py`, `gate/egress_proxy.py`, `gate/v1/check_exec.py`;
+- `docs/confinement-design.md` (3.9);
+- the tests, the engine double and the real-engine suite (new group rel083; total 79).
+
+Nothing changes in the managed policy, the hook, the checker program, the Keychain, the overlay, `registry.yaml` or `confinement.yaml`. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.8.3 commit, then `70ad949` (0.8.2). `cat .claude-plugin/plugin.json` shows `"version": "0.8.3"`.
+
+**2. Run the Terminal-only suites.** These cannot run inside Claude Code (Keychain, nested `sandbox-exec`, Docker, or refused by the hook):
+
+```
+cd ~/moadix
+/usr/bin/python3 tests/rel083/run.py                 # last line: 35 checks, 35 passed, 0 failed, 0 skipped (<s> s)
+/usr/bin/python3 tests/rel081/run.py                 # 45 checks, 45 passed, 0 failed, 0 skipped (the enumerator under real sandbox-exec)
+/usr/bin/python3 tests/corpus/run.py                 # the attack corpus (test keychains): every check passes
+/usr/bin/python3 tests/install/render.py             # policy rendering
+/usr/bin/python3 tests/install/dryrun.py             # install/uninstall dry run (test keychain)
+/usr/bin/python3 managed/fetch_tools.py ~/.cache/moadix-tools && /usr/bin/python3 tests/tools/run.py   # with the loopback-server cases
+/usr/bin/python3 tests/confined-engine/run.py        # Docker Desktop running, no other container: 79 checks, 79 passed, 0 failed
+```
+
+The real-engine suite now also pulls a pinned `alpine:3.22@sha256:...` image, with the gate's images and before it records the machine's other objects. Its new rel083 group (2 checks) needs internet on the host:
+- It reads the current version of `tini` from the Alpine index. It builds a tiny Alpine image with `apk add --no-cache tini=<that version>` through the gate's `build_image` under `build.network: registry`, and checks that the image has exactly that version.
+- It builds a probe whose `RUN` tries example.com (https and http), an address without the proxy, and an Alpine package server (the control). Only the package server may be reached, and the proxy must answer 403 for example.com.
+
+To rerun only it: `/usr/bin/python3 tests/confined-engine/run.py --only rel083`. The whole output is in `~/.cache/moadix-engine-suite/last-run.log`.
+
+**3. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   70ad949..<0.8.3 commit>  master -> master`;
+- the tag: `git tag -a v0.8.3 -m "MOADIX 0.8.3" && git push origin v0.8.3`;
+- `/plugin` shows **0.8.3**.
+
+**4. In the product.**
+- Before the next live gate or check-trivy run, pin every package of each `apk add` and `apt-get install` in the Dockerfiles the gate builds (the root `Dockerfile`, the `live.compose` builds, `tests/gate/*`), and remove any `apk upgrade` or `apt-get upgrade`.
+- To find a package's current version: `docker run --rm <the FROM image> sh -c 'apk update -q && apk policy <pkg>'` (Alpine) or `docker run --rm <the FROM image> sh -c 'apt-get update -qq && apt-cache policy <pkg>'` (Debian).
+- A product that installs OS packages during the build needs `build.network: registry` in its adopted `product-tools.yaml`.
+- When a pinned version disappears from the server, the build fails and names it. Pin the new version, and update the `FROM` digest if the base moved on.
+
 ## Updating from 0.8.1 to 0.8.2
 
 0.8.2 changes check-trivy, APPROVE 9, the AC coverage check and the gate's YAML reader (report: `docs/release-0.8.2-report.md`):

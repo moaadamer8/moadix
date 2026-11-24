@@ -658,7 +658,10 @@ def build_image(r, pt, export_tar, tmp, name, ctx, dockerfile, tag):
     finally:
         r.end_step(*step)  # the build's way out (proxy, networks, its volume) ends with the build
     if p.returncode != 0:
-        err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
+        gone = confined.missing_pins(p.stdout.decode(errors="replace") + "\n" + p.stderr.decode(errors="replace"))
+        err = confined.Refused("building %s failed (engine exit %s)%s" % (name, p.returncode, (
+            ": a pinned OS package version is not on the package server (the gate never falls back to another "
+            "version; pin one that exists): %s" % " | ".join(gone)) if gone else ""))
         err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
         raise err
 

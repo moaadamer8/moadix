@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""The allowlisting egress proxy for the confined runner's install step (docs/confinement-design.md 3.4).
+"""The allowlisting egress proxy for the confined runner's install step and builds (docs/confinement-design.md 3.4).
 
-Runs inside a gate-started container that sits on two networks: the run's internal install network
-(no route out) and an egress network. The install container reaches the package registries only
+Runs inside a gate-started container that sits on two networks: the run's internal install (or build)
+network (no route out) and an egress network. The install container reaches the package registries only
 through it. It speaks HTTP CONNECT (for HTTPS) and refuses every host not on the allowlist given on
 the command line, and every port but 443. It never decrypts traffic and carries no credentials.
 
-    python3 egress_proxy.py <port> <host> [<host> ...]
+0.8.3: hosts after --http (a build's OS package servers) may also be fetched over plain http: a GET or HEAD
+in absolute form (http://host/path, port 80 only) is sent to that host as one request (Connection: close).
+Every other method, host or port is refused.
+
+    python3 egress_proxy.py <port> <host> [<host> ...] [--http <host> ...]
 """
 import contextlib
 import select
@@ -35,7 +39,34 @@ def pipe(a, b):
                 s.close()
 
 
-def handle(conn, allowed):
+def plain_http(conn, head, parts, http_allowed):
+    """Forward one absolute-form GET/HEAD to an --http host on port 80; False when the request is not one."""
+    method, url, version = parts
+    if method not in ("GET", "HEAD") or not url.lower().startswith("http://") or not version.startswith("HTTP/1."):
+        return False
+    hostport, _, path = url[7:].partition("/")
+    host, _, port = hostport.partition(":")
+    if host.lower() not in http_allowed or port not in ("", "80") or "@" in hostport:
+        return False
+    lines = head.split(b"\r\n\r\n", 1)[0].split(b"\r\n")[1:]
+    keep = [ln for ln in lines if ln.split(b":", 1)[0].strip().lower() not in
+            (b"host", b"connection", b"proxy-connection", b"proxy-authorization", b"keep-alive")]
+    req = ("%s /%s %s\r\nHost: %s\r\nConnection: close\r\n" % (method, path, version, host.lower())).encode("latin-1")
+    up = socket.create_connection((host, 80), timeout=30)
+    up.sendall(req + b"".join(ln + b"\r\n" for ln in keep) + b"\r\n")
+    try:
+        while True:
+            data = up.recv(65536)
+            if not data:
+                break
+            conn.sendall(data)
+    finally:
+        with contextlib.suppress(OSError):
+            up.close()
+    return True
+
+
+def handle(conn, allowed, http_allowed=frozenset()):
     try:
         conn.settimeout(30)
         head = b""
@@ -46,8 +77,12 @@ def handle(conn, allowed):
             head += chunk
         line = head.split(b"\r\n", 1)[0].decode("latin-1")
         parts = line.split()
+        if len(parts) == 3 and parts[0] != "CONNECT" and http_allowed and plain_http(conn, head, parts, http_allowed):
+            return
         if len(parts) != 3 or parts[0] != "CONNECT":
-            conn.sendall(b"HTTP/1.1 405 Only CONNECT\r\n\r\n")
+            sys.stderr.write("refused %s\n" % (parts[1] if len(parts) == 3 else "a request that is not CONNECT"))
+            conn.sendall(b"HTTP/1.1 403 Not on the MOADIX allowlist\r\n\r\n" if http_allowed and len(parts) == 3
+                         else b"HTTP/1.1 405 Only CONNECT\r\n\r\n")
             return
         host, _, port = parts[1].rpartition(":")
         if host.lower() not in allowed or port != "443":
@@ -67,15 +102,18 @@ def handle(conn, allowed):
 
 
 def main(argv):
-    port, allowed = int(argv[0]), {h.lower() for h in argv[1:]}
+    port, rest = int(argv[0]), list(argv[1:])
+    cut = rest.index("--http") if "--http" in rest else len(rest)
+    allowed, http_allowed = {h.lower() for h in rest[:cut]}, frozenset(h.lower() for h in rest[cut + 1:])
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("0.0.0.0", port))  # noqa: S104 (inside its container; reachable only from the run's internal network)
     srv.listen(64)
-    sys.stderr.write("moadix egress proxy on %d for %s\n" % (port, ", ".join(sorted(allowed))))
+    sys.stderr.write("moadix egress proxy on %d for %s%s\n" % (port, ", ".join(sorted(allowed)), (
+        "; plain http for %s" % ", ".join(sorted(http_allowed))) if http_allowed else ""))
     while True:
         c, _a = srv.accept()
-        threading.Thread(target=handle, args=(c, allowed), daemon=True).start()
+        threading.Thread(target=handle, args=(c, allowed, http_allowed), daemon=True).start()
 
 
 if __name__ == "__main__":

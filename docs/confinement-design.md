@@ -156,12 +156,15 @@ No container receives a Docker socket, ever.
   - `--network none` by default: a Dockerfile that downloads during the build fails. The product installs dependencies in the gate's install step (3.4), whose read-only output is added to the context.
   - A product may declare `build.network: registry` in an adopted product-tools.yaml. The build then uses the classic builder on the gate's egress network, reaching the registry hosts only, through the allowlisting proxy.
   - BuildKit cannot attach to a custom network, so the classic builder is used for those builds.
+  - 0.8.3: a `build.network: registry` build may also reach the Alpine and Debian package servers (dl-cdn.alpinelinux.org, deb.debian.org, security.debian.org), through its own build proxy only. The install step's proxy and every runtime container are unchanged. Debian's images name their sources over plain http (a slim image has no CA bundle), so the build proxy also forwards a plain-http GET or HEAD to those three hosts on port 80, one request per connection; apk and apt verify the signed indexes and each package's hash themselves.
+- **OS packages (0.8.3).** Every `apk add` and `apt-get install` (also `apt`, `aptitude`) names each package at an exact version (`pkg=version`). `apk upgrade`, `apt-get upgrade`, `dist-upgrade`, `full-upgrade` and an unpinned, ranged, wildcard or release-pinned install are refused before the build, each naming its line. A pinned version the server no longer has fails the build, and the gate says so; nothing in the `RUN` may let that failure pass (`||` after the install, a pipe, a `;` with no `set -e` before it, an `if`/`while`/`!` test, `apt-get --ignore-missing`).
 - **Limits and lifetime.** The 3.5 limits apply to the build: a wall clock of 15 min. The image, its build cache and the run's containers are removed after the run.
 
 **Accepted risks of the build:**
 
 - `RUN` steps execute as **root inside the build container**. A non-root build is not possible for arbitrary Dockerfiles, so the builder's isolation (BuildKit/runc inside the Docker VM) is trusted, as in 5.1.
 - With `build.network: registry`, a `RUN` step can talk to the registry hosts. Any upload a registry accepts is a channel out. It carries no secrets, because none are present.
+- 0.8.3: plain http to the OS package servers can be read or altered on the way. apk and apt refuse an index whose signature fails and a package whose hash differs from the signed index, so the risk is a stale or withheld package, not a forged one.
 - The resulting image runs only under 3.2's restrictions, as uid 65534, whatever its `USER` says.
 
 ### 3.10 As built (increment 7d)

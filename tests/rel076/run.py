@@ -455,7 +455,7 @@ def test_engine():
     plan = es.PLAN.get("test_rel076")
     record(G, "the engine suite has a rel076 group of 7 real-engine cases on the smoke-076 fixture",
            plan == ("rel076", 7) and "smoke-076" in open(p).read(), plan)
-    record(G, "its fixed total is 77 (0.7.5: 50, plus the 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3; 0.8.1: rel081 3; 0.8.2: rel082 4)", es.TOTAL == 77, es.TOTAL)
+    record(G, "its fixed total is 79 (0.7.5: 50, plus the 7; 0.7.7: rel077 2; 0.7.8: rel078 4; 0.7.9: rel079 4; 0.8.0: rel080 3; 0.8.1: rel081 3; 0.8.2: rel082 4; 0.8.3: rel083 2)", es.TOTAL == 79, es.TOTAL)
     src = open(p).read()
     for needle, what in (("schemathesis", "MF-54"), ("NoCoverage", "MF-51"), ("ERR_MODULE_NOT_FOUND", "MF-53"),
                          ("CSP-BYPASSED", "MF-49"), ("checked elsewhere", "MF-50"), ("08-traceability", "MF-46"),
