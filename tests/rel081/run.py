@@ -645,8 +645,8 @@ def test_engine():
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
     text = open(p).read()
-    record(G, "the engine suite has a rel081 group (3 checks), and its total is 73",
-           es.PLAN.get("test_rel081") == ("rel081", 3) and es.TOTAL == 73 and "test_rel081, (node,)" in text,
+    record(G, "the engine suite has a rel081 group (3 checks), and its total is 77",
+           es.PLAN.get("test_rel081") == ("rel081", 3) and es.TOTAL == 77 and "test_rel081, (node,)" in text,
            (es.PLAN.get("test_rel081"), es.TOTAL))
     body = text.split("def test_rel081", 1)[1].split("\n# ", 1)[0] if "def test_rel081" in text else ""
     record(G, "it runs the real Schemathesis on smoke-081 with and without refusal-statuses: [413], checks the real "

@@ -333,10 +333,70 @@ def summary(data, limit=8):
     if al:
         out.append("%s (%d): %s" % (ALLOWLISTED_HEAD, len(al), " | ".join(al[:40]) + (
             " | ... and %d more" % (len(al) - 40) if len(al) > 40 else "")))
+    un = unfixed_text(data)
+    if un:
+        out.append(un)
     return out
 
 
-ALLOWLISTED_HEAD = "Allowlisted test-fixture findings, by the operator's adopted allowlist (not blocking)"
+UNFIXED_HEAD = "Unfixed High/Critical image vulnerabilities (no fixed version; residual risk)"
+
+
+def unfixed_key(u):
+    """0.8.2: what an APPROVE's acceptance of one unfixed finding is bound to.
+    - A declared image (`images:`, pinned by digest): CVE, package and the image's digest, which is stable.
+    - An image the gate builds (`dockerfile` set): CVE, package, installed version and the Dockerfile's path (the
+      image's role). Its image ID is NOT in the key: every build carries its run's label (moadix.run=<id>) in the
+      image config, so Docker's ID and trivy's change on every run. A new installed version is a new finding.
+    The ID stays in the evidence (`digest`) for tracing."""
+    if u.get("dockerfile"):
+        return ("built", str(u.get("cve")), str(u.get("package")), str(u.get("installed")), str(u.get("dockerfile")))
+    return ("image", str(u.get("cve")), str(u.get("package")), str(u.get("digest")))
+
+
+def unfixed_digest(items):
+    """0.8.2: the sha256 of an unfixed set: its sorted acceptance keys (unfixed_key), as JSON."""
+    import hashlib
+    rows = sorted({unfixed_key(u) for u in items or [] if isinstance(u, dict)})
+    return hashlib.sha256(json.dumps(rows).encode()).hexdigest()
+
+
+def unfixed_of(output):
+    """0.8.2: ([unfixed finding], only) from a validator's output: its `UNFIXED <json>` lines, and whether it printed
+    UNFIXED-ONLY (its only failures are unfixed findings the last APPROVE did not accept)."""
+    got, only = [], False
+    for ln in (output or "").splitlines():
+        s = ln.strip()
+        if s == "UNFIXED-ONLY":
+            only = True
+        elif s.startswith("UNFIXED {"):
+            try:
+                u = json.loads(s[len("UNFIXED "):])
+            except ValueError:
+                continue
+            if isinstance(u, dict):
+                got.append(u)
+    return got, only
+
+
+def unfixed_text(data):
+    """0.8.2: REVIEW's line for the unfixed set: every finding (CVE, package, image digest, or for a built image its
+    Dockerfile and this build's ID) and whether the last APPROVE accepted it; APPROVE records this set."""
+    un = (data or {}).get("unfixed") or []
+    if not un:
+        return ""
+    rows = ["%s [%s] %s@%s in %s (%s)%s" % (u.get("cve"), u.get("severity"), u.get("package"), u.get("installed"),
+                                          u.get("image"), "Dockerfile %s, this build %s" % (
+                                              u.get("dockerfile"), u.get("digest")) if u.get("dockerfile")
+                                          else u.get("digest"),
+                                          " accepted at ledger seq %s" % u["accepted_seq"] if u.get("accepted_seq")
+                                          else " NOT YET ACCEPTED") for u in un]
+    return "%s (%d, set sha256 %s): %s. APPROVE %s records this set as the operator's acceptance" % (
+        UNFIXED_HEAD, len(un), str(data.get("unfixed_sha256") or unfixed_digest(un))[:12], " | ".join(rows),
+        data.get("phase") or "")
+
+
+ALLOWLISTED_HEAD ="Allowlisted test-fixture findings, by the operator's adopted allowlist (not blocking)"
 
 
 def allowlisted(results):

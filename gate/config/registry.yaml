@@ -283,7 +283,7 @@ components:
     args:
       - --tool
       - trivy
-    timeout: 1800
+    timeout: 4800  # 0.8.2: also builds the product's images (each up to the build tier's 900 s) before scanning
   - id: check-semgrep
     scope: both
     kind: validator

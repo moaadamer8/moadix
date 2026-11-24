@@ -283,8 +283,8 @@ def test_engine():
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
     text = open(p).read()
-    record(G, "the engine suite has a rel079 group (every live gate with two registry builds), and its total is 73 (0.8.0: rel080 3; 0.8.1: rel081 3)",
-           es.PLAN.get("test_rel079") == ("rel079", 4) and es.TOTAL == 73 and "test_rel079, (node,)" in text and
+    record(G, "the engine suite has a rel079 group (every live gate with two registry builds), and its total is 77 (0.8.0: rel080 3; 0.8.1: rel081 3; 0.8.2: rel082 4)",
+           es.PLAN.get("test_rel079") == ("rel079", 4) and es.TOTAL == 77 and "test_rel079, (node,)" in text and
            [g for g, _l in es.LIVE_GATES] == ["schemathesis", "zap", "lhci", "axe"], (es.PLAN.get("test_rel079"), es.TOTAL))
     body = text.split("def built_images", 1)[1].split("\ndef ", 1)[0]
     rel = text.split("def test_rel079", 1)[1].split("\n# ", 1)[0]

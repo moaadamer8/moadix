@@ -1,7 +1,12 @@
 #!/usr/bin/python3
 """Increment-7d: the confined runner against a REAL Docker engine. Terminal only, one command:
 
-    /usr/bin/python3 tests/confined-engine/run.py
+    /usr/bin/python3 tests/confined-engine/run.py                  # every group
+    /usr/bin/python3 tests/confined-engine/run.py --only rel082    # only these groups (comma-separated names)
+
+Every run's output is also written to ~/.cache/moadix-engine-suite/last-run.log (replaced on each run), so a
+failing check's evidence can be read after the terminal is gone. With --only, the static safeguard and the two
+cleanup checks still run; the summary names the groups it ran.
 
 The agent's sandbox cannot reach the Docker socket, so the operator runs this in Terminal. It uses only
 throwaway fixtures and its own containers, volumes and networks, every one labelled moadix.run=es<hex>,
@@ -47,6 +52,11 @@ What it proves, each with a hostile fixture, through gate/confined.py exactly as
   rel079    0.7.9: every live gate with two services built under build.network: registry (smoke-076's app and its
             two-stage worker): each build has its own network and proxy, the run passes, nothing labelled is left, and
             every image the run added (the untagged step and stage images included) carries the run's label
+  rel082    0.8.2: check-trivy builds a tiny image FROM a pinned image, saves it with `docker save`, scans it offline
+            with the real pinned trivy (`trivy image --input`, from ~/.cache/moadix-tools) and records it in
+            trivy-built.json by the image ID the engine reports, before the run's cleanup; a second build of the
+            same Dockerfile gets a new image ID, and the first run's acceptance (CVE, package, installed version,
+            Dockerfile path) still holds
   cleanup   nothing labelled is left; every foreign container, volume, network and image is exactly as before
             (objects an earlier real gate run left, run label x + 10 hex, are the gate's: listed, not compared)
 """
@@ -54,6 +64,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -70,6 +81,24 @@ from gate import confined  # noqa: E402  (the repository's runner and configurat
 
 RESULTS = []
 T0 = time.time()
+LOG = os.path.expanduser("~/.cache/moadix-engine-suite/last-run.log")
+
+
+class Tee:
+    """Everything the suite prints goes to the terminal and to LOG."""
+
+    def __init__(self, stream, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        self.stream, self.f = stream, open(path, "w")
+
+    def write(self, s):
+        self.stream.write(s)
+        self.f.write(s)
+        self.f.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.f.flush()
 NEEDED = ("node", "node-full", "python", "chromium", "zap", "postgres")
 PREFIX = "es"
 
@@ -843,13 +872,140 @@ def test_rel081(_node):
            "%s | fails %s | log:\n%s" % (err, f[:4], log[-1500:]))
 
 
+def saved_ids(image_id):
+    """(config digest, {index and manifest digests}) of `docker save <image_id>`, read from the tar's manifest.json
+    and its OCI index.json (followed into any nested index blob). ("", set()) when it cannot be saved."""
+    import tarfile
+    d = tempfile.mkdtemp(prefix="moadix-rel082-save-")
+    tar = os.path.join(d, "img.tar")
+    try:
+        with open(tar, "wb") as f:
+            if subprocess.run([confined.docker_path(), "save", image_id], stdout=f, timeout=600).returncode != 0:
+                return "", set()
+        with tarfile.open(tar) as tf:
+            def blob(name):
+                try:
+                    return json.load(tf.extractfile(name))
+                except (KeyError, ValueError, TypeError):
+                    return None
+            man = blob("manifest.json") or [{}]
+            cfg = os.path.basename(str(man[0].get("Config") or ""))
+            config = "sha256:" + (cfg[:-5] if cfg.endswith(".json") else cfg) if cfg else ""
+            names, todo = set(), [blob("index.json") or {}]
+            while todo:
+                for m in (todo.pop() or {}).get("manifests") or []:
+                    dg = m.get("digest") or ""
+                    if dg and dg not in names:
+                        names.add(dg)
+                        todo.append(blob("blobs/sha256/" + dg.split(":", 1)[-1]))
+        return config, names
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_rel082(_node):
+    """0.8.2: check-trivy's scan of an image the gate builds, on the real engine with the real pinned trivy: a tiny
+    image built FROM a pinned image by check_exec.build_image, saved with `docker save`, scanned offline with
+    `trivy image --input`, and recorded in trivy-built.json by the image ID the engine reports."""
+    G = "rel082"
+    sys.path.insert(0, os.path.join(REPO, "gate", "v1"))
+    import check_scanners as cs
+    import toolrun
+    toolrun.TOOLS_DIR = os.path.expanduser("~/.cache/moadix-tools")  # managed/fetch_tools.py's cache
+    root = os.path.join(tempfile.mkdtemp(prefix="moadix-rel082-"), "r082")
+    os.makedirs(root)
+    with open(os.path.join(root, "Dockerfile"), "w") as f:
+        f.write("FROM %s\nUSER 65534\nCMD [\"true\"]\n" % confined.image("python"))
+    git = ["/usr/bin/git", "-C", root]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["-c", "user.email=smoke@example.invalid", "-c", "user.name=smoke", "commit", "-qm",
+                          "rel082 fixture"], check=True)
+    out = tempfile.mkdtemp(prefix="moadix-rel082-out-")
+    run_id = rid()
+    SMOKE_RUNS.append(run_id)  # its image carries the suite's label: listed at the end, never removed (ruling 3)
+    cache, scan = cs.trivy_prepare(out)
+    targets = cs.built_targets(root, {})
+    notes = []
+    findings, unfixed, files = cs.scan_built(root, out, cache, scan, {}, targets, notes, run_id=run_id)
+    paths = {n: p for n, p, _i in files}
+    rec = json.load(open(paths["trivy-built.json"])) if "trivy-built.json" in paths else {}
+    built = (rec.get("built") or [{}])[0]
+    tagged = lines(["image", "ls", "-q", "--no-trunc", "--filter", "label=moadix.run=%s" % run_id])
+    record(G, "the gate built the tiny image from the root Dockerfile (the shipped image), and trivy-built.json records "
+              "it by the image ID the engine reports",
+           targets == [("shipped image (Dockerfile)", ".", "Dockerfile")] and len(rec.get("built") or []) == 1 and
+           built.get("digest", "").startswith("sha256:") and built.get("digest") in tagged,
+           (targets, rec, tagged, notes[-2:]))
+    rep = json.load(open(paths["trivy-built-1.json"])) if "trivy-built-1.json" in paths else {}
+    # trivy's Metadata.ImageID is the image's CONFIG digest. The engine's ID (what the gate records) is that same
+    # digest with the classic image store, but the image's index digest with the containerd image store (Docker
+    # Desktop's default), so the two need not be equal. Both are read here from a fresh `docker save` of the
+    # engine's ID: the config the tar names must be trivy's ImageID, and the engine's ID must be that config or an
+    # index/manifest the tar names.
+    config, names = saved_ids(built.get("digest", ""))
+    tid = (rep.get("Metadata") or {}).get("ImageID")
+    record(G, "trivy scanned that saved image (`docker save`, then `trivy image --input`, offline): its report's "
+              "ImageID is the config digest of the image the gate recorded by its engine ID",
+           rep.get("ArtifactType") == "container_image" and tid and tid == config and
+           built.get("digest") in names | {config} and not [f for f in findings if f[1] == "trivy:build"],
+           (rep.get("ArtifactType"), "trivy ImageID", tid, "engine ID", built.get("digest"), "saved config", config,
+            "saved index/manifests", sorted(names), findings[:3]))
+    record(G, "the scan ran before the run's cleanup, and nothing of the run is left (containers, networks, volumes)",
+           not labelled(run_id) and any("the gate built: shipped image (Dockerfile) sha256:" in n for n in notes),
+           (labelled(run_id), notes[-2:]))
+
+    # A second gate run of the same Dockerfile: its run label is in the image config, so the ID changes. An APPROVE 9
+    # binds a built image's unfixed finding to CVE, package, installed version and Dockerfile path (never the ID),
+    # so what the first run's APPROVE recorded still holds. The tiny image may have no unfixed High/Critical, so
+    # every vulnerability trivy reports is treated as one here (no fixed version, severity HIGH): what is checked is
+    # the binding, through the gate's own code (split_unfixed, opcmd.unfixed_payload, check_unfixed).
+    from gate import opcmd, validation
+
+    def as_unfixed(path, digest):
+        doc = json.load(open(path))
+        for res in doc.get("Results") or []:
+            for v in res.get("Vulnerabilities") or []:
+                v.pop("FixedVersion", None)
+                v["Severity"] = "HIGH"
+        return cs.split_unfixed(doc, "built shipped image (Dockerfile)", digest=digest, dockerfile="Dockerfile")[1]
+
+    first = as_unfixed(paths["trivy-built-1.json"], built.get("digest")) if "trivy-built-1.json" in paths else []
+    out2 = tempfile.mkdtemp(prefix="moadix-rel082-out-")
+    run2 = rid()
+    SMOKE_RUNS.append(run2)
+    notes2 = []
+    _f2, _u2, files2 = cs.scan_built(root, out2, cache, scan, {}, targets, notes2, run_id=run2)
+    paths2 = {n: p for n, p, _i in files2}
+    built2 = ((json.load(open(paths2["trivy-built.json"])) if "trivy-built.json" in paths2 else {}).get("built")
+              or [{}])[0]
+    second = as_unfixed(paths2["trivy-built-1.json"], built2.get("digest")) if "trivy-built-1.json" in paths2 else []
+    payload = opcmd.unfixed_payload({"unfixed": first}) or {}
+    real_approved = cs.approved_unfixed
+    cs.approved_unfixed = lambda _root: ({validation.unfixed_key(a) for a in payload.get("findings") or []}, 1)
+    try:
+        still = cs.check_unfixed(root, second, [])
+    finally:
+        cs.approved_unfixed = real_approved
+    record(G, "two real builds of the same Dockerfile (two gate runs) get different image IDs, and the set the first "
+              "run's APPROVE 9 would record still accepts every finding of the second",
+           built.get("digest", "").startswith("sha256:") and built2.get("digest", "").startswith("sha256:") and
+           built.get("digest") != built2.get("digest") and first and len(second) == len(first) and still == [] and
+           not labelled(run2),
+           ("ids", built.get("digest"), built2.get("digest"), "findings", len(first), len(second), "failing",
+            still[:3], notes2[-2:]))
+    shutil.rmtree(os.path.dirname(root), ignore_errors=True)  # the fixture repository
+    shutil.rmtree(out, ignore_errors=True)                     # the saved tar and the reports
+    shutil.rmtree(out2, ignore_errors=True)
+
+
 # The checks each group records (the total is always TOTAL: a crash is one failed check, and the group's checks
 # that never ran are reported as failed, not dropped).
 PLAN = {"test_secrets": ("secrets", 5), "test_host": ("host paths", 6), "test_network": ("network", 7),
         "test_limits": ("limits", 6), "test_output": ("forged output", 5), "test_user": ("user", 5),
         "test_smoke": ("smoke", 13), "test_rel076": ("rel076", 7), "test_rel077": ("rel077", 2),
         "test_rel078": ("rel078", 4), "test_rel079": ("rel079", 4), "test_rel080": ("rel080", 3),
-        "test_rel081": ("rel081", 3)}
+        "test_rel081": ("rel081", 3), "test_rel082": ("rel082", 4)}
 TOTAL = 1 + sum(n for _g, n in PLAN.values()) + 2  # the static check, the groups, the two cleanup checks
 
 
@@ -869,7 +1025,26 @@ def run_group(t, a):
         record(group, "the group recorded %d checks, expected %d" % (len(RESULTS) - start, planned), False, "")
 
 
+def only_groups(argv):
+    """The group names after --only (None: every group); an unknown name is an error, never a silent skip."""
+    if "--only" not in argv:
+        return None, None
+    i = argv.index("--only")
+    names = [x for x in (argv[i + 1] if i + 1 < len(argv) else "").split(",") if x]
+    known = [g for g, _n in PLAN.values()]
+    bad = [x for x in names if x not in known]
+    if not names or bad:
+        return None, "--only takes group names from: %s (got %r)" % (", ".join(known), ",".join(bad or names))
+    return names, None
+
+
 def main():
+    only, err = only_groups(sys.argv[1:])
+    if err:
+        print(err)
+        return 2
+    sys.stdout = Tee(sys.stdout, LOG)
+    print("log: %s" % LOG)
     print("MOADIX confined-engine suite (Terminal only). It never touches anything not labelled moadix.run=%s*." % PREFIX)
     hits = no_prune.scan(REPO)
     record("safeguards", "static: no pruning and no compose down with volumes in the runner, the gates or this suite",
@@ -914,8 +1089,9 @@ def main():
     for t, a in ((test_secrets, (node,)), (test_host, (node,)), (test_network, (node, py)), (test_limits, (node,)),
                  (test_output, (node,)), (test_user, (node,)), (test_smoke, (node,)), (test_rel076, (node,)),
                  (test_rel077, (node,)), (test_rel078, (node,)), (test_rel079, (node,)), (test_rel080, (node,)),
-                 (test_rel081, (node,))):
-        run_group(t, a)
+                 (test_rel081, (node,)), (test_rel082, (node,))):
+        if only is None or PLAN[t.__name__][0] in only:
+            run_group(t, a)
     left = built_images()
     if left:
         print("images built by the live smoke runs, labelled moadix.run=%s*, left in place (nothing here removes an "
@@ -934,7 +1110,8 @@ def main():
     bad = [r for r in RESULTS if not r[2]]
     for g, name, _ok in bad:
         print("FAILED [%s] %s" % (g, name))
-    print("\n%d checks, %d passed, %d failed (%d s)" % (n, n - len(bad), len(bad), time.time() - T0))
+    print("\n%d checks, %d passed, %d failed (%d s)%s" % (n, n - len(bad), len(bad), time.time() - T0,
+                                                     "; only %s" % ",".join(only) if only else ""))
     return 1 if bad else 0
 
 

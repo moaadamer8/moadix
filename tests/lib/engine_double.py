@@ -252,6 +252,15 @@ def build_images(data, dockerfile, build_labels, classic):
     return out + [final], base
 
 
+def dockerfile_text(data, dockerfile):
+    import io
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tf:
+            return tf.extractfile(tf.getmember(os.path.normpath(dockerfile))).read().decode("utf-8", "replace")
+    except (KeyError, tarfile.TarError, AttributeError):
+        return ""
+
+
 def network_ok(s, net):
     return net in BUILTIN_NETWORKS or net in s["networks"]
 
@@ -365,10 +374,34 @@ def main():
             return refuse("ERROR: failed to build: the Dockerfile is not in the context")
         built, base = built
         tag = (opt(a, "-t") or [None])[0]
+        text = dockerfile_text(data, (opt(a, "-f") or ["Dockerfile"])[0])
         for i, labels in enumerate(built):
+            last = i == len(built) - 1
             s.setdefault("images", []).append({"id": "sha256:%064x" % (len(s.get("images") or []) + 1),
-                                               "tag": tag if i == len(built) - 1 else None, "labels": labels,
-                                               "base": base})
+                                               "tag": tag if last else None, "labels": labels,
+                                               "base": base, "dockerfile": text if last else None})
+    elif cmd == "image" and a[1] == "inspect" and "{{.Id}}" in (opt(a, "--format") or [""])[0]:
+        # 0.8.2: a built image's ID (check-trivy records the images the gate builds by it)
+        img = next((x for x in s.get("images") or [] if x.get("tag") == a[-1]), None)
+        if img is None:
+            return refuse("Error response from daemon: No such image: %s" % a[-1])
+        print(img["id"])
+    elif cmd == "save":
+        # 0.8.2: `docker save <tag>` to stdout: a tar holding the double's record of the image (its ID, base and
+        # Dockerfile), which the fixture trivy reads in place of layers
+        import io
+        img = next((x for x in s.get("images") or [] if x.get("tag") == a[-1]), None)
+        if img is None:
+            return refuse("Error response from daemon: reference does not exist")
+        raw = json.dumps({"id": img["id"], "tag": img["tag"], "base": img.get("base"),
+                          "dockerfile": img.get("dockerfile") or ""}).encode()
+        with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tf:
+            ti = tarfile.TarInfo("moadix-double-image.json")
+            ti.size = len(raw)
+            tf.addfile(ti, io.BytesIO(raw))
+        sys.stdout.buffer.flush()
+        with open(os.path.join(BASE, "saves.log"), "a") as f:
+            f.write(json.dumps({"tag": img["tag"], "id": img["id"]}) + "\n")
     elif cmd == "image" and a[1] == "inspect":
         # 0.8.0: the image's own environment (the runner keeps its PATH); --format '{{json .Config.Env}}' only
         print(json.dumps(["PATH=%s" % image_path(a[-1], s)]))

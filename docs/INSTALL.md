@@ -273,6 +273,64 @@ Steps:
 | 28 | `cat ~/moadix-readcheck/.env` | runs and prints `A="encrypted:fixture"` (an encrypted `.env` stays readable) |
 | 29 | `cat ~/moadix-readcheck/cert.pem` | runs and prints `fixture` (certificates stay readable; 0.7.3 does not protect them) |
 
+## Updating from 0.8.1 to 0.8.2
+
+0.8.2 changes check-trivy, APPROVE 9, the AC coverage check and the gate's YAML reader (report: `docs/release-0.8.2-report.md`):
+
+- **Unfixed image vulnerabilities, accepted by APPROVE 9:**
+  - A High or Critical with a fixed version still fails and still cannot be waived.
+  - One with no fixed version is residual risk. It is listed in `trivy-unfixed.json` (CVE, package, image digest, scan date), and REVIEW 9 lists every one.
+  - Only your APPROVE 9 accepts them: its ledger line records the set and its sha256.
+  - check-trivy passes an unfixed finding only when the last APPROVE 9 recorded it. In a declared image (`images:`) it is matched by CVE, package and the image's pinned digest. In an image the gate builds it is matched by CVE, package, installed version and Dockerfile path, because a built image's ID changes on every run (the run's label is in its config). A new finding, or a new installed version, fails until the next APPROVE 9, and one that gets a fix fails.
+  - The report's `## Residual risk` lines are documentation; text the agent writes never accepts anything.
+  - APPROVE 9 (and WITH-WAIVERS) is refused if any other validator fails.
+- **Built images:**
+  - check-trivy also builds and scans the images the gate builds from the product's Dockerfiles: the root `Dockerfile`, the `live.compose` builds and `tests/gate/*`.
+  - It scans them before the run's cleanup and records each by digest in `trivy-built.json`.
+  - `images:` (bases) is still scanned.
+  - The build proxy's allowed hosts do not change.
+- **MF-66:** the ac-coverage-critic's check reads `traceability-exemptions.yaml`. An exempted acceptance criterion (`untested-story`, or the new `untested-ac`) passes check-verifiers with no test.
+- **YAML:** an unquoted list item with a colon (`- postgres:17`) is now read as a string, not as a one-key map, so `images:` entries need no quotes.
+
+It changes:
+- the gate's Python, including APPROVE in `gate/opcmd.py` and the validator worker;
+- check-trivy's timeout in `registry.yaml`;
+- `/moadix:coverage` (two paragraphs, generated);
+- the tests, the engine double and the real-engine suite (new group rel082; total 76).
+
+Nothing changes in the managed policy, the hook, the checker program, the Keychain, the overlay or the build proxy. Run each command in **Terminal** unless the step says otherwise; stop at the first one whose last line differs.
+
+**1. Confirm the version.** `cd ~/moadix && git log --oneline -2`. Expected: the 0.8.2 commit, then `867970f` (0.8.1). `cat .claude-plugin/plugin.json` shows `"version": "0.8.2"`.
+
+**2. Run the Terminal-only suites.** These cannot run inside Claude Code (Keychain, nested `sandbox-exec`, Docker, or refused by the hook):
+
+```
+cd ~/moadix
+/usr/bin/python3 tests/rel082/run.py                 # last line: 58 checks, 58 passed, 0 failed, 0 skipped (<s> s)
+/usr/bin/python3 tests/rel081/run.py                 # 45 checks, 45 passed, 0 failed, 0 skipped (the enumerator under real sandbox-exec)
+/usr/bin/python3 tests/corpus/run.py                 # the attack corpus (test keychains): every check passes
+/usr/bin/python3 tests/install/render.py             # policy rendering
+/usr/bin/python3 tests/install/dryrun.py             # install/uninstall dry run (test keychain)
+/usr/bin/python3 managed/fetch_tools.py ~/.cache/moadix-tools && /usr/bin/python3 tests/tools/run.py   # with the loopback-server cases
+/usr/bin/python3 tests/confined-engine/run.py        # Docker Desktop running, no other container: 77 checks, 77 passed, 0 failed
+```
+
+The real-engine suite needs `managed/fetch_tools.py` to have filled `~/.cache/moadix-tools` first (its new rel082 group runs the pinned trivy from there). Its new rel082 group (4 checks) builds a tiny image FROM the pinned python image with the gate's own code, saves it with `docker save`, scans it with `trivy image --input` and checks that `trivy-built.json` records the image ID the engine reports. It then builds the same Dockerfile again in a second run and checks that the ID changed and that the first run's acceptance still holds. The images are labelled with the suite's run and left in place, like the other images the suite builds.
+
+The real-engine suite writes its whole output to `~/.cache/moadix-engine-suite/last-run.log` (replaced on each run); `grep -A3 '^FAIL' ~/.cache/moadix-engine-suite/last-run.log` shows each failing check with its evidence. `--only <group>[,<group>]` reruns only those groups (the static safeguard and the two cleanup checks still run), for example `/usr/bin/python3 tests/confined-engine/run.py --only rel082`.
+
+**3. Reinstall, check, push, tag and refresh** as in steps 6–9 of "Updating from 0.7.5 to 0.7.7", with these values:
+- the product-strings check: `(1 commits, <n> strings checked)`;
+- the push: `   867970f..<0.8.2 commit>  master -> master`;
+- the tag: `git tag -a v0.8.2 -m "MOADIX 0.8.2" && git push origin v0.8.2`;
+- `/plugin` shows **0.8.2**.
+
+**4. In the product (phase 9).**
+- Check that each Dockerfile the gate builds has its `FROM` pinned by `@sha256:`.
+- After `/moadix:request-review 9`, REVIEW 9 lists the unfixed High/Critical findings ("Unfixed High/Critical image vulnerabilities ... NOT YET ACCEPTED"), each with its CVE, package and image digest (for a built image, its Dockerfile and this build's ID).
+- Read them. If every other validator passes, `APPROVE 9 <code>` accepts exactly that set, and its reply names each one. A finding that appears later fails check-trivy until you approve again.
+- For phase 8, propose `traceability-exemptions.yaml` with an `untested-ac` or `untested-story` entry (with a reason) for each criterion no test can verify, then `ADOPT <code>`.
+
 ## Updating from 0.8.0 to 0.8.1
 
 0.8.1 fixes what stopped the first product's phase 9 on 0.8.0 (report: `docs/release-0.8.1-report.md`):

@@ -191,7 +191,7 @@ def _parse_list(rows, i, indent):
             raise YamlError("unexpected indent in list at %r" % txt)
         body = txt[2:].strip()
         i += 1
-        if ":" in body and not _looks_scalar(body):
+        if _is_map_entry(body) and not _looks_scalar(body):
             # inline first key of a mapping item, e.g. "- id: 0"
             sub = [(ind + 2, body)]
             while i < len(rows) and rows[i][0] > ind:
@@ -212,6 +212,16 @@ def _parse_list(rows, i, indent):
         else:
             items.append(_scalar(body))
     return items, i
+
+
+# 0.8.2: a mapping item starts with a key and `: ` (or `:` at the end of the line), as in YAML. An unquoted scalar
+# with a colon in it (`- postgres:17`, `- repo/app@sha256:<hex>`, `- http://x`) stays a string; it used to be read
+# as a one-key map.
+MAP_ENTRY = re.compile(r"""^(?:"[^"]*"|'[^']*'|[^\s"'#:][^:]*?)\s*:(?:\s|$)""")
+
+
+def _is_map_entry(body):
+    return MAP_ENTRY.match(body) is not None
 
 
 def _looks_scalar(body):

@@ -179,7 +179,7 @@ def verify_digest(root, label):
 
 def row_of(vid, cmd, c, rc, out):
     lines = [ln for ln in out.splitlines() if ln.strip() and not ln.strip().startswith(
-        ("MINOR ", "FROZEN-BLOCKER ", "ALLOWLISTED "))]
+        ("MINOR ", "FROZEN-BLOCKER ", "ALLOWLISTED ", "UNFIXED"))]
     first = lines[0] if lines else ""
     verifiers = str(c.get("module")) == "check_verifiers"
     if verifiers and rc != 0:  # 0.8.1: the line that says why, not an OK line of another verifier
@@ -224,6 +224,7 @@ def main():
             minor = []  # increment 7 (Amendment 3 section 5): MINOR findings go to a file, not the summary
             frozen_blockers = []  # 0.7.2 (ruling A1): shown in full in REVIEW and APPROVE, never blocking
             allowed = []  # 0.8.0 (task-tracker MF-59): allowlisted test-fixture findings, shown in REVIEW
+            unfixed, unfixed_only = [], []  # 0.8.2
             rows = {}  # 0.8.1: validator id -> (component, full output), for the end-of-run verifier re-check
             for c in validators_for(label, "feature" if st.get("feature") else "product"):
                 vid = str(c.get("id"))
@@ -258,6 +259,12 @@ def main():
                                     if ln.strip().startswith("FROZEN-BLOCKER ")]
                 # 0.8.0 (MF-59): from the whole output (the stored output keeps only its tail)
                 allowed += validation.allowlisted([{"validator": vid, "output": out}])
+                # 0.8.2: the unfixed image findings (REVIEW lists them; APPROVE records the set) and whether they are the
+                # validator's only failures
+                got, only = validation.unfixed_of(out)
+                unfixed += got
+                if only:
+                    unfixed_only.append(vid)
         verdict = "pass" if all(r["result"] in ("pass", "n/a-by-profile") for r in results) else (
             "unknown" if any(r["result"] == "unknown" for r in results) and
             not any(r["result"] == "fail" for r in results) else "fail")
@@ -272,6 +279,8 @@ def main():
                 "finished_at": now(), "minor": len(minor), "minor_file": os.path.relpath(mf, root),
                 "frozen_blockers": frozen_blockers,
                 "allowlisted": allowed,  # 0.8.0 (MF-59): shown in REVIEW
+                "unfixed": unfixed, "unfixed_sha256": validation.unfixed_digest(unfixed) if unfixed else None,
+                "unfixed_only": unfixed_only,  # 0.8.2: listed in REVIEW; APPROVE records the set
                 "verdict": verdict, "results": results}
         tmpf = validation.cache_file(root, label) + ".tmp"
         with open(tmpf, "w") as f:

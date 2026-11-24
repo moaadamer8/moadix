@@ -605,44 +605,8 @@ def start_live(r, root, pt, export_tar, tmp, net):
     for name, svc in proj["services"].items():
         src = doc["services"][name]
         if "build" in src:
-            b = src["build"] if isinstance(src["build"], dict) else {"context": src["build"]}
-            ctx, dockerfile = str(b.get("context") or "."), str(b.get("dockerfile") or "Dockerfile")
-            text = _member(export_tar, os.path.normpath(os.path.join(ctx, dockerfile)))
-            probs = confined.dockerfile_problems(text, pt)
-            if probs:
-                raise confined.Refused("%s's Dockerfile: %s" % (name, "; ".join(probs)))
-            # 0.7.9: the engine builds the Dockerfile with the run's labels set first in every stage, so every image the
-            # build makes (each step's, each earlier stage's, untagged) carries them, not only the tagged one
-            ctx_tar = _context_tar(export_tar, ctx, tmp, dockerfile=dockerfile,
-                                   replace=confined.label_stages(text, r.id).encode("utf-8"))
-            bnet, step = None, ([], [], [])
-            if confined.build_network(pt) == "registry":
-                # section 3.9: the classic builder on an internal network whose only way out is the allowlisting
-                # proxy (0.7.4: the network used to be named but never created). 0.7.9: each built service is its own
-                # step, with its own networks, proxy and volume (r.unique), removed when its build ends; the second
-                # built service used to create the first one's build network again, which the engine refuses
-                bnet, benet = r.network("build"), r.network("build-egress", internal=False)
-                pvol = r.volume("build-proxy")
-                step = ([], [bnet, benet], [pvol])
-                try:
-                    r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
-                           confined.image("python"))
-                    step[0].append(r.proxy(bnet, benet, pvol, "build"))  # 0.7.6 (MF-54): not the install proxy's name
-                except BaseException:
-                    r.end_step(*step)
-                    raise
-            try:
-                args, envb = confined.build_argv(r.id, svc["image"], dockerfile, confined.limits("build", pt), pt,
-                                                 network=bnet)
-                with open(ctx_tar, "rb") as f:
-                    p = subprocess.run([r.d] + args, stdin=f, capture_output=True,
-                                       timeout=confined.limits("build", pt)["wall_s"], env=dict(os.environ, **envb))
-            finally:
-                r.end_step(*step)  # the build's way out (proxy, networks, its volume) ends with the build
-            if p.returncode != 0:
-                err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
-                err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
-                raise err
+            ctx, dockerfile = compose_build(src["build"])
+            build_image(r, pt, export_tar, tmp, name, ctx, dockerfile, svc["image"])
         argv = svc.get("command") or []
         argv = argv if isinstance(argv, list) else str(argv).split()
         r.execute(svc["image"], [str(x) for x in argv], "L", [], network=net, env=svc.get("environment") or {},
@@ -650,6 +614,53 @@ def start_live(r, root, pt, export_tar, tmp, net):
                   name="moadix-%s-svc-%s" % (r.id, name),
                   detach=True)
     return port, notes
+
+
+def compose_build(build):
+    """(context, dockerfile) of a compose service's `build:`."""
+    b = build if isinstance(build, dict) else {"context": build}
+    return str(b.get("context") or "."), str(b.get("dockerfile") or "Dockerfile")
+
+
+def build_image(r, pt, export_tar, tmp, name, ctx, dockerfile, tag):
+    """Build one of the product's Dockerfiles from the HEAD export, tagged `tag`, in run `r` (section 3.9). 0.8.2:
+    shared by the live gates and check-trivy's scan of the images the gate builds. Raises Refused (with .log on a
+    failed build)."""
+    text = _member(export_tar, os.path.normpath(os.path.join(ctx, dockerfile)))
+    probs = confined.dockerfile_problems(text, pt)
+    if probs:
+        raise confined.Refused("%s's Dockerfile: %s" % (name, "; ".join(probs)))
+    # 0.7.9: the engine builds the Dockerfile with the run's labels set first in every stage, so every image the
+    # build makes (each step's, each earlier stage's, untagged) carries them, not only the tagged one
+    ctx_tar = _context_tar(export_tar, ctx, tmp, dockerfile=dockerfile,
+                           replace=confined.label_stages(text, r.id).encode("utf-8"))
+    bnet, step = None, ([], [], [])
+    if confined.build_network(pt) == "registry":
+        # section 3.9: the classic builder on an internal network whose only way out is the allowlisting
+        # proxy (0.7.4: the network used to be named but never created). 0.7.9: each built service is its own
+        # step, with its own networks, proxy and volume (r.unique), removed when its build ends; the second
+        # built service used to create the first one's build network again, which the engine refuses
+        bnet, benet = r.network("build"), r.network("build-egress", internal=False)
+        pvol = r.volume("build-proxy")
+        step = ([], [bnet, benet], [pvol])
+        try:
+            r.load(pvol, _write(tmp, "bproxy.tar", _tar_of({"egress_proxy.py": _rb(os.path.join(GATE, "egress_proxy.py"))})),
+                   confined.image("python"))
+            step[0].append(r.proxy(bnet, benet, pvol, "build"))  # 0.7.6 (MF-54): not the install proxy's name
+        except BaseException:
+            r.end_step(*step)
+            raise
+    try:
+        args, envb = confined.build_argv(r.id, tag, dockerfile, confined.limits("build", pt), pt, network=bnet)
+        with open(ctx_tar, "rb") as f:
+            p = subprocess.run([r.d] + args, stdin=f, capture_output=True,
+                               timeout=confined.limits("build", pt)["wall_s"], env=dict(os.environ, **envb))
+    finally:
+        r.end_step(*step)  # the build's way out (proxy, networks, its volume) ends with the build
+    if p.returncode != 0:
+        err = confined.Refused("building %s failed (engine exit %s)" % (name, p.returncode))
+        err.log = (p.stdout.decode(errors="replace"), p.stderr.decode(errors="replace"), p.returncode)
+        raise err
 
 
 def _member(tar_path, rel):

@@ -50,6 +50,8 @@ def main(argv):
             print("FROZEN-BLOCKER %s:%s: %s" % (verify.PLUGIN, name, m))
         for w in info.get("waived") or []:
             print("OK %s:%s: waived by the operator: %s" % (verify.PLUGIN, name, w))
+        for a in info.get("exempt_acs") or []:  # 0.8.2 (MF-66): traceability-exemptions.yaml, as ADOPT recorded it
+            print("OK %s:%s: untested and exempt in traceability-exemptions.yaml: %s" % (verify.PLUGIN, name, a))
         if status == "ok":
             print("OK %s:%s evidence %s (brief %s): %d findings%s, citations resolve, stamped HEAD" % (
                 verify.PLUGIN, name, info.get("evidence_sha256", "")[:12], info.get("brief_sha256", "")[:12],

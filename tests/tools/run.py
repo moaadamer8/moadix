@@ -353,16 +353,16 @@ def test_trivy():
     clean_lock = lockfile("is-number", "7.0.0",
                           "sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==")
     df_ok = "FROM alpine:3.19\nRUN adduser -D app\nUSER app\nHEALTHCHECK CMD true\nCMD [\"true\"]\n"
-    p = bare_product("trivy-clean", {"Dockerfile": df_ok, "package-lock.json": clean_lock})
+    p = bare_product("trivy-clean", {"docker/Dockerfile": df_ok, "package-lock.json": clean_lock})
     rc, out = check(p, "check_scanners", "--tool", "trivy")
     record("trivy", "clean: a non-root Dockerfile and a clean lockfile pass (DB downloaded, scan offline)", rc == 0,
            fails_line(out) if rc else "rc=0")
     df_root = "FROM alpine:3.19\nUSER root\nCMD [\"true\"]\n"
-    p = bare_product("trivy-planted", {"Dockerfile": df_root, "package-lock.json": clean_lock})
+    p = bare_product("trivy-planted", {"docker/Dockerfile": df_root, "package-lock.json": clean_lock})
     rc, out = check(p, "check_scanners", "--tool", "trivy")
     record("trivy", "planted misconfiguration (image runs as root, DS-0002 HIGH) fails", rc == 1 and "DS-0002" in out,
            fails_line(out))
-    p = bare_product("trivy-bypass", {"Dockerfile": df_root, "package-lock.json": clean_lock,
+    p = bare_product("trivy-bypass", {"docker/Dockerfile": df_root, "package-lock.json": clean_lock,
                                       ".trivyignore": "DS-0002\nAVD-DS-0002\n",
                                       "trivy.yaml": "misconfiguration:\n  scanners: []\n"})
     rc, out = check(p, "check_scanners", "--tool", "trivy")
@@ -721,8 +721,9 @@ def test_live():
     record("live", "planted: no video recorded fails (and a cited artifact that does not exist fails)",
            rc != 0 and "no video" in out and "does not exist" in out, " ".join(out.split())[:300])
     # live probe and Arazzo: never a production URL
-    surf = ("contract: sdlc/05-lld/notes.openapi.yaml\nenumerate:\n  method: command\n"
-            "  command: [\"python3\", \"scripts/routes.py\"]\n")
+    surf = ("contract: sdlc/05-lld/notes.openapi.yaml\nenumerate:\n  api:\n    method: command\n"
+            "    command: [\"python3\", \"scripts/routes.py\"]\n"
+            "  screens:\n    method: none\n    reason: the fixture app has no screens\n    owner: fixture\n")
     p2 = bare_product("live-probe", {"sdlc/05-lld/notes.openapi.yaml": OPENAPI, "sdlc/05-lld/notes.arazzo.yaml": ARAZZO,
                                      "scripts/routes.py": "print('GET /notes')\n"},
                       "live:\n  base_url: https://shop.example.com\n")

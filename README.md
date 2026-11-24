@@ -107,6 +107,7 @@ The agent can call `/moadix:request-review <phase>` (plugin) to say a phase is r
 /usr/bin/python3 tests/rel079/run.py       # 0.7.9: unique per-step names (two registry builds), every built image labelled
 /usr/bin/python3 tests/rel080/run.py       # 0.8.0: image PATH kept (postgres as a service), service logs on a failed wait, SEC references, gitleaks fixture allowlist
 /usr/bin/python3 tests/rel081/run.py       # 0.8.1: quoted fixture values allowlisted, check-security applies the allowlist, pinned Node for the enumerator, 413 for ST201, stale verifier evidence, anonymous volumes, long critic fixes
+/usr/bin/python3 tests/rel082/run.py       # 0.8.2: unfixed image High/Critical accepted only by APPROVE 9 (ledger set), scans of the images the gate builds, exempted ACs, list items with a colon
 /usr/bin/python3 tests/install/no_product_strings.py   # before a push: no overlay value or home path in new commits
 /usr/bin/python3 tests/install/render.py   # policy rendering: marketplace allowlist
 /usr/bin/python3 tests/install/dryrun.py   # install/uninstall dry run (Terminal; test keychain)

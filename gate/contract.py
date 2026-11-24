@@ -1615,7 +1615,27 @@ def coverage_doc():
          "fingerprint>\"` in place of `fixture: true`; the gate applies it only when the quoted value is that "
          "fixture's. check-security's own secret scan applies the same allowlist. **Schemathesis:** an operation "
          "whose contract documents a refusal status ST201 does not count (413 for a body over the limit) is accepted "
-         "by `schemathesis: refusal-statuses: [413]` in the same file, adopted the same way.",
+         "by `schemathesis: refusal-statuses: [413]` in the same file, adopted the same way. **Image "
+         "vulnerabilities:** check-trivy scans the images declared under `images:` (bases) and every image the gate "
+         "builds from the product's Dockerfiles: the root `Dockerfile` (the shipped image), each `build:` of "
+         "`live.compose`, and each Dockerfile under `tests/gate/`. Each is built as the live gates build it (FROM "
+         "pinned by digest, the same build network), scanned before the run is cleaned up and recorded by its image "
+         "ID in `trivy-built.json`; a Dockerfile the gate cannot build fails. Declaring a base never exempts what is "
+         "built on it. check-trivy fails on a High or Critical that has a fixed version (never waivable: update the "
+         "image). One with no fixed version is residual risk: the gate lists it in `trivy-unfixed.json` (CVE, "
+         "package, image digest, scan date), REVIEW 9 lists every one, and the operator accepts them only by "
+         "APPROVE 9, whose ledger line records the set. check-trivy passes an unfixed finding only when the last "
+         "APPROVE 9 recorded it: for a declared image by CVE, package and the image's pinned digest; for a built "
+         "image by CVE, package, installed version and Dockerfile path, since a built image's ID changes on every "
+         "run (the run's label is in its config). A new one, or a new installed version, fails until the next "
+         "APPROVE 9. Text you write never accepts anything: "
+         "describe each one under `## Residual risk` in `09-security-report.md` as documentation. Every scan "
+         "checks again, so one that gets a fix fails from then on.",
+         "",
+         "**Phase 8: exempted acceptance criteria.** An acceptance criterion no test can verify here is exempted in "
+         "`.sdlc-proposals/config/traceability-exemptions.yaml` (ADOPT): `{kind: untested-story, story: US-001, "
+         "reason: ...}` for a whole story, or `{kind: untested-ac, ac: US-001/AC-2, reason: ...}` for one criterion. "
+         "The ac-coverage-critic's check (check-verifiers) then accepts it with no test and prints it as exempt.",
          "",
          "**Claude Code memory is off in a product.** The gate refuses writes to `~/.claude/projects/*/memory/`: a "
          "note there would reach later sessions without the operator. A lasting instruction goes in "

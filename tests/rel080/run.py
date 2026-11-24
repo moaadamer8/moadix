@@ -463,8 +463,8 @@ def test_engine():
     es = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(es)
     text = open(p).read()
-    record(G, "the engine suite has a rel080 group (the official postgres image as a live service), and its total is 73 (0.8.1: rel081 3)",
-           es.PLAN.get("test_rel080") == ("rel080", 3) and es.TOTAL == 73 and "test_rel080, (node,)" in text,
+    record(G, "the engine suite has a rel080 group (the official postgres image as a live service), and its total is 77 (0.8.1: rel081 3; 0.8.2: rel082 4)",
+           es.PLAN.get("test_rel080") == ("rel080", 3) and es.TOTAL == 77 and "test_rel080, (node,)" in text,
            (es.PLAN.get("test_rel080"), es.TOTAL))
     body = text.split("def test_rel080", 1)[1].split("\n# ", 1)[0] if "def test_rel080" in text else ""
     db = open(os.path.join(FIX80, "db.Dockerfile")).read()

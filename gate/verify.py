@@ -384,6 +384,36 @@ def ac_ids(story_list):
     return ["%s/%s" % (sid, ac) for sid, _t, acs, _p, _n in story_list for ac, _l in acs]
 
 
+def ac_exemptions(root):
+    """0.8.2 (MF-66): {story id or "US-n/AC-n": reason} from the adopted .sdlc/config/traceability-exemptions.yaml,
+    the file check-traceability reads. `kind: untested-story` (`story`, `reason`) exempts every acceptance
+    criterion of that story; `kind: untested-ac` (`ac: "US-001/AC-2"`, `reason`) exempts one. An entry without a
+    reason exempts nothing. An exempted criterion may be unmapped or have no test; a test it does cite is still
+    checked."""
+    from .v1 import hlib
+    p = os.path.join(root, state.SDLC, "config", "traceability-exemptions.yaml")
+    if not os.path.exists(p):
+        return {}
+    try:
+        doc = hlib.load_yaml(p) or {}
+    except Exception:
+        return {}
+    out = {}
+    for e in (doc.get("exemptions") if isinstance(doc, dict) else None) or []:
+        if not isinstance(e, dict) or not str(e.get("reason") or "").strip():
+            continue
+        kind, reason = str(e.get("kind") or ""), str(e.get("reason")).strip()
+        if kind == "untested-story":
+            key = str(e.get("story") or "").strip().upper().replace("_", "-").replace(" ", "-")
+            if re.match(r"^(?:US|NFR)-\d+$", key):
+                out[key] = reason
+        elif kind == "untested-ac":
+            m = re.match(r"^((?:US|NFR)-\d+)/(AC-\d+)$", str(e.get("ac") or "").strip(), re.I)
+            if m:
+                out["%s/%s" % (m.group(1).upper(), m.group(2).upper())] = reason
+    return out
+
+
 # ---------------------------------------------------------------- live verifier (increment 5)
 # The phase-10a live verifier drives the running app through MOADIX's pinned Playwright
 # MCP (plugin.json: mcp__plugin_moadix_playwright__*). Its network-reading tools are
@@ -1017,8 +1047,14 @@ def check_role(root, st, name, role, base, hd, required):
         for e in cov:
             if isinstance(e, dict) and isinstance(e.get("ac"), str):
                 got[e["ac"]] = e.get("tests")
+        exempt = ac_exemptions(root)  # 0.8.2 (MF-66)
+        info["exempt_acs"] = []
         for ac in want:
             tests = got.get(ac)
+            why = exempt.get(ac) or exempt.get(ac.split("/", 1)[0])
+            if why and (not isinstance(tests, list) or not tests):
+                info["exempt_acs"].append("%s (%s)" % (ac, why[:120]))
+                continue
             if ac not in got:
                 probs.append("coverage: %s is not mapped" % ac)
             elif not isinstance(tests, list) or not tests:

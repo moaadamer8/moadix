@@ -392,12 +392,35 @@ def _approve_gate(root, st, label):
             hint = "; the agent must commit the work first; the gate then runs them when its turn ends"
         return False, "the phase's validators have no fresh result for this commit (%s), and a stale or missing " \
                       "result counts as a failure%s" % (detail, hint), None
+    if data["verdict"] != "pass" and unfixed_approvable(data):
+        return True, None, data  # 0.8.2: this APPROVE is the operator's acceptance of the unfixed set REVIEW listed
     if data["verdict"] != "pass":
         fz = validation.frozen_text(data)  # 0.7.2 (ruling A1)
         return False, "the phase %s validators did not pass (%s). Findings: %s%s" % (
             label, data["verdict"].upper(), " | ".join(validation.findings(data)) or "see REVIEW %s" % label,
             ". " + fz if fz else ""), data
     return True, None, data
+
+
+def unfixed_approvable(data, also=()):
+    """0.8.2: True when every failing validator failed only on unfixed image findings the last APPROVE did not accept
+    (it printed UNFIXED-ONLY; validate.py lists it in unfixed_only), or is one of `also`. Those findings have no fix
+    to apply: the operator accepts them by approving, and the ledger line records the set."""
+    only = set((data or {}).get("unfixed_only") or [])
+    failing = [r for r in (data or {}).get("results") or [] if r.get("result") not in ("pass", "n/a-by-profile")]
+    return bool(only) and bool(failing) and all(
+        (r["validator"] in only and r.get("result") == "fail") or r["validator"] in also for r in failing)
+
+
+def unfixed_payload(data):
+    """0.8.2: what APPROVE records about the unfixed set: its sha256 and each finding (CVE, package, installed version,
+    image digest, and for a built image its Dockerfile: validation.unfixed_key says what the acceptance binds)."""
+    un = (data or {}).get("unfixed") or []
+    if not un:
+        return None
+    keep = ("cve", "severity", "package", "installed", "image", "digest", "dockerfile", "scan_date")
+    return {"sha256": validation.unfixed_digest(un),
+            "findings": [{k: u.get(k) for k in keep if k != "dockerfile" or u.get(k)} for u in un]}
 
 
 def _proceed_gate(root, st, label):
@@ -875,7 +898,8 @@ def _with_waivers_gate(root, st, label, data, items, extra):
     if data is None:
         return False, "there is no fresh validator result"
     failing = [r["validator"] for r in data["results"] if r["result"] not in ("pass", "n/a-by-profile")]
-    other = [v for v in failing if not v.startswith("check-verifiers-")]
+    other = [v for v in failing if not v.startswith("check-verifiers-") and
+             v not in (data.get("unfixed_only") or [])]  # 0.8.2: accepted by this APPROVE
     if other:
         return False, ("validator(s) %s failed, and a waiver covers a finding, not a failing check: fix them first"
                        % ", ".join(other))
@@ -1171,6 +1195,8 @@ def handle(hook_input):
             if ok:
                 payload.update(waivers=items, waivers_file=PROPOSED_WAIVERS, waivers_file_sha256=digest,
                                fingerprints=wextra.get("fingerprints") or {}, with_waivers=True)
+                if unfixed_payload(data):  # 0.8.2: the operator's acceptance of the unfixed set
+                    payload["unfixed_accepted"] = unfixed_payload(data)
                 payload["validation"] = {"commit": data["key"]["commit"], "verdict": data["verdict"],
                                          "finished_at": data.get("finished_at"), "digest": data["_digest"],
                                          "passed_with_waivers": data["verdict"] != "pass",
@@ -1178,11 +1204,15 @@ def handle(hook_input):
                                                       "exit_code": r["exit_code"]} for r in data["results"]]}
     if not why and name == "APPROVE" and not ww:
         ok, why, data = _approve_gate(root, st, g["phase"])
+        if ok and unfixed_payload(data):  # 0.8.2: the operator's acceptance of the unfixed set REVIEW listed
+            payload["unfixed_accepted"] = unfixed_payload(data)
         if ok:
             payload["validation"] = {"commit": data["key"]["commit"], "verdict": data["verdict"],
                                      "finished_at": data.get("finished_at"), "digest": data["_digest"],
                                      "results": [{"validator": r["validator"], "result": r["result"],
                                                   "exit_code": r["exit_code"]} for r in data["results"]]}
+            if data["verdict"] != "pass":  # 0.8.2: failing only on the unfixed set this APPROVE accepts
+                payload["validation"]["passed_with_unfixed_accepted"] = True
     merge = None
     if not why and name == "APPROVE" and st.get("feature") and g["phase"] == pathmap.RELEASE:
         from . import feature
@@ -1290,6 +1320,11 @@ def handle(hook_input):
     nxt = ""
     if name == "APPROVE":
         nxt = " It rests on validator result %s." % payload["validation"]["digest"][:19]
+        if payload.get("unfixed_accepted"):  # 0.8.2
+            ua = payload["unfixed_accepted"]
+            nxt += " It accepts %d unfixed High/Critical image finding(s) as residual risk (set sha256 %s): %s." % (
+                len(ua["findings"]), ua["sha256"][:12], ", ".join("%s %s (%s)" % (
+                    u["cve"], u["package"], u["digest"]) for u in ua["findings"]))
         fz = validation.frozen_text(data)  # 0.7.2 (ruling A1): shown, never blocking
         if fz:
             nxt += " %s." % fz
