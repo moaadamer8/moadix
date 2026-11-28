@@ -1,127 +1,172 @@
-# Amendment 5 (2026-11-21) — Autonomy: clean phases close themselves, and phases are built by orchestrated agents
+# Amendment 5 (2026-11-21, revised 2026-11-28) — Autonomy: the operator directs, MOADIX runs the workflow
 
-Extends DESIGN.md and Amendments 1–4; overrides them where they differ. Proposed by the operator on 2026-11-21. Draft for review: nothing here is built, and section 5 lists the rulings still needed.
+Extends DESIGN.md and Amendments 1–4; overrides them where they differ. Proposed by the operator on 2026-11-21; revised with the operator's rulings and autonomy direction on 2026-11-28. Nothing here is built.
 
-Build only after one product has passed every phase on the current design. Both parts are off by default and are turned on per product through ADOPT.
+Build only after one product has passed every phase on the current design. Every part is off by default and is turned on per product through ADOPT.
 
-Principle that does not change: the agent never accepts a problem on the operator's behalf. Everything that needs a judgement or an exception (a waiver, a skipped check, a scope choice, an answer to a question) still needs the operator and a code.
+## 0. Goal and principles
 
-## 1. Clean phases close themselves
+Goal, in the operator's words: "I initialize a product, provide its initial business context, approve the seven mandatory milestones, and let MOADIX execute the remaining SDLC work independently. I want to direct the engineering team, not operate the engineering workflow."
 
-### 1.1 Policy
+Three levels of autonomy:
+- **Execution:** the agent does routine work without asking.
+- **Validation:** the agent checks its own work, fixes failures and re-verifies. Passing must never come from weakening a check (section 4).
+- **Escalation:** the agent asks only for a business decision, a significant architectural trade-off, an unresolved risk, a mandatory gate, or an authorization outside its scope.
 
-`.sdlc-proposals/autonomy.yaml`, adopted with `ADOPT <code>` into `.sdlc/autonomy.yaml`:
+Unchanged: the agent never silently waives a finding, bypasses a mandatory check, invents a business decision, or acts on production. Accepting a risk, skipping a failing check and changing the gate's governance stay operator decisions with a code.
 
-```yaml
-auto_close: ["4", "5", "6b", "7", "8", "9", "10a", "10b", "10c"]   # the operator's choice per product
-pause_after: 3        # optional: stop for the operator after this many auto-closes in a row
-```
+## 1. The seven mandatory gates
 
-- Default: `auto_close` is empty, which is today's behaviour.
-- Never auto-closed, whatever the file says (ADOPT refuses the file): **0** BRD, **2** PRD, **6** UX, **11** Release, **11b** Store release, **12** Retro, **B** Baseline. These are the phases that decide what the product is, what ships, and what is learned.
-- Any other phase is the operator's choice.
+Always an explicit `APPROVE <ph> <code>`, never automatic, whatever any policy file says (ADOPT refuses such a file):
 
-### 1.2 What "clean" means
+| Phase | Name | The operator decides |
+|---|---|---|
+| 0 | BRD | Vision, target users, purpose |
+| 2 | PRD | Feature scope and behaviour |
+| 6 | UX | Experience, screens, design |
+| 11 | Release | Shipping to real users |
+| 11b | Store release | App Store / Google Play publishing (mobile only) |
+| 12 | Retro | Lessons learned and improvements |
+| B | Baseline | The takeover assessment of an existing product |
 
-The gate closes a listed phase only when all of these hold on the current commit:
+Ruling R1 (2026-11-28): phase 9 is not on this list.
+
+### 1.1 The approval package
+
+At a mandatory gate, the agent prepares one package: the deliverables, the decisions taken since the last gate (including every auto-closed phase with its counts and MINORs file), the assumptions, the open risks, and the exact line the operator must send. Reporting progress never needs an approval.
+
+## 2. Clean phases close themselves
+
+Policy in `.sdlc-proposals/autonomy.yaml`, adopted with `ADOPT <code>` into `.sdlc/autonomy.yaml`. Default when adopted: every phase not in section 1.
+
+### 2.1 What "clean" means
+
+All must hold on the current commit (ruling R2: clean means clean):
 
 | Condition | Detail |
 |---|---|
-| Validators | Every validator of the phase is PASS. One FAIL or UNKNOWN is not clean. |
-| Verifiers | Every scheduled verifier has current evidence (document-set digest matches). |
-| Findings | No open BLOCKER, no open MAJOR, no high or medium design-review finding. MINORs do not count. |
-| No exception used | No waiver recorded in this phase, no PROCEED-PAST, no frozen finding the critic rated BLOCKER. |
+| Validators | Every validator PASS. One FAIL or UNKNOWN is not clean. |
+| Verifiers | Every scheduled verifier has current evidence. |
+| Findings | No open BLOCKER or MAJOR, no high or medium design-review finding. MINORs do not count. |
+| No exception | No waiver, no PROCEED-PAST, no frozen BLOCKER in this phase. |
+| Risk acceptance | Nothing awaits operator acceptance: in phase 9, no unaccepted unfixed scanner finding (0.8.2) and no residual risk added or changed since the last acceptance. |
 | Carries | Every carry addressed to this phase is settled. |
-| Questions | Every discovery question of the phase has an operator answer, or the log says there were none. |
-| Proposals | Nothing is pending in `.sdlc-proposals/`. |
-| Budget | The phase is inside its critic-run limit and its cost budget (Amendment 4). |
+| Questions | Every question has an operator answer, or there were none. |
+| Proposals | Nothing pending in `.sdlc-proposals/`. |
+| Budget | Inside the critic-run limit and the cost budget. |
 
-If any condition fails, nothing changes from today: the phase waits for `APPROVE`, `APPROVE … WITH-WAIVERS` or `PROCEED-PAST` with a code.
+If any fails, the phase needs one operator command, and only one (section 5).
 
-### 1.3 Who closes it, and how it is recorded
+### 2.2 Recording
 
-- The gate's own worker closes the phase when it finishes the review run. The agent has no command or file for it and cannot request it.
-- The ledger line is a new type, `AUTO-CLOSE`, signed like every line. It carries the validator result digest, each evidence digest, the policy file's digest and the counts of findings. It can never be read as an `APPROVE`.
-- `STATUS` and `phase.yaml` show the phase as `AUTO-CLOSED`. Later phases, trace checks and the release scorecard treat it as closed.
+The gate's worker closes the phase; the agent cannot request it. Ledger line type `AUTO-CLOSE`, signed, with validator and evidence digests, the policy digest and finding counts. It can never be read as an `APPROVE`. `STATUS` shows `AUTO-CLOSED`. `REOPEN` works on it as on an approved phase.
 
-### 1.4 What the operator sees
+Ruling R3 (2026-11-28): no `pause_after`. The run keeps going until something needs the operator.
 
-- Every auto-close is reported in the session with the same summary an approval would show.
-- `STATUS` lists the phases auto-closed since the operator's last command.
-- The next approval the operator gives (a never-list phase, or any phase that was not clean) shows every phase auto-closed since the previous human approval, with its counts and MINORs file.
-- `REOPEN` works on an auto-closed phase exactly as on an approved one.
-- With `pause_after: n`, the gate stops after n auto-closes in a row and waits for any operator command.
+## 3. Actions the agent may take without a code
 
-### 1.5 Tests
+Each is requested by the agent with a code-free command, checked by the gate against the rules below, and recorded as a signed ledger line of its own type. A request that breaks a rule is refused and becomes an escalation. Manual operator use of each command stays.
 
-Attack corpus additions, each of which must end without an auto-close: a failing validator, an UNKNOWN validator, stale evidence, a forged CRITIC.json, an open MAJOR, a waiver in the phase, an unanswered question, a pending proposal, a phase not in the policy, a never-list phase in the policy (ADOPT refused), a policy file written by the agent without ADOPT, and an attempt to write an `AUTO-CLOSE` line.
+### 3.1 Fix before escalating
 
-## 2. Orchestrated phase agents
+On any finding, the agent first tries to fix it, re-runs the checks and re-verifies, within the phase's critic-run limit and cost budget. A waiver or PROCEED-PAST request to the operator must list the fix attempts and why each failed.
 
-### 2.1 Roles
+### 3.2 AUTO-REOPEN
 
-| Role | Runs as | Does | May not |
-|---|---|---|---|
-| Orchestrator | The main session | Launches builders and verifiers, relays questions and summaries to the operator | Write a phase document or product code |
-| Phase builder | A fresh agent per phase, `moadix:phase-builder` | Writes the phase's documents or code inside the phase's path map, commits, hands back | Launch agents, talk to the operator, write outside the phase's paths |
-| Verifier | A fresh agent per review, as today | Reviews and writes evidence | Anything else, as today |
+The agent may reopen an earlier phase when a correction belongs there, only if all hold:
+- the target is not a mandatory gate (0, 2, 6, 11, 11b, 12, B): reopening one of those is always the operator's `REOPEN` with a code;
+- the reopen names the finding that needs it, and the gate's path map confirms the fix touches the target phase's paths;
+- the fix stays inside the approved requirements: it does not change a PRD acceptance criterion, a UX decision or an operator ruling;
+- the product's reopen budget is not used up (ruling R6).
 
-The orchestrator launches the verifiers, not the builder. Assumption to verify during the build: in the pinned Claude Code versions an agent launched by an agent cannot launch another. If it can, the gate must still refuse it.
+Phases reset by the reopen go to draft as today and may auto-close again when clean. The fix lane (Amendment 4 proposal 8) is preferred when it applies, because it avoids the reopen.
 
-### 2.2 The builder's brief
+### 3.3 CARRY-SETTLED (replaces most UNCARRY)
 
-Generated and enforced by the gate, exactly like a verifier's brief (prompt replacement, one-time receipt). It contains:
-- the phase's role and coverage topics, with size defaults and operator rulings;
-- the list of input documents (upstream phases, carried items addressed to this phase, standing instructions);
-- the earlier critic findings on this phase, when this is a fix round;
-- the operator's answers so far;
-- the paths it may write.
+A carry is settled automatically when the target phase's evidence shows the carried item resolved, cited by file and line and checked by that phase's critic. Dropping a carry that is not resolved stays the operator's `UNCARRY` with a code. A carry of a security item can never pass phase 9 either way.
 
-Nothing from the orchestrator's conversation reaches the builder except through these documents.
+### 3.4 AUTO-COLLAPSE
 
-### 2.3 Questions
+A phase that demonstrably does not apply is collapsed from an operator ruling already in the ledger: the platform profile from phase 0 (for example 11b for WEB) or the size ruling (for example 10c where the size defaults say so). Any other collapse stays the operator's `COLLAPSE` with a code.
 
-A builder cannot ask the operator. It hands back one round of questions (numbered, lettered options, a recommendation each). The orchestrator shows them to the operator unchanged and passes the answer back. See ruling R4 on how the gate protects the answers.
+### 3.5 Routine technical decisions
 
-### 2.4 The loop for one phase
+The agent decides technical questions inside the approved BRD, PRD, UX and rulings, recorded as ADRs. A decision that changes cost, scope, a user-visible behaviour or a significant architectural trade-off is escalated as a question.
 
-1. The orchestrator launches the builder with the gate's brief.
-2. The builder hands back questions, or a commit.
-3. Questions go to the operator; the builder is launched again with the answers.
-4. On a commit, the gate runs its validators and the orchestrator launches the verifiers.
-5. Findings go to a new builder launch as a fix round, within the run limit.
-6. The phase ends by auto-close (section 1), or the orchestrator stops and gives the operator the summary and the exact line to send.
+### 3.6 Questions
 
-### 2.5 Parallel work
+Questions are collected into one round per phase where possible and answered with code-free `ANSWER <phase> <round> <text>`, logged by the gate with its hash; the builder's brief quotes the gate's copy (ruling R4).
 
-Phases never run in parallel. Inside one phase, the orchestrator may launch several builders when the gate can give each a write scope that does not overlap with the others: research dimensions, LLD modules, implementation tasks. The gate refuses overlapping scopes and refuses a commit outside the builder's scope.
+## 4. Validation must not be weakened
 
-### 2.6 When the run stops
+A fix may not pass by loosening a check. The gate flags, and the phase's critic must review, any commit in the phase that: deletes or skips a test or assertion, widens an accepted value, raises a threshold or timeout in a check, narrows a scan or mutation scope, or adds an allowlist entry. A flagged change with no ADR and no critic acceptance blocks auto-close. Allowlists and scope changes stay ADOPT.
 
-The orchestrator stops and reports, and never retries on its own, when: the operator must answer a round, a phase is not clean, a never-list phase is ready for approval, `pause_after` is reached, a budget threshold is crossed, a validator is UNKNOWN, a builder fails twice, or the gate reports an integrity failure.
+## 5. Final behaviour of the commands
 
-### 2.7 Mode
+| Command | Behaviour |
+|---|---|
+| `STATUS` | Read-only, no code. |
+| `REVIEW <ph>` | Read-only, no code. Lists everything that awaits the operator. |
+| `APPROVE <ph>` | Automatic for clean non-mandatory phases (AUTO-CLOSE). Explicit, with a code, at the seven mandatory gates. |
+| `APPROVE <ph> WITH-WAIVERS` | Explicit acceptance of unresolved findings. One code also accepts every pending ADOPT, waiver and risk REVIEW listed (Amendment 4 proposal 11). |
+| `WAIVE` | Explicit risk acceptance, after the agent's fix attempts (3.1). |
+| `PROCEED-PAST <ph>` | Explicit authorization. Never for security in phase 9. |
+| `ADOPT` | Explicit approval of governance changes. |
+| `REOPEN <ph>` | AUTO-REOPEN under 3.2; the operator's code for mandatory gates and anything outside 3.2. |
+| `UNCARRY` | CARRY-SETTLED under 3.3; the operator's code to drop an unresolved carry. |
+| `COLLAPSE` | AUTO-COLLAPSE under 3.4; the operator's code otherwise. |
+| `INIT` | Operator-initiated, once per product. |
+| `ANSWER` | Code-free answers, one round per phase where possible. |
 
-`orchestration: on` in `autonomy.yaml`, default off. When on, the main session's writes to `sdlc/` and to product code are refused by the path map; only builders write there.
+Target: clean phases need no command; any other non-mandatory phase needs at most one code.
 
-## 3. What this does not change
+## 6. Orchestrated phase agents
 
-- Operator commands, the one-time code, the signed ledger, and the rule that a BLOCKER cannot be waived.
-- Policy-denied tools: scheduled tasks and cross-session messages stay denied. An unattended run is one session that keeps working until a stop condition; it is not a scheduled job.
-- The three-run limit and the scoped third run.
+Roles: an orchestrator (the main session: launches builders and verifiers, relays questions and summaries, writes no phase document or code); a phase builder (a fresh `moadix:phase-builder` per phase, writes only inside the phase's path map, cannot launch agents or talk to the operator); verifiers as today.
 
-## 4. Build order
+The builder's brief is generated by the gate: role, coverage topics, size defaults, rulings, input documents, earlier findings on a fix round, the operator's answers, the writable paths. Nothing else from the orchestrator's conversation reaches it.
 
-1. Section 1, with its corpus additions. Prove it on a size S product.
-2. Section 2, sequential builders only.
-3. Section 2.5, parallel builders, last.
+Loop per phase: launch builder → questions or a commit → validators and verifiers → fix rounds within the limit → auto-close, or stop with the summary and the exact line to send.
 
-Each part is one increment with its own report, tests on fixtures only, a version bump and a tag.
+Ruling R5 (2026-11-28): after an operator approval the orchestrator starts the next phase directly, with no new message.
 
-## 5. Rulings needed from the operator
+Parallel work: phases never run in parallel. Inside a phase, several builders may run when the gate gives each a non-overlapping write scope; when one task is blocked, the others continue.
 
-- **R1.** The never-list in 1.1: 0, 2, 6, 11, 11b, 12 and B. Add or remove any?
-- **R2.** Does a medium design-review finding stop an auto-close (proposed), or only a high one?
-- **R3.** `pause_after`: a default value, or off unless set?
-- **R4.** Protecting answers to builder questions. Proposed: the operator answers with a command the gate records (`ANSWER <phase> <text> <code>` is too heavy for every round, so the proposal is a code-free `ANSWER <phase> <round> <text>` that the gate logs with its hash, and the builder's brief quotes the gate's copy). The alternative is to trust the orchestrator to relay answers, as the single agent does today.
-- **R5.** May the orchestrator be allowed to continue into the next phase after an operator approval without a new message from the operator (proposed: yes), or should every approval end the turn?
+`orchestration: on` in `autonomy.yaml`, default off. When on, the main session's writes to `sdlc/` and product code are refused.
+
+## 7. When the run stops
+
+The orchestrator stops, reports, and never retries on its own when: a mandatory gate is ready (with its package, 1.1); a question round needs the operator; a phase is not clean and needs one code; a budget is crossed; a validator is UNKNOWN; a builder fails twice; an AUTO action is refused; or the gate reports an integrity failure.
+
+## 8. What does not change
+
+The one-time code, the signed ledger, the rule that a confirmed high finding cannot be waived, the rule that security cannot pass phase 9 by PROCEED-PAST, the critic-run limit with the scoped third run, and the denial of scheduled tasks and cross-session messages: an unattended run is one session working until a stop condition.
+
+## 9. Conflicts found and how they are resolved
+
+| Operator direction | Conflict with the earlier design | Resolution |
+|---|---|---|
+| Reopen phases automatically | A reopen could undo an operator decision | 3.2: never a mandatory gate, only inside approved requirements, tied to a finding, with a budget |
+| Resolve obsolete carries automatically | A dropped carry hides unfinished work | 3.3: settled only with evidence; dropping stays a code |
+| Collapse irrelevant phases automatically | Collapse was an operator judgement | 3.4: only from a ruling already in the ledger |
+| Phase 9 not mandatory | Unfixed scanner findings and residual risks need acceptance | 2.1: phase 9 auto-closes only when nothing awaits acceptance; otherwise one code |
+| Fix findings and re-run checks autonomously | Fixes could pass by weakening checks | Section 4 |
+| Continue when a task is blocked | Phases are sequential | 6: within the phase only |
+| Keep going with no pause (R3) | Many phases could close unseen | 1.1: every auto-close appears in the next approval package; STATUS lists them |
+
+## 10. Build order
+
+1. Sections 2, 3.3, 3.4, 4 and 5 (auto-close, carry settling, auto-collapse, the weakening check, one code per phase), with attack-corpus cases. Prove on a size S product.
+2. Section 3.1 and 3.2 (fix-first, AUTO-REOPEN), after the fix lane (Amendment 4 proposal 8).
+3. Section 6, sequential builders.
+4. Section 6, parallel builders, last.
+
+Each part is one increment with its own report, fixture tests, a version bump and a tag.
+
+## 11. Rulings
+
+Decided 2026-11-28: R1 (the seven gates, without 9), R2 (clean means clean), R3 (no pause_after), R4 (gate-logged ANSWER), R5 (start the next phase directly).
+
+Still needed:
+- **R6.** AUTO-REOPEN budget: how many automatic reopens per product before the agent must ask (proposed: 3 per product, and never the same phase twice for the same finding)?
+- **R7.** Is AUTO-REOPEN of phase 4 (threat model) allowed, or should a change to security requirements always reach the operator?

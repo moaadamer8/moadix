@@ -173,6 +173,12 @@ Nothing in this section is ruled. Each item records a gap or an idea for the ope
 10. **One ADOPT per product.** Phase 6b collects every gate setting the product will need into one proposal, so the operator ADOPTs once.
     Open questions: which settings can be known by 6b, and which only appear later (for example phase 9 gitleaks allows)? Does a later change still need its own ADOPT?
 
+11. **One code per phase.** REVIEW lists everything pending for the phase (waivers, exceptions, carries, proposals to ADOPT), and one APPROVE with one code accepts it all.
+    Open questions: does the single APPROVE still record each item separately in the ledger, with its own reason, as a WAIVE does today? Are BLOCKERs, which cannot be waived, kept out of the list? How does this fit Amendment 5's autonomy rules?
+
+12. **COLLAPSE from the platform profile.** Phase 0's platform profile (B19, `gate/config/profiles.yaml`) applies COLLAPSE automatically, without a `COLLAPSE <phase> <code>` from the operator.
+    Open questions: does it cover only the phases the platform ruling leaves out (such as 11b under WEB), or also the size-S collapses of phases 1, 6b and 10c, which today are the operator's choice? Is the automatic collapse recorded in the ledger with its reason and the checks that will not run, as a manual one is? Can the operator undo it?
+
 ### Next-round backlog
 
 - MF-67 (task-tracker, phase 7 reopen, MOADIX 0.8.3): check-trivy does not build the root `docker-compose.yml`. `built_targets` builds only the root `Dockerfile`, each `build:` of the `live.compose` file and each Dockerfile under `tests/gate/`, so an image the operator's own compose file builds is neither built nor scanned, silently. The gate's builds also ignore `build.target`, so a multi-stage Dockerfile is scanned at its last stage, not the stage Compose builds. The finding suggests reading each `build:` of the root compose file (or failing on any compose `build:` the gate does not build), passing `build.target` as `--target`, and keying an image's accepted unfixed findings on (Dockerfile path, target).
