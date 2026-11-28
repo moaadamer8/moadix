@@ -132,3 +132,50 @@ Adaptation required before use: its hunter, coverage-critic and verifier roles a
 3. Starter packs, cost and status, lessons library, trial mode, container isolation.
 
 Each part is one increment with its own report, tests on fixtures only, a `plugin.json` version bump and a tag.
+
+## Proposals for review: not decided, do not build
+
+Nothing in this section is ruled. Each item records a gap or an idea for the operator to decide on; no increment may build from it until the operator rules on it. Items 1 to 7 come from an audit of the coverage topics (`gate/config/coverage-topics.yaml`) for a hosted, real product.
+
+### Production readiness
+
+1. **Long-lead approvals.** Phase 0 asks which outside approvals the product needs: payment provider, business identity, email sender, domain, app stores, regulators. Phase 1 researches each lead time and outputs a long-lead list with a start-by date per item. Phase 6b checks the status of each.
+   Open questions: is this a new topic in phases 0, 1 and 6b, or an extension of B15, R14 and V1? Is the start-by date counted back from a target release date, and who sets that date? Does a missed start-by date block a phase or only warn?
+
+2. **Pending-external items in 6b.** Phase 6b records each item waiting on an outside party as "requested, waiting on <provider> since <date>, needed by phase <n>". The item is carried forward with no code. Phase 11 cannot release while an item needed for production is still pending.
+   Open questions: where does the list live (a 6b document, or the ledger like CARRY)? Is it the same mechanism as CARRY or a separate one? Can the operator waive a pending item at phase 11, and if so, with what record?
+
+3. **TLS.** Phase 6b covers getting the certificate and setting up automatic renewal. Phase 11 covers monitoring the expiry date.
+   Open questions: new V- and RL- topics, or an extension of V4 and RL12? Is a product whose host manages TLS for it (a platform-managed certificate) N/A, or does it still need the expiry check?
+
+4. **Staging.** A hosted product requires a staging environment. Phases 10a to 10c run against staging instead of the gate's local origin.
+   Open questions: how does this fit the current rule that live gates reach the app only at `http://sut.localhost:<port>`? Does the gate need staging credentials, and how is that kept within the 6b BLOCKER that the agent never holds production credentials? Is staging required at size S, or is it a size default?
+
+5. **Hosting provider.** Choosing the hosting provider becomes its own phase 1 topic, decided by an ADR in phase 3.
+   Open questions: a new R- topic, or a required part of R5 and R6? Is a matching H- topic needed, or is an ADR under H15 enough?
+
+6. **Monthly cost.** Phase 3 gives a monthly figure at launch, at 10x and at 100x. Phase 11 gets a cost topic (budget alerts, spend caps), so the X1.3 handoff ("operational cost tuning" to phase 11) has a topic to land on.
+   Open questions: does the phase 3 figure replace R7, or refine it? How does the phase 11 topic relate to V9 (spend caps in 6b)? Should the gap critic treat an uncited monthly figure as a BLOCKER, like other cost claims a decision depends on?
+
+7. **Privacy per market.** Each target market (B10) is mapped to its privacy regime, with dated sources. The mapping is checked in phase 4 (threats) and phase 11 (policies, consent, notices).
+   Open questions: does the mapping belong in B11 or R4? Is "market" a country, or can it be a region such as the EU? What does phase 4 check beyond T8: one T8 entry per regime?
+
+### Fewer operator commands
+
+8. **Fix lane.** Two cases, both without reopening an approved phase:
+   - (a) **Tests for a later phase's own findings.** Phases 9 and 10a to 10c add tests for the findings they make without `REOPEN 8`. This is what happened in task-tracker's phase 9.
+   - (b) **Fixes for defects found in testing (MF-42).** Phases 8, 10a and 10b may fix `src/**` without `REOPEN 7`, only together with a test that names a TS16 defect-register entry and fails before the fix (at the parent commit) and passes after it (at HEAD). MF-42 (task-tracker, phase 8, MOADIX 0.7.5): phase 8 may write `tests/**`, but no phase after 7 owns `src/**`, so a one-line fix needs `REOPEN 7`, phase 7's verifiers and gap critic again, and a new `APPROVE 7`. The finding also suggests re-running phase 7's exec checks on that commit and listing the change for the next code review.
+   Open questions: which phases may use it (8, 9, 10a to 10c)? May the lane change only test files, or also the fix itself? How is the added test reviewed, and is it recorded in the ledger?
+
+9. **Every SEC-ID has a test.** Phase 8's critic checks that every SEC-ID from the threat model has a test.
+   Open questions: a check in the ac-coverage-critic or in the gap critic? Is it the same trace format as `@AC-id`? Which SEC-IDs are exempt because they are verified only in phase 9 (scans, configuration)?
+
+10. **One ADOPT per product.** Phase 6b collects every gate setting the product will need into one proposal, so the operator ADOPTs once.
+    Open questions: which settings can be known by 6b, and which only appear later (for example phase 9 gitleaks allows)? Does a later change still need its own ADOPT?
+
+### Next-round backlog
+
+- MF-67 (task-tracker, phase 7 reopen, MOADIX 0.8.3): check-trivy does not build the root `docker-compose.yml`. `built_targets` builds only the root `Dockerfile`, each `build:` of the `live.compose` file and each Dockerfile under `tests/gate/`, so an image the operator's own compose file builds is neither built nor scanned, silently. The gate's builds also ignore `build.target`, so a multi-stage Dockerfile is scanned at its last stage, not the stage Compose builds. The finding suggests reading each `build:` of the root compose file (or failing on any compose `build:` the gate does not build), passing `build.target` as `--target`, and keying an image's accepted unfixed findings on (Dockerfile path, target).
+- A helper that proposes updates to pinned packages and images.
+
+Open questions: does MF-67 take the read-the-root-compose fix or the fail-on-unbuilt-`build:` fix, and does `--target` ship with it? Does the update helper only propose (an `.sdlc-proposals/` file for ADOPT), and which pins does it cover: OS packages, npm packages, images, gate tools?
